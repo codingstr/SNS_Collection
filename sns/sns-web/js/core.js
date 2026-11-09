@@ -15,31 +15,39 @@ async function apiPost(path, obj, ms, opts) {
   } finally { clearTimeout(t); }
 }
 
-/* 화면 아래쪽 알림(오류·안내). 어느 화면에 있든 보입니다. */
-function toast(msg, kind) {
+/* 화면 아래쪽 알림(오류·안내). 어느 화면에 있든 보입니다.
+   action: { label, fn } 을 주면 알림 안에 버튼(예: 되돌리기)이 붙고, 누를 시간을 주려고 조금 더 오래 떠 있습니다. */
+function toast(msg, kind, action) {
   if (!msg) return;
   let box = document.getElementById("toasts");
   if (!box) { box = document.createElement("div"); box.id = "toasts"; box.setAttribute("role", "status"); box.setAttribute("aria-live", "polite"); document.body.appendChild(box); }
-  // 같은 문구가 이미 떠 있으면 새로 쌓지 않고 시간만 늘립니다.
-  const same = Array.from(box.children).find((n) => n.dataset.msg === msg);
+  // 같은 문구가 이미 떠 있으면 새로 쌓지 않고 시간만 늘립니다(버튼이 있는 알림은 새로 띄움: 되돌릴 대상이 다를 수 있음).
+  const same = action ? null : Array.from(box.children).find((n) => n.dataset.msg === msg && !n._action);
   const n = same || document.createElement("div");
   if (!same) {
-    n.className = "toast" + (kind === "error" ? " err" : "");
+    n.className = "toast" + (kind === "error" ? " err" : "") + (action ? " act" : "");
     n.dataset.msg = msg;
+    n._action = !!action;
     const t = document.createElement("span"); t.textContent = msg;
     const x = document.createElement("button"); x.type = "button"; x.className = "tx"; x.textContent = "×"; x.setAttribute("aria-label", "알림 닫기");
     x.addEventListener("click", () => n.remove());
-    n.append(t, x);
+    n.append(t);
+    if (action) {
+      const a = document.createElement("button"); a.type = "button"; a.className = "ta"; a.textContent = action.label;
+      a.addEventListener("click", () => { n.remove(); try { action.fn(); } catch (e) { /* 무시 */ } });
+      n.append(a);
+    }
+    n.append(x);
     box.appendChild(n);
     while (box.children.length > 4) box.firstChild.remove();
   }
   clearTimeout(n._t);
-  n._t = setTimeout(() => n.remove(), kind === "error" ? 7000 : 4500);
+  n._t = setTimeout(() => n.remove(), action ? 9000 : kind === "error" ? 7000 : 4500);
 }
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v376";
+const WEB_VERSION = "v378";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };
@@ -81,6 +89,32 @@ function markSeen(it) {
   saveSeen();
   if (typeof queueSeen === "function") queueSeen(it.id); // 로그인 상태면 다른 기기에도 반영
   document.querySelectorAll(".card").forEach((c) => { if (c._item && c._item.id === it.id) c.classList.add("seen"); });
+  if (typeof renderStories === "function") renderStories(); // 묶음 줄의 '안 읽은 글' 빨간 점
+}
+// 여러 글을 한꺼번에 읽음으로(묶음 줄에서 '모두 읽음'). 새로 읽음 처리한 글 ID 목록을 돌려줍니다(되돌리기에 씀).
+function markSeenMany(ids) {
+  const done = [];
+  ids.forEach((id) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id); done.push(id);
+    if (typeof queueSeen === "function") queueSeen(id);
+  });
+  if (!done.length) return done;
+  saveSeen();
+  document.querySelectorAll(".card").forEach((c) => { if (c._item && seen.has(c._item.id)) c.classList.add("seen"); });
+  if (typeof renderStories === "function") renderStories();
+  return done;
+}
+// '모두 읽음' 되돌리기: 이 기기와 서버의 본 글 기록에서 뺍니다.
+function unmarkSeen(ids) {
+  const set = new Set(ids);
+  if (!set.size) return;
+  set.forEach((id) => { seen.delete(id); if (typeof seenQueue !== "undefined") seenQueue.delete(id); });
+  saveSeen();
+  document.querySelectorAll(".card.seen").forEach((c) => { if (c._item && set.has(c._item.id)) c.classList.remove("seen"); });
+  if (typeof renderStories === "function") renderStories();
+  // 아직 보내는 중인 '본 글' 기록이 있으면 그게 끝난 뒤에 지웁니다(순서가 바뀌면 지운 기록이 다시 들어감).
+  if (sess && typeof sapi === "function") (seenFlushP || Promise.resolve()).catch(() => {}).then(() => sapi("delSeen", { ids: [...set] })).catch(() => {});
 }
 const $ = (id) => document.getElementById(id);
 

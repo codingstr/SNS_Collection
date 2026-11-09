@@ -183,7 +183,7 @@ def collect_on_login(uid: str, fresh_login: bool):
         if not row:
             return
         tracked, settings, status = json.loads(row["tracked"]), json.loads(row["settings"]), json.loads(row["status"])
-        if status.get("running") or not any(settings.get(t.get("platform")) is not False for t in tracked):
+        if status.get("running") or not any(settings.get(t.get("platform")) is not False and t.get("hidden") is not True for t in tracked):
             return
         if not fresh_login and time.time() * 1000 - (status.get("lastRun") or 0) < LOGIN_COLLECT_COOLDOWN * 1000:
             return

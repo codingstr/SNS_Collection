@@ -8,8 +8,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=376">
-<link rel="stylesheet" href="bento.css?v=376">
+<link rel="stylesheet" href="style.css?v=378">
+<link rel="stylesheet" href="bento.css?v=378">
 
 <header>
   <div id="infoCard2" class="infocard info2"></div>
@@ -151,26 +151,39 @@
     </section>
 
     <section class="panel" id="trackPanel" hidden>
-      <h2>추적 계정 관리</h2>
-      <div id="ptManage">
-      <div id="tracked" class="chips"></div>
-      <div id="selBar" class="selbar" aria-label="선택한 계정" aria-live="polite"></div>
-      <div id="gChips" class="gchips2" hidden></div>
-      <div id="manageBottom" class="manage-bottom">
-      <form id="daysForm" class="row">
-        <select id="dDays" aria-label="계정별 가져올 기간"><option value="0">기본(맨 위 기간)</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option><option value="60">60일</option></select>
-        <button type="submit">기간 적용</button>
-        <button id="selRemove" type="button" class="danger">제거</button>
-        <button id="selAll" type="button">전체 선택</button>
-        <button id="selClear" type="button" hidden>선택 해제</button>
-      </form>
-      <form id="groupForm" class="row">
-        <input id="gName" type="text" maxlength="30" placeholder="묶음 이름 (비우면 해제)" aria-label="묶음 이름" autocomplete="off">
-        <button id="gRename" type="button" title="묶음 이름을 고칩니다">묶음 수정</button>
-        <button id="gClear" type="button" title="선택한 계정의 묶음을 없앱니다">묶음 해제</button>
-        <button type="submit">묶기</button>
-      </form>
-      </div>
+      <div class="mg-head"><h2>추적 계정 관리</h2><span id="mgCount" class="mg-count"></span><span class="mg-tools" aria-hidden="true"></span></div>
+      <details id="mgHelp" class="mg-help">
+        <summary>사용 방법</summary>
+        <ul>
+          <li><b>계정</b>을 누르면 골라집니다(여러 개 가능). <b>묶음 이름</b>을 누르면 그 묶음의 계정이 한꺼번에 골라집니다.</li>
+          <li>고른 뒤 아래 막대에서 <b>가져올 기간</b>을 정하거나, <b>묶음 이름</b>을 적어 묶거나, <b>숨기기</b>·<b>제거</b>를 합니다.</li>
+          <li>같은 사람의 유튜브·X·인스타 계정을 한 묶음으로 묶으면 홈에서 한 사람으로 모아 봅니다.</li>
+          <li><b>숨긴 묶음</b>은 홈에 나오지 않고 글도 모으지 않습니다. 묶음 오른쪽 눈 버튼으로 바로 숨기거나 다시 보이게 할 수 있습니다.</li>
+          <li>계정 추가는 위쪽 검색창에서 합니다(이름·@아이디·프로필 주소를 넣고 Enter).</li>
+        </ul>
+      </details>
+      <div id="mgList" class="mg-list" aria-label="추적 계정"></div>
+      <div id="mgBar" class="mg-bar">
+        <div class="mg-selrow">
+          <div id="selBar" class="mg-selinfo" aria-live="polite"></div>
+          <button id="selAll" type="button" class="mg-link">전체 선택</button>
+          <button id="selClear" type="button" class="mg-link" hidden>선택 해제</button>
+        </div>
+        <div class="mg-actions">
+          <div class="mg-act">
+            <select id="dDays" aria-label="고른 계정의 가져올 기간"><option value="0">기본(맨 위 기간)</option><option value="7">1주 (7일)</option><option value="14">2주 (14일)</option><option value="30">1개월 (30일)</option><option value="60">2개월 (60일)</option></select>
+            <button id="dApply" type="button">기간 적용</button>
+          </div>
+          <form id="groupForm" class="mg-act">
+            <input id="gName" type="text" maxlength="30" placeholder="묶음 이름" aria-label="묶을 묶음 이름" autocomplete="off">
+            <button type="submit">묶기</button>
+            <button id="gClear" type="button" title="고른 계정을 묶음에서 뺍니다">묶음 풀기</button>
+          </form>
+          <div class="mg-act">
+            <button id="selHide" type="button">숨기기</button>
+            <button id="selRemove" type="button" class="danger">제거</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -187,11 +200,13 @@
   </main>
 </div>
 
-<script src="js/core.js?v=376"></script>
-<script src="js/bridge.js?v=376"></script>
-<script src="js/store.js?v=376"></script>
-<script src="js/list.js?v=376"></script>
-<script src="js/tracking.js?v=376"></script>
-<script src="js/account.js?v=376"></script>
-<script src="js/ui.js?v=376"></script>
+<script src="js/core.js?v=378"></script>
+<script src="js/bridge.js?v=378"></script>
+<script src="js/store.js?v=378"></script>
+<script src="js/list.js?v=378"></script>
+<script src="js/stories.js?v=378"></script>
+<script src="js/tracking.js?v=378"></script>
+<script src="js/manage.js?v=378"></script>
+<script src="js/account.js?v=378"></script>
+<script src="js/ui.js?v=378"></script>
 

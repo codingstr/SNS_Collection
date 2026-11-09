@@ -1357,3 +1357,177 @@ html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{dis
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head button{position:static !important;margin-left:auto !important}
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card .badge{display:none !important}
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card:not(:has(> img)) .body{padding-top:16px}
+
+/* ===== 위쪽 묶음 줄(인스타그램 스토리 모양): 글 영역 맨 위, 글을 내려도 위에 붙어 있음 (js/stories.js) ===== */
+html[data-design="bento"] #storyBar{position:sticky;top:0;z-index:4;grid-column:1 / -1;display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;
+  padding:10px 14px 8px;margin:0 0 14px;border-radius:24px;box-sizing:border-box;max-width:100%;
+  background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid rgba(255,255,255,.8);box-shadow:0 6px 20px rgba(40,38,35,.10),inset 0 1px 0 rgba(255,255,255,.8);
+  scrollbar-width:none;overscroll-behavior-x:contain;-webkit-user-select:none;user-select:none}
+html[data-design="bento"] #storyBar::-webkit-scrollbar{display:none}
+html[data-design="bento"][data-theme="dark"] #storyBar{background:rgba(34,34,32,.78);border-color:rgba(255,255,255,.10);box-shadow:0 6px 20px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+html[data-design="bento"] #storyBar.dragging{cursor:grabbing}
+html[data-design="bento"] #storyBar .story{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;width:74px;padding:2px 0 0;margin:0;border:0;border-radius:14px;background:none;box-shadow:none;color:var(--fg);cursor:pointer;font:inherit;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+html[data-design="bento"] #storyBar .sring{position:relative;display:block;width:64px;height:64px;padding:2px;border-radius:50%;box-sizing:border-box;background:var(--line);transition:transform .15s ease}
+html[data-design="bento"] #storyBar .story.on .sring{padding:3px;background:linear-gradient(45deg,#f9a03f,#f05c40 30%,#e1306c 55%,#c13584 75%,#833ab4)}
+html[data-design="bento"] #storyBar .sinner{display:block;width:100%;height:100%;padding:2px;border-radius:50%;box-sizing:border-box;background:var(--card)}
+html[data-design="bento"] #storyBar .sface{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;object-fit:cover;box-sizing:border-box;background:var(--soft);color:var(--fg);font-weight:700;font-size:20px;line-height:1;border:0;box-shadow:none}
+html[data-design="bento"] #storyBar .sall svg{width:80%;height:80%;color:var(--fg)}
+html[data-design="bento"] #storyBar .sbadge{position:absolute;right:-1px;bottom:-1px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--card);box-shadow:0 1px 4px rgba(0,0,0,.18)}
+html[data-design="bento"] #storyBar .sbadge .pg,html[data-design="bento"] #storyBar .sbadge img{display:flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:9px;line-height:1}
+html[data-design="bento"] #storyBar .sname{position:relative;display:inline-block;max-width:70px;font-size:12px;line-height:1.25}
+html[data-design="bento"] #storyBar .st{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+html[data-design="bento"] #storyBar .story.on .st,html[data-design="bento"] #storyBar .story.new .st{color:var(--fg)}
+html[data-design="bento"] #storyBar .story.on .st{font-weight:700}
+/* 안 읽은 글: 이름 오른쪽 위 빨간 점 */
+html[data-design="bento"] #storyBar .sdot{position:absolute;top:-2px;right:-7px;width:7px;height:7px;border-radius:50%;background:#ff3b30;box-shadow:0 0 0 2px var(--card)}
+html[data-design="bento"] #storyBar .story:hover .sring{transform:scale(1.05)}
+html[data-design="bento"] #storyBar .story:active .sring{transform:scale(.96)}
+html[data-design="bento"] #storyBar .story:focus{outline:none}
+html[data-design="bento"] #storyBar .story:focus-visible .sring{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){html[data-design="bento"] #storyBar .sring{transition:none}}
+@media (max-width:860px){
+  html[data-design="bento"] #storyBar{gap:10px;padding:8px 10px 6px;margin-bottom:10px;border-radius:20px}
+  html[data-design="bento"] #storyBar .story{width:64px}
+  html[data-design="bento"] #storyBar .sring{width:56px;height:56px}
+  html[data-design="bento"] #storyBar .sname{max-width:62px;font-size:11.5px}
+}
+
+/* ===== 추적 계정 관리: 홈에 보일 묶음(숨기기/보이기) ===== */
+html[data-design="bento"] #hideBox{margin:14px 0 4px;padding:12px 14px;border-radius:20px;background:var(--soft)}
+html[data-design="bento"] #hideBox .hb-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:10px}
+html[data-design="bento"] #hideBox .hb-head b{font-size:14px}
+html[data-design="bento"] #hideBox .hb-head .hint{margin:0 !important;font-size:12px;line-height:1.5;color:var(--muted)}
+html[data-design="bento"] #hideList{display:flex;flex-wrap:wrap;gap:8px}
+html[data-design="bento"] #hideList .hchip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--fg);font:inherit;font-size:13px;cursor:pointer}
+html[data-design="bento"] #hideList .hchip .pface{width:26px;height:26px;font-size:11px;border-width:1px;box-shadow:none;flex:none}
+html[data-design="bento"] #hideList .hchip .hs{font-size:11.5px;font-weight:700;color:var(--ok)}
+html[data-design="bento"] #hideList .hchip.off{background:transparent;border-style:dashed;color:var(--muted)}
+html[data-design="bento"] #hideList .hchip.off .pface{opacity:.45;filter:grayscale(1)}
+html[data-design="bento"] #hideList .hchip.off .hn{text-decoration:line-through}
+html[data-design="bento"] #hideList .hchip.off .hs{color:var(--muted)}
+html[data-design="bento"] #hideList .hchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 사람별 화면 오른쪽 칸: 지금 보이는 묶음 목록(누르면 그 줄로 이동). 고르기는 위쪽 묶음 줄에서 */
+html[data-design="bento"] #sidePeople .pb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;font-size:12.5px;color:var(--muted)}
+html[data-design="bento"] #sidePeople .pb-head b{font-weight:700}
+html[data-design="bento"] #sidePeople .pb-clear{padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--fg);font:inherit;font-size:12px;cursor:pointer}
+html[data-design="bento"] #sidePeople .pbar button.new .nm{position:relative;padding-right:9px}
+html[data-design="bento"] #sidePeople .pbar button.new .nm::after{content:"";position:absolute;top:1px;right:0;width:6px;height:6px;border-radius:50%;background:#ff3b30}
+
+/* ===== 추적 계정 관리: 제목 줄(오른쪽 끝에 상단 버튼 줄이 들어가는 자리 .mg-tools — 위치는 js/ui.js가 맞춤) ===== */
+html[data-design="bento"] #trackPanel .mg-head{display:flex;align-items:center;gap:10px;margin:0 0 14px;min-height:46px}
+html[data-design="bento"] #trackPanel .mg-head h2{margin:0 !important}
+html[data-design="bento"] #trackPanel .mg-count{font-size:12.5px;color:var(--muted)}
+html[data-design="bento"] #trackPanel .mg-tools{margin-left:auto;flex:none;display:block}
+@media (max-width:860px){html[data-design="bento"] #trackPanel .mg-tools{display:none}}
+/* 관리 칸 제목 줄 안의 버튼 줄: 홈의 '현재 작업' 카드에 붙는 탭 모양 대신 둥근 알약 모양 */
+@media (min-width:861px){
+  html[data-design="bento"] header .toolbar.inpanel,html[data-design="bento"] header .toolbar.inpanel:has(.lb.pi){position:absolute;height:48px !important;border-radius:999px !important;clip-path:none !important;box-shadow:none !important;background:var(--soft) !important;z-index:5}
+  html[data-design="bento"] header .toolbar.inpanel::after{display:none !important}
+  html[data-design="bento"] header .toolbar.inpanel .refreshbtn{background:var(--card) !important}
+  html[data-design="bento"] header .toolbar.inpanel .refreshbtn:hover:not(:disabled){background:var(--accent) !important}
+}
+
+/* ===== 추적 계정 관리 (js/manage.js): 묶음 카드 + 아래 작업 막대 ===== */
+html[data-design="bento"] #trackPanel .mg-help{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
+html[data-design="bento"] #trackPanel .mg-help summary{display:inline-flex;align-items:center;gap:6px;padding:5px 12px 5px 6px;border-radius:999px;background:var(--soft);color:var(--fg);font-weight:600;cursor:pointer;list-style:none;user-select:none}
+html[data-design="bento"] #trackPanel .mg-help summary::-webkit-details-marker{display:none}
+html[data-design="bento"] #trackPanel .mg-help summary::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--card);font-size:11px;font-weight:700}
+html[data-design="bento"] #trackPanel .mg-help[open] summary::after{content:"닫기";font-weight:500;color:var(--muted);margin-left:4px}
+html[data-design="bento"] #trackPanel .mg-help ul{margin:10px 0 0;padding:12px 16px 12px 30px;border-radius:16px;background:var(--soft);line-height:1.75;color:var(--fg)}
+html[data-design="bento"] #trackPanel .mg-help b{font-weight:700}
+html[data-design="bento"] #trackPanel .mg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-content:start;padding:2px;margin:0;overscroll-behavior:contain}
+html[data-design="bento"] #trackPanel .mg-empty{grid-column:1 / -1;margin:24px 4px;color:var(--muted);font-size:13.5px;line-height:1.6}
+html[data-design="bento"] #trackPanel .mg-group{display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px 12px 12px;border-radius:20px;background:var(--soft);border:2px solid transparent;box-sizing:border-box;transition:border-color .15s}
+html[data-design="bento"] #trackPanel .mg-group.has-sel{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+html[data-design="bento"] #trackPanel .mg-group.off:not(.mg-singles){border-style:dashed;border-color:var(--line)}
+html[data-design="bento"] #trackPanel .mg-group.off:not(.mg-singles) .mg-gsel .pface,html[data-design="bento"] #trackPanel .mg-group.off:not(.mg-singles) .mg-gname{opacity:.5}
+html[data-design="bento"] #trackPanel .mg-ghead{display:flex;align-items:center;gap:4px;min-width:0}
+html[data-design="bento"] #trackPanel .mg-gsel{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:42px;padding:0 10px 0 6px;margin:0;border:0;border-radius:14px;background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+html[data-design="bento"] #trackPanel .mg-gsel:hover{background:var(--card)}
+html[data-design="bento"] #trackPanel .mg-gsel .pface{width:30px;height:30px;font-size:12px;border-width:1px;box-shadow:none;flex:none}
+html[data-design="bento"] #trackPanel .mg-gname{font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+html[data-design="bento"] #trackPanel .mg-gmeta{margin-left:auto;padding-left:8px;font-size:12px;color:var(--muted);white-space:nowrap}
+html[data-design="bento"] #trackPanel .mg-check{position:relative;flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);box-sizing:border-box;background:var(--card)}
+html[data-design="bento"] #trackPanel .mg-check.on{background:var(--accent);border-color:var(--accent)}
+html[data-design="bento"] #trackPanel .mg-check.on::after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid var(--accent-fg);border-width:0 2px 2px 0;transform:rotate(45deg)}
+html[data-design="bento"] #trackPanel .mg-check.part{border-color:var(--accent)}
+html[data-design="bento"] #trackPanel .mg-check.part::after{content:"";position:absolute;left:3px;top:7px;width:10px;height:2px;border-radius:1px;background:var(--accent)}
+html[data-design="bento"] #trackPanel .mg-badge{flex:none;padding:3px 8px;border-radius:999px;background:var(--card);color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
+html[data-design="bento"] #trackPanel .mg-ib{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer}
+html[data-design="bento"] #trackPanel .mg-ib:hover{background:var(--card);color:var(--fg)}
+html[data-design="bento"] #trackPanel .mg-ib svg{width:18px;height:18px}
+html[data-design="bento"] #trackPanel .mg-ib-hidden{color:var(--fg)}
+html[data-design="bento"] #trackPanel .mg-accs{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px}
+html[data-design="bento"] #trackPanel .mg-acc{display:inline-flex;align-items:center;gap:6px;max-width:100%;height:32px;padding:0 10px 0 6px;margin:0;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--fg);font:inherit;font-size:12.5px;cursor:pointer;box-sizing:border-box}
+html[data-design="bento"] #trackPanel .mg-acc:hover{border-color:var(--muted)}
+html[data-design="bento"] #trackPanel .mg-pi,html[data-design="bento"] #trackPanel .mg-pi .pg{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none;font-size:10px}
+html[data-design="bento"] #trackPanel .mg-pi img{width:16px;height:16px;border-radius:4px;display:block}
+html[data-design="bento"] #trackPanel .mg-an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+html[data-design="bento"] #trackPanel .mg-ad{flex:none;padding-left:7px;border-left:1px solid var(--line);color:var(--muted);font-size:11px}
+html[data-design="bento"] #trackPanel .mg-acc.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #trackPanel .mg-acc.sel .mg-ad{color:inherit;opacity:.75;border-color:currentColor}
+html[data-design="bento"] #trackPanel .mg-acc.off .mg-an{text-decoration:line-through;opacity:.65}
+html[data-design="bento"] #trackPanel .mg-accwrap{display:inline-flex;align-items:center;max-width:100%}
+html[data-design="bento"] #trackPanel .mg-accwrap .mg-ib{width:28px;height:28px}
+html[data-design="bento"] #trackPanel .mg-accwrap .mg-ib svg{width:16px;height:16px}
+html[data-design="bento"] #trackPanel .mg-acc:focus-visible,html[data-design="bento"] #trackPanel .mg-gsel:focus-visible,html[data-design="bento"] #trackPanel .mg-ib:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 아래 작업 막대 */
+html[data-design="bento"] #trackPanel .mg-bar{display:flex;flex-direction:column;gap:10px;margin:12px 0 0;padding:12px 14px;border-radius:20px;background:var(--soft);transition:box-shadow .2s}
+html[data-design="bento"] #trackPanel .mg-bar.need{box-shadow:0 0 0 2px var(--danger)}
+html[data-design="bento"] #trackPanel .mg-selrow{display:flex;align-items:center;gap:8px;min-height:22px}
+html[data-design="bento"] #trackPanel .mg-selinfo{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;font-size:13px;overflow:hidden}
+html[data-design="bento"] #trackPanel .mg-selinfo b{flex:none;font-weight:700}
+html[data-design="bento"] #trackPanel .mg-selinfo .ph{color:var(--muted)}
+html[data-design="bento"] #trackPanel .mg-selnames{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+html[data-design="bento"] #trackPanel .mg-link{flex:none;height:auto;padding:2px 4px;margin:0;border:0;background:none;color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+html[data-design="bento"] #trackPanel .mg-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+html[data-design="bento"] #trackPanel .mg-act{position:relative;display:flex;align-items:center;gap:6px;margin:0}
+html[data-design="bento"] #trackPanel .mg-act + .mg-act{padding-left:12px;border-left:1px solid var(--line)}
+html[data-design="bento"] #trackPanel .mg-act select,html[data-design="bento"] #trackPanel .mg-act input{height:38px;padding:0 14px;border:0;border-radius:19px;background:var(--card);color:var(--fg);font:inherit;font-size:13px;box-sizing:border-box}
+html[data-design="bento"] #trackPanel .mg-act input{width:150px}
+html[data-design="bento"] #trackPanel .mg-act button{height:38px;padding:0 14px;margin:0;border:0;border-radius:19px;background:var(--card);color:var(--fg);font:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+html[data-design="bento"] #trackPanel .mg-act button:hover:not(:disabled){background:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #trackPanel .mg-act button.danger{color:var(--danger)}
+html[data-design="bento"] #trackPanel .mg-act button.danger:hover:not(:disabled){background:var(--danger);color:#fff}
+html[data-design="bento"] #trackPanel .mg-act :disabled{opacity:.45;cursor:not-allowed}
+html[data-design="bento"] #trackPanel .mg-act .gsuggest{bottom:calc(100% + 8px);top:auto}
+/* 넓은 화면: 패널 높이 안에서 묶음 목록만 스크롤, 작업 막대는 맨 아래 */
+@media (min-width:861px){
+  html[data-design="bento"] #trackPanel .mg-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin}
+}
+/* 좁은 화면: 한 줄에 카드 하나, 작업 막대는 화면 아래에 붙어 있음 */
+@media (max-width:860px){
+  html[data-design="bento"] #trackPanel .mg-list{grid-template-columns:minmax(0,1fr)}
+  html[data-design="bento"] #trackPanel .mg-bar{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+  html[data-design="bento"] #trackPanel .mg-act + .mg-act{padding-left:0;border-left:0}
+  html[data-design="bento"] #trackPanel .mg-act{flex-wrap:wrap}
+  html[data-design="bento"] #trackPanel .mg-act input{width:130px}
+  html[data-design="bento"] #trackPanel .mg-act select{max-width:150px}
+}
+html[data-design="bento"] #trackPanel .mg-head h2{font-size:20px;font-weight:700;letter-spacing:-.2px;color:var(--fg)}
+html[data-design="bento"] #trackPanel .mg-gtext{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
+@media (max-width:860px){
+  html[data-design="bento"] #trackPanel .mg-gtext{flex-direction:column;align-items:flex-start;gap:1px}
+  html[data-design="bento"] #trackPanel .mg-gname{max-width:100%}
+  html[data-design="bento"] #trackPanel .mg-gmeta{margin-left:0;padding-left:0;font-size:11.5px}
+  html[data-design="bento"] #trackPanel .mg-gsel{height:auto;min-height:44px;padding-top:4px;padding-bottom:4px}
+  /* 작업 막대: 고른 계정이 있을 때만 버튼이 나오고, 버튼은 빈틈없이 두 줄 정도로 채웁니다.
+     칸 묶음(.mg-act)을 풀어(display:contents) 버튼끼리 한 흐름으로 줄을 바꾸고, 묶음 이름 추천 목록은 막대 위로 뜹니다. */
+  html[data-design="bento"] #trackPanel .mg-bar{gap:8px;padding:10px 12px}
+  html[data-design="bento"] #trackPanel .mg-bar.empty .mg-actions{display:none}
+  html[data-design="bento"] #trackPanel .mg-actions{flex-wrap:wrap;gap:6px}
+  html[data-design="bento"] #trackPanel .mg-act,html[data-design="bento"] #trackPanel .mg-act + .mg-act{display:contents;padding:0;border:0}
+  html[data-design="bento"] #trackPanel .mg-act select,html[data-design="bento"] #trackPanel .mg-act input,html[data-design="bento"] #trackPanel .mg-act button{height:36px;font-size:12.5px}
+  html[data-design="bento"] #trackPanel .mg-act button{padding:0 11px}
+  html[data-design="bento"] #trackPanel #dDays{order:1;width:118px;max-width:none;padding:0 10px}
+  html[data-design="bento"] #trackPanel #dApply{order:2}
+  html[data-design="bento"] #trackPanel #selHide{order:3}
+  html[data-design="bento"] #trackPanel #selRemove{order:4}
+  html[data-design="bento"] #trackPanel #gName{order:5;flex:1 1 110px;width:auto;min-width:0}
+  html[data-design="bento"] #trackPanel #groupForm button[type=submit]{order:6}
+  html[data-design="bento"] #trackPanel #gClear{order:7}
+  html[data-design="bento"] #trackPanel .mg-act .gsuggest{order:9;left:12px;right:12px;width:auto;bottom:calc(100% + 8px)}
+  html[data-design="bento"] #trackPanel .mg-selnames{display:none}
+}

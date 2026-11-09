@@ -40,7 +40,7 @@ document.addEventListener("wheel", (ev) => {
     // 트랙패드 가로 스크롤: 카드 줄을 손가락 움직임 그대로(1:1) 따라가게 직접 움직이고, 멈추면 가장 가까운 카드 자리로 살짝 맞춥니다.
     // 줄이 그 방향으로 더 갈 수 없거나 줄이 아닌 곳이면 막아서 브라우저의 '뒤로/앞으로 가기' 스와이프가 발동하지 않게 합니다.
     ev.preventDefault();
-    const r = ev.target.closest(".row-cards");
+    const r = ev.target.closest(".row-cards, .storybar");
     if (!r) return;
     const dx = ev.deltaMode === 1 ? ev.deltaX * 40 : ev.deltaX, mx = r.scrollWidth - r.clientWidth;
     if (mx <= 0 || (dx < 0 && r.scrollLeft <= 0) || (dx > 0 && r.scrollLeft >= mx - 1)) return;
@@ -54,7 +54,9 @@ document.addEventListener("wheel", (ev) => {
     return;
   }
   ev.preventDefault();
-  const row = ev.target.closest(".row-cards");
+  let row = ev.target.closest(".row-cards, .storybar");
+  // 묶음 줄이 옆으로 넘길 만큼 길지 않으면, 그 위에서 돌린 휠은 글 영역을 세로로 움직입니다.
+  if (row && row.classList.contains("storybar") && row.scrollWidth <= row.clientWidth + 1) row = null;
   if (!row) { // 카드 줄이 아닌 곳(세로로 쌓인 카드 목록 등): 스크롤바에 마우스를 올리지 않아도 휠로 글 영역이 세로로 움직입니다
     const g = document.getElementById("grid");
     if (g && g.scrollHeight > g.clientHeight) barWheel(g, dy); // 스크롤바 위에서 돌릴 때와 같은 속도
@@ -70,11 +72,12 @@ document.addEventListener("wheel", (ev) => {
   // 휠 한 번 = 카드 한 장(폭+간격)씩, 부드럽게 이동
   const kids = Array.from(row.children).filter((c) => c.offsetWidth);
   const unit = kids.length > 1 ? kids[1].offsetLeft - kids[0].offsetLeft : kids[0] ? kids[0].offsetWidth + 4 : 240; // 실제 카드 간격(줄마다 gap이 달라도 어긋나지 않게)
+  const step = row.classList.contains("storybar") ? 3 : 1; // 묶음 줄은 휠 한 칸에 세 개씩
   const now = Date.now();
   if (st.last && now - st.last < 60) { return; } // 트랙패드 연속 이벤트는 한 번으로 묶기
   st.last = now;
   const base = st.raf ? st.target : snapPos(row, row.scrollLeft);
-  st.target = Math.max(0, Math.min(max, snapPos(row, base + (dy > 0 ? unit : -unit))));
+  st.target = Math.max(0, Math.min(max, snapPos(row, base + (dy > 0 ? unit : -unit) * step)));
   wheelRun(row, st);
 }, { passive: false });
 
@@ -426,16 +429,42 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   const tb = document.querySelector("header .toolbar"), wc = document.getElementById("workCard"), lay = document.querySelector(".layout");
   if (!tb || !wc || !lay) return;
   let raf = 0;
+  // 버튼 줄의 위치 기준(위치를 정하는 부모)의 화면 좌표
+  const originOf = () => {
+    if (getComputedStyle(tb).position === "fixed") return { top: 0, left: 0 };
+    const op = tb.offsetParent;
+    if (op && op !== document.body && op !== document.documentElement) { const r = op.getBoundingClientRect(); return { top: r.top, left: r.left }; }
+    return { top: -window.scrollY, left: -window.scrollX };
+  };
   const place = () => {
     raf = 0;
-    const on = window.innerWidth >= 861 && !wc.hidden && wc.offsetParent !== null && !document.querySelector("#trackPanel:not([hidden])");
+    // 추적 계정 관리 화면(넓은 화면): 오른쪽 열이 없으므로, 관리 칸 제목 줄 오른쪽 끝의 빈 자리(.mg-tools)에 버튼 줄을 넣습니다.
+    const slot = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden]) .mg-tools") : null;
+    const inPanel = !!(slot && slot.offsetParent !== null);
+    tb.classList.toggle("inpanel", inPanel);
+    if (inPanel) {
+      slot.style.width = tb.offsetWidth + "px";
+      slot.style.height = tb.offsetHeight + "px";
+      const o = originOf(), s = slot.getBoundingClientRect();
+      tb.style.setProperty("top", Math.round(s.top - o.top) + "px", "important");
+      tb.style.setProperty("left", Math.round(s.left - o.left) + "px", "important");
+      tb.style.setProperty("right", "auto", "important");
+      return;
+    }
+    tb.style.removeProperty("left"); tb.style.removeProperty("right");
+    const on = window.innerWidth >= 861 && !wc.hidden && wc.offsetParent !== null;
     if (!on) { tb.style.removeProperty("top"); return; }
-    const op = tb.offsetParent, base = op && op !== document.body && op !== document.documentElement ? op.getBoundingClientRect().top : -window.scrollY;
-    tb.style.setProperty("top", Math.round(wc.getBoundingClientRect().top - base - tb.offsetHeight) + "px", "important");
+    tb.style.setProperty("top", Math.round(wc.getBoundingClientRect().top - originOf().top - tb.offsetHeight) + "px", "important");
   };
-  const q = () => { if (!raf) raf = requestAnimationFrame(place); };
+  // 다음 화면 그리기 때 한 번만 맞춥니다. 탭이 뒤에 가려져 있으면 그리기가 멈추므로, 잠시 뒤에도 안 했으면 직접 맞춥니다
+  // (안 그러면 기다리는 표시가 남아 이후의 화면 변화를 모두 놓칩니다).
+  const q = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(place);
+    setTimeout(() => { if (raf) { cancelAnimationFrame(raf); place(); } }, 200);
+  };
   window.addEventListener("resize", q);
-  if (window.ResizeObserver) { const ro = new ResizeObserver(q); ro.observe(wc); ro.observe(lay); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(q); ro.observe(wc); ro.observe(lay); ro.observe(tb); const tp = document.getElementById("trackPanel"); if (tp) ro.observe(tp); }
   new MutationObserver(q).observe(document.body, { attributes: true, subtree: true, attributeFilter: ["hidden"] });
   q();
 })();
@@ -452,13 +481,14 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
     { sel: [".sbox"], t: "통합 검색창", d: "글 제목·내용·작성자·매체·묶음 이름으로 모아 둔 글을 바로 검색합니다. 왼쪽 동그라미는 '계정 찾기'에서 검색할 매체(인스타·X·유튜브)를 고르는 버튼이에요." },
     { sel: ["#sGo"], t: "계정 찾기", d: "검색창에 이름·@아이디·프로필 주소를 적고 누르면(Enter도 가능) 선택한 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
     { sel: ["#empty:not([hidden])", "#grid:not([hidden])"], t: "글이 모이는 곳", d: "추적 중인 계정의 새 글이 여기에 모입니다. 카드를 누르면 바로 열어 볼 수 있어요." },
-    { sel: ["#sidePeople"], t: "사람 목록", d: "같은 사람의 인스타·X·유튜브 계정을 한 묶음으로 만들어 두면 한 사람으로 모아 봅니다. 목록에서 골라 그 사람의 글만 볼 수 있어요." },
+    { sel: ["#storyBar"], t: "묶음 고르기", d: "같은 사람의 인스타·X·유튜브 계정을 한 묶음으로 만들어 두면 한 사람으로 모아 봅니다. 동그라미를 눌러 보고 싶은 묶음을 여러 개 고를 수 있고, 아무것도 안 고르면 모두 보여요. 빨간 점은 안 읽은 글이 있다는 뜻이에요. 빠르게 두 번 누르면 안 읽은 글을 오래된 것부터 차례로 열고, 우클릭(휴대폰은 길게 누르기)하면 그 묶음의 글을 모두 읽음으로 표시해요(바로 되돌릴 수 있어요)." },
+    { sel: ["#sidePeople:not([hidden])"], t: "계정 목록", d: "매체 탭에서는 그 매체의 계정이 여기에 나와요. 하나를 고르면 그 계정 글만 볼 수 있어요." },
     { sel: ["#tabs"], t: "매체별 보기", d: "인스타·X·유튜브 버튼으로 매체별 글만 모아 볼 수 있습니다. 숫자는 글 개수예요." },
     { sel: ["#workCard", "header .toolbar"], t: "수집 켜기·최신화", d: "매체 아이콘을 누르면 그 매체 수집을 켜고 끕니다(회색이면 서버 테스트 계정 로그인이 필요해 관리자에게 알려 주세요). 동그란 버튼은 '지금 최신화'이고, 수집 중에 두 번 누르면 멈춥니다." },
     { sel: ["#brand"], t: "로고", d: "어느 화면에서든 로고를 누르면 처음 홈 화면(전체 글)으로 돌아옵니다." },
     { sel: ["#navHome"], t: "홈", d: "추적 중인 모든 계정의 글을 한꺼번에 보는 기본 화면이에요." },
     { sel: ["#navFav"], t: "즐겨찾기", d: "☆를 눌러 둔 사람의 글만 모아서 봅니다." },
-    { sel: ["#navManage"], t: "추적 계정 관리", d: "추적 중인 계정을 골라 묶음·기간을 정리하거나 제거하는 화면이에요. 계정 추가는 위쪽 검색창에서 해요." },
+    { sel: ["#navManage"], t: "추적 계정 관리", d: "묶음별 카드에서 계정을 골라 가져올 기간·묶음을 정하거나, 숨기거나 제거하는 화면이에요. 묶음 이름을 누르면 그 묶음의 계정이 한꺼번에 골라져요. 숨긴 묶음은 홈에 안 나오고 글도 모으지 않아요. 계정 추가는 위쪽 검색창에서 해요." },
     { sel: ["#navHelp"], t: "사용 설명", d: "지금 보는 이 안내예요. 언제든 눌러서 다시 볼 수 있어요." },
     { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "눌러서 밝은 화면과 어두운 화면을 바꿀 수 있어요." },
     { sel: ["#connAcct"], t: "계정 메뉴", d: "프로필 이미지 설정, 계정 관리, 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },

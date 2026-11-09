@@ -120,8 +120,12 @@ async function initAccount() {
     } catch (e) { say("delMsg", e.message, true); }
   });
   if (sess) {
-    try { const j = await api("me"); await afterLogin(j.id); }
+    // 저장된 로그인을 확인하는 사이에 사용자가 새로 로그인했으면(느린 연결에서 생길 수 있음), 늦게 온 옛 확인 결과는 무시합니다.
+    // (예전에는 옛 세션의 '만료' 응답이 방금 받은 새 세션까지 지워, 새로고침하면 로그아웃되어 있었음)
+    const used = sess;
+    try { const j = await api("me"); if (sess === used) await afterLogin(j.id); }
     catch (e) {
+      if (sess !== used) return;
       if (e && e.offline) {
         // 서버가 꺼져 있거나 닿지 않을 때: 로그인 상태는 유지하고, 서버가 다시 켜지면 자동으로 이어집니다(아래 connect의 반복 확인).
         $("acctForm").hidden = true; $("acctUser").hidden = false; $("connAcct").hidden = false; $("connOut").textContent = "로그아웃";

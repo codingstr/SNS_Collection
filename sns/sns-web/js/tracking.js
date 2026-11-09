@@ -74,97 +74,7 @@ function parseAccount(platformHint, raw) {
 
 /* ---------- 이벤트 ---------- */
 { let qt = 0; $("q").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(renderList, 180); }); } // 글자마다 전체를 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
-function needPick() { const b = $("selBar"); b.classList.add("need"); setTimeout(() => b.classList.remove("need"), 900); }
-$("selClear").addEventListener("click", () => { selIds = []; renderTracked(); });
-$("selAll").addEventListener("click", () => { selIds = tracked.map((t) => t.id); renderTracked(); });
-// 고른 계정 전부에 적용합니다.
-async function applyToSelected(change) {
-  if (!selIds.length) { needPick(); return; }
-  const ids = new Set(selIds), before = tracked;
-  tracked = tracked.map((t) => (ids.has(t.id) ? change({ ...t }) : t));
-  renderTracked(); renderList();
-  try { await saveTracked(); } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
-}
-$("groupForm").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const name = $("gName").value.trim().slice(0, 30);
-  await applyToSelected((c) => { if (name) c.group = name; else delete c.group; return c; });
-  if (selIds.length) $("gName").value = "";
-});
-$("gClear").addEventListener("click", () => applyToSelected((c) => { delete c.group; return c; }));
-// 묶음 수정: 모달에서 묶음을 고르고 새 이름을 적으면, 그 묶음의 모든 계정 이름이 바뀝니다(즐겨찾기·보고 있는 묶음도 따라감).
-{
-  const modal = $("gmModal"), sel = $("gmSel"), inp = $("gmName"), err = $("gmErr");
-  const say = (m) => { err.textContent = m; err.hidden = !m; };
-  const close = () => { modal.hidden = true; };
-  const groupsNow = () => { const c = new Map(); tracked.forEach((t) => { if (t.group) c.set(t.group, (c.get(t.group) || 0) + 1); }); return c; };
-  $("gRename").addEventListener("click", () => {
-    const c = groupsNow();
-    if (!c.size) { toast("수정할 묶음이 없습니다. 계정을 골라 '묶기'로 먼저 묶어 주세요.", "error"); return; }
-    sel.textContent = "";
-    c.forEach((n, name) => sel.appendChild(el("option", { value: name, text: name + " (" + n + "개 계정)" })));
-    let start = selGroup;
-    if (!start) { const gs = Array.from(new Set(tracked.filter((t) => selIds.includes(t.id) && t.group).map((t) => t.group))); if (gs.length === 1) start = gs[0]; }
-    if (start && c.has(start)) sel.value = start;
-    inp.value = sel.value; say(""); modal.hidden = false; inp.focus(); inp.select();
-  });
-  sel.addEventListener("change", () => { inp.value = sel.value; say(""); inp.focus(); inp.select(); });
-  $("gmX").addEventListener("click", close); $("gmCancel").addEventListener("click", close);
-  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) close(); });
-  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("gmOk").click(); } });
-  $("gmOk").addEventListener("click", async () => {
-    const old = sel.value, neu = inp.value.trim().slice(0, 30);
-    if (!neu) { say("새 이름을 적어 주세요."); inp.focus(); return; }
-    if (neu === old) { say("현재 이름과 같습니다."); return; }
-    const before = tracked;
-    tracked = tracked.map((t) => (t.group === old ? { ...t, group: neu } : t));
-    if (typeof favs !== "undefined" && favs.has(old)) { favs.delete(old); favs.add(neu); saveFavs(); }
-    if (typeof groupFocus !== "undefined" && groupFocus === old) groupFocus = neu;
-    if (typeof personFocus !== "undefined" && personFocus === old) personFocus = neu;
-    selGroup = ""; close(); renderTracked(); renderList();
-    try { await saveTracked(); } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
-  });
-}
-// 묶음 고르기: 이미 있는 묶음 이름을 칩으로 보여 주고, 하나를 누르면 이름 칸에 그 이름이 들어가 바로 고쳐서 "이름 변경"을 누를 수 있습니다.
-let selGroup = "";
-function renderGroupChips() {
-  const box = $("gChips"); if (!box) return;
-  const cnt = new Map(); tracked.forEach((t) => { if (t.group) cnt.set(t.group, (cnt.get(t.group) || 0) + 1); });
-  if (selGroup && !cnt.has(selGroup)) selGroup = "";
-  box.textContent = ""; box.hidden = !cnt.size;
-  box.appendChild(el("span", { class: "gl", text: "묶음" }));
-  [...cnt.entries()].sort((a, b) => b[1] - a[1]).forEach(([name, n]) => {
-    const b = el("button", { type: "button", class: "gc" + (name === selGroup ? " on" : ""), title: "눌러서 선택 → 아래 칸에서 이름을 고쳐 '이름 변경'" }, [el("span", { text: name }), el("i", { text: String(n) })]);
-    b.addEventListener("click", () => {
-      selGroup = selGroup === name ? "" : name;
-      $("gName").value = selGroup; if (selGroup) { $("gName").focus(); $("gName").select(); const sg = $("gName").parentElement.querySelector(".gsuggest"); if (sg) sg.hidden = true; }
-      renderGroupChips();
-    });
-    box.appendChild(b);
-  });
-  
-}
-{ const _rt = renderTracked; renderTracked = function () { const r = _rt.apply(this, arguments); renderGroupChips(); return r; }; }
-renderGroupChips();
-$("daysForm").addEventListener("submit", (ev) => {
-  ev.preventDefault();
-  const d = Number($("dDays").value);
-  applyToSelected((c) => { if (d) c.days = d; else delete c.days; return c; });
-});
-// 제거: 선택한 계정을 추적 목록에서 지웁니다(그 계정으로 모은 글도 함께). 확인 창에서 한 번 더 확인합니다.
-const closeRm = () => { $("rmModal").hidden = true; };
-$("selRemove").addEventListener("click", () => {
-  if (!selIds.length) { needPick(); return; }
-  $("rmList").textContent = selIds.map((id) => { const t = tracked.find((x) => x.id === id); return t ? PLATFORM[t.platform] + " " + (t.kind === "feed" ? FEED[t.platform] : t.handle ? "@" + t.handle : t.channelId || "") : ""; }).filter(Boolean).join(" · ");
-  $("rmModal").hidden = false;
-  $("rmCancel").focus();
-});
-$("rmX").addEventListener("click", closeRm);
-$("rmCancel").addEventListener("click", closeRm);
-$("rmModal").addEventListener("click", (e) => { if (e.target === $("rmModal")) closeRm(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("rmModal").hidden) closeRm(); });
-$("rmOk").addEventListener("click", async () => { closeRm(); await removeTrackedIds(selIds.slice()); });
+// 추적 계정 관리 화면(고르기·묶기·기간·숨기기·제거)은 js/manage.js에 있습니다.
 async function removeTrackedIds(ids) {
   const set = new Set(ids);
   if (!ids.length) return;
@@ -186,13 +96,23 @@ function addAccount(acc) {
   if (tracked.some((t) => t.id === acc.id)) { toast("이미 추가된 계정입니다.", "error"); return Promise.resolve(false); }
   if (tracked.length >= MAX_TRACKED) { toast("계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다.", "error"); return Promise.resolve(false); }
   if (!acc.days) acc.days = 30; // 이 계정만의 가져올 기간
+  // 숨긴 묶음에 넣으면 이 계정도 숨김(안 그러면 묶음 전체가 다시 보이게 됨)
+  const sameGroup = acc.group ? tracked.filter((t) => t.group === acc.group) : [];
+  const intoHidden = sameGroup.length > 0 && sameGroup.every((t) => t.hidden);
+  if (intoHidden) acc.hidden = true; else delete acc.hidden;
   const before = tracked;
   removedIds.delete(acc.id); // 방금 지웠던 계정을 다시 추가하는 경우
   tracked = [...tracked, acc];
   renderTracked(); renderTabs(); renderList();
   return saveTracked().then(() => {
-    toast(PLATFORM[acc.platform] + " " + (acc.handle ? "@" + acc.handle : acc.channelId || "계정") + " 추가됨 · 글을 모으는 중입니다");
-    call("checkNow", { only: acc.id }).catch(showErr);
+    const who = PLATFORM[acc.platform] + " " + (acc.handle ? "@" + acc.handle : acc.channelId || "계정");
+    if (intoHidden) {
+      // 숨긴 묶음은 수집하지 않으므로 바로 모으지도 않습니다.
+      toast(who + " 추가됨 · 숨긴 묶음 ‘" + acc.group + "’에 들어가 홈에 보이지 않고, 다시 보이게 할 때까지 글을 모으지 않습니다.");
+    } else {
+      toast(who + " 추가됨 · 글을 모으는 중입니다");
+      call("checkNow", { only: acc.id }).catch(showErr);
+    }
     fetchAvatars().catch(() => {});
     return true;
   }, (e) => { tracked = before; renderTracked(); renderTabs(); renderList(); showErr(e); return false; });
@@ -298,7 +218,9 @@ async function startRefresh() {
   if (!tracked.length) { toast("먼저 위쪽 검색창에서 추적할 계정을 찾아 추가하세요.", "error"); return; }
   refreshing = true; paintCheckNow();
   try {
-    const plats = Array.from(new Set(tracked.filter((t) => settings[t.platform] !== false).map((t) => t.platform)));
+    const shown = tracked.filter((t) => !t.hidden);   // 숨긴 묶음은 수집하지 않음
+    if (!shown.length) { toast("모든 묶음을 숨겨 둬서 모을 계정이 없습니다. 추적 계정 관리에서 다시 보이게 할 수 있습니다.", "error"); return; }
+    const plats = Array.from(new Set(shown.filter((t) => settings[t.platform] !== false).map((t) => t.platform)));
     if (!plats.length) { toast("모든 매체의 수집이 꺼져 있습니다. 위쪽 매체 아이콘을 눌러 켜세요.", "error"); return; }
     const out = plats.filter(loggedOut);
     if (out.length) toast(out.map((p) => PLATFORM[p]).join("·") + "는 서버 테스트 계정이 로그인되어 있지 않아 건너뜁니다(관리자 확인 필요).", "error");

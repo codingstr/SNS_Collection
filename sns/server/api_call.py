@@ -86,6 +86,8 @@ def clean_tracked(lst) -> list:
             c["group"] = t["group"].strip()[:30]
         if t.get("days") in DAYS_OK:
             c["days"] = t["days"]
+        if t.get("hidden") is True:
+            c["hidden"] = True   # 홈 화면·묶음 줄에서 숨김(표시만 숨기고 수집은 계속)
         out.append(c)
     return out
 

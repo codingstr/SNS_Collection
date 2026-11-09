@@ -70,6 +70,8 @@ async function refreshOnce() {
   else if (statusSig !== lastStatusSig) { lastStatusSig = statusSig; renderTracked(); }
   if (loginSig !== lastLoginSig) { lastLoginSig = loginSig; renderLogin(); }
   renderWork();
+  // 수집 중에는 글 목록을 다시 그리지 않지만, 묶음 줄의 '새 글' 빨간 점은 바로 바꿔 줍니다(바뀐 게 없으면 그대로 둠).
+  if (typeof renderStories === "function") renderStories();
   // 이 브라우저에 사진이 없는 계정은 서버에 저장된 사진을 받아 옵니다(계정마다 한 번만 물어봄).
   if (tracked.some((t) => !picMap[t.id] && !avAsked.has(t.id))) fetchAvatars().catch(() => {});
 }
@@ -187,7 +189,15 @@ function queueSeen(id) {
   clearTimeout(seenTimer);
   seenTimer = setTimeout(flushSeen, 8000);
 }
-async function flushSeen(opts) {
+// 보내는 중인 '본 글' 기록(되돌리기가 이것이 끝난 뒤에 지우도록 기다림)
+let seenFlushP = null;
+function flushSeen(opts) {
+  const p = flushSeenNow(opts);
+  seenFlushP = p;
+  p.finally(() => { if (seenFlushP === p) seenFlushP = null; });
+  return p;
+}
+async function flushSeenNow(opts) {
   if (!sess || !seenQueue.size) return;
   const add = Array.from(seenQueue).slice(0, 500);
   try {
@@ -207,6 +217,7 @@ async function pullSeen() {
     if (added) {
       saveSeen();
       document.querySelectorAll("#grid .card").forEach((c) => { if (c._item && seen.has(c._item.id)) c.classList.add("seen"); });
+      if (typeof renderStories === "function") renderStories();
     }
     // 이 기기에만 있던 기록은 서버로 올립니다.
     Array.from(seen).slice(-2000).forEach((id) => { if (!server.has(id)) seenQueue.add(id); });

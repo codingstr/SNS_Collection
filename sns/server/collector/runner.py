@@ -1159,6 +1159,10 @@ class Collector:
                 if not ctx["total"]:
                     set_status(uid, running=True, closed=False, paused=False, message="수집 준비 중…")
                 first = len(ctx["targets"])
+                # 숨긴 묶음의 계정은 모으지 않습니다(숨기는 동안 사이트 방문을 줄여 테스트 계정이 봇으로 보일 위험을 낮춤).
+                hidden = [t for t in tracked if t.get("hidden") is True]
+                ctx["hidden"] = ctx.get("hidden", 0) + len(hidden)
+                tracked = [t for t in tracked if t.get("hidden") is not True]
                 self._ensure_login({t.get("platform") for t in tracked if settings.get(t.get("platform")) is not False})
                 logins = get_login_state()
                 for t in tracked:
@@ -1331,6 +1335,8 @@ class Collector:
             parts.append(" / ".join(detail))
         if ctx["skipped"]:
             parts.append("서버 테스트 계정이 로그인되어 있지 않아 건너뜀: " + ", ".join(PLATFORM_KO[p] for p in sorted(ctx["skipped"])) + " (관리자 확인 필요)")
+        if ctx.get("hidden"):
+            parts.append(f"숨긴 묶음의 계정 {ctx['hidden']}개는 수집하지 않음")
         errors = ctx["errors"]
         if errors:
             other = [e for e in errors if e != "수집을 멈췄습니다"]
@@ -1343,6 +1349,8 @@ class Collector:
         if not ctx["tracked"] and not errors:
             return "확인할 계정이 없습니다. 추적 계정을 추가하세요."
         if not ctx["targets"] and not ctx["skipped"] and not errors:
+            if ctx.get("hidden") and ctx["hidden"] >= len(ctx["tracked"]):
+                return "수집할 계정이 없습니다. 숨긴 묶음은 수집하지 않습니다(추적 계정 관리에서 다시 보이게 할 수 있습니다)."
             return "수집할 계정이 없습니다. 매체 아이콘에서 수집이 꺼져 있는지 확인하세요."
         return " · ".join(parts)
 
@@ -1353,7 +1361,7 @@ class Collector:
         wanted = set()
         for row in rows:
             settings = json.loads(row["settings"])
-            wanted |= {t.get("platform") for t in json.loads(row["tracked"])[:30] if settings.get(t.get("platform")) is not False}
+            wanted |= {t.get("platform") for t in json.loads(row["tracked"])[:30] if settings.get(t.get("platform")) is not False and t.get("hidden") is not True}
         self._ensure_login(wanted & set(PLATFORMS))
         logins = get_login_state()
         pages = {}   # 주소 → {"p", "via", "days", "users"}
@@ -1363,6 +1371,8 @@ class Collector:
                 p = t.get("platform")
                 if p not in PLATFORMS or settings.get(p) is False or t.get("kind") == "feed":
                     continue
+                if t.get("hidden") is True:
+                    continue   # 숨긴 묶음은 모으지 않음(같은 계정을 숨기지 않은 다른 사용자가 있으면 그 사용자 몫으로 모음)
                 if p != "youtube" and (logins.get(p) or {}).get("loggedIn") is False:
                     continue
                 days = t["days"] if t.get("days") in (7, 14, 30, 60) else row["window_days"]

@@ -372,10 +372,10 @@ function srcIcon(k) {
 }
 const PARTNER = { "youtube-video": "youtube-post", "youtube-post": "youtube-video", x: "instagram", instagram: "x" };
 function renderTabs() {
-  const vis = items.filter(inPeriod);
+  const vis = homeItems();
   const counts = { all: vis.length };
   vis.forEach((it) => { const k = tabOf(it.source); counts[k] = (counts[k] || 0) + 1; });
-  counts.people = new Set(tracked.filter((t) => t.kind !== "feed").map(personKey)).size;
+  counts.people = effSel().size || visiblePeople().length;
   const nav = $("tabs");
   nav.textContent = "";
   Object.keys(LABELS).forEach((k) => {
@@ -425,6 +425,57 @@ function enableDrag(box) {
 }
 // 사람별 화면에서 한 줄의 이름: 묶음 이름, 묶음이 없으면 "매체 @계정"
 const personKey = (t) => t.group || PLATFORM[t.platform] + " @" + (t.handle || t.channelId || t.resolveUrl || "");
+// 이야기 줄·숨김 목록에 쓰는 짧은 이름: 묶음 이름, 묶음이 없으면 "@계정"
+const personLabel = (p) => (p.accs[0] && p.accs[0].group) || (p.accs[0] ? (p.accs[0].handle ? "@" + p.accs[0].handle : p.accs[0].channelId || "") : p.name);
+
+/* ---------- 사람(묶음) ----------
+   같은 묶음 이름을 가진 계정들이 한 사람이고, 묶음이 없는 계정은 그 계정 하나가 한 사람입니다.
+   숨긴 묶음(추적 계정 관리에서 숨김)은 홈 화면과 위쪽 묶음 줄에 나오지 않고, 서버도 수집하지 않습니다.
+   묶음의 모든 계정이 숨김일 때 숨긴 묶음으로 봅니다. 숨기기·보이기는 묶음의 모든 계정에 한꺼번에 적용합니다. */
+let _peopleOf = null, _people = new Map(), _hiddenVias = new Set();
+function peopleMap() {
+  if (_peopleOf !== tracked) {
+    _peopleOf = tracked; _people = new Map(); _hiddenVias = new Set();
+    tracked.filter((t) => t.kind !== "feed").forEach((t) => {
+      const name = personKey(t);
+      if (!_people.has(name)) _people.set(name, { name, ids: new Set(), plats: new Set(), accs: [] });
+      const p = _people.get(name);
+      p.ids.add(t.id); p.plats.add(t.platform); p.accs.push(t);
+    });
+    _people.forEach((p) => { p.hidden = p.accs.every((t) => t.hidden); if (p.hidden) p.ids.forEach((id) => _hiddenVias.add(id)); });
+  }
+  return _people;
+}
+function hiddenVias() { peopleMap(); return _hiddenVias; }
+// 지금 화면(홈·즐겨찾기)에 보일 수 있는 사람: 숨기지 않았고, 즐겨찾기 화면이면 즐겨찾기한 사람만
+function visiblePeople() {
+  return [...peopleMap().values()].filter((p) => !p.hidden && (page !== "fav" || favs.has(p.name)));
+}
+// 위쪽 묶음 줄에서 고른 묶음(이름). 비어 있으면 모든 묶음을 보여 줍니다.
+let storySel = new Set();
+// 실제로 적용되는 선택: 고른 묶음 중 지금 화면에 보일 수 있는 것만(숨겼거나 즐겨찾기 화면에서 빠진 묶음은 제외. 고른 기록은 남겨 둠)
+function effSel() {
+  if (!storySel.size) return storySel;
+  const vis = new Set(visiblePeople().map((p) => p.name));
+  return new Set([...storySel].filter((n) => vis.has(n)));
+}
+function selectedVias() {
+  const sel = effSel();
+  if (!sel.size) return null;
+  const out = new Set(), m = peopleMap();
+  sel.forEach((n) => { const p = m.get(n); if (p) p.ids.forEach((id) => out.add(id)); });
+  return out;
+}
+// 홈에 보일 글: 기간 안 + 숨긴 묶음 제외 + 고른 묶음만(고른 게 있으면)
+function homeItems() {
+  const hid = hiddenVias(), sel = selectedVias();
+  return items.filter((it) => inPeriod(it) && !hid.has(it.via) && (!sel || sel.has(it.via)));
+}
+// 홈에 보일 추적 계정(매체 탭의 계정 목록·묶음 줄에 씀)
+function homeAccounts() {
+  const hid = hiddenVias(), sel = selectedVias();
+  return tracked.filter((t) => t.kind !== "feed" && !hid.has(t.id) && (!sel || sel.has(t.id)));
+}
 /* 사람별 프로필 사진: 계정별 사진은 이 브라우저에 작게 저장하고, 이름 옆에 쓸 사진(유튜브·X·인스타)은 사람마다 고릅니다. */
 let picMap = {}, picPick = {};
 try { picMap = JSON.parse(lsGet("snsPics", "{}")) || {}; picPick = JSON.parse(lsGet("snsPicPick", "{}")) || {}; } catch (e) {}
@@ -506,10 +557,19 @@ function personAvatar(r) {
   });
   return b;
 }
+// 사람별 화면에서 그 사람의 줄로 스크롤합니다(위에 붙어 있는 묶음 줄에 가려지지 않게).
+function jumpToPerson(name) {
+  const g = $("grid");
+  const sec = Array.from(g.querySelectorAll(".sections > .sec")).find((s) => s._person === name);
+  if (!sec) return;
+  const bar = $("storyBar"), barH = bar ? bar.offsetHeight + 12 : 0;
+  const dy = sec.getBoundingClientRect().top - (g.scrollHeight > g.clientHeight + 1 ? g.getBoundingClientRect().top : 0) - barH - 8;
+  if (g.scrollHeight > g.clientHeight + 1) g.scrollBy({ top: dy, behavior: "smooth" }); else window.scrollBy({ top: dy, behavior: "smooth" });
+}
 function renderList() {
   renderTabs();
   const q = $("q").value.trim().toLowerCase();
-  let list = items.filter(inPeriod).filter((it) => activeTab === "all" || activeTab === "people" || tabOf(it.source) === activeTab);
+  let list = homeItems().filter((it) => activeTab === "all" || activeTab === "people" || tabOf(it.source) === activeTab);
   if (q) {
     // 통합 검색: 제목·본문·작성자·매체 이름·묶음 이름·계정을 한 번에 찾습니다(공백으로 나눈 단어가 모두 들어 있어야 함).
     const words = q.split(/\s+/).filter(Boolean);
@@ -523,13 +583,16 @@ function renderList() {
   list.sort((a, b) => (bySort ? publishedMs(b) - publishedMs(a) : b.collectedAt - a.collectedAt));
   const g = $("grid");
   g.querySelectorAll("img[data-src]").forEach((img) => imgObserver.unobserve(img)); // 지울 카드의 그림은 더 지켜보지 않습니다
+  { const ob = $("storyBar"); if (ob && typeof storyScroll !== "undefined") storyScroll = ob.scrollLeft; } // 묶음 줄을 옆으로 넘겨 둔 위치 유지
   g.textContent = "";
   g.className = "";
+  // 위쪽 묶음 줄(인스타 스토리 모양): 글 영역 맨 위에 붙어 있고, 글을 내려도 위에 남습니다(stories.js)
+  if (typeof storyBar === "function") { const sb = storyBar(); if (sb) { g.appendChild(sb); sb.scrollLeft = storyScroll; } }
   let ytBar = null;
   { const sp = $("sidePeople"); sp.textContent = ""; sp.hidden = true; }
   // 매체 탭(유튜브·X·인스타그램): 오른쪽 아래에 그 매체의 계정 목록(묶음 아님)을 보여주고, 누르면 그 계정 글만 봅니다.
   if (activeTab !== "people" && activeTab !== "all") {
-    const accs = tracked.filter((t) => t.platform === activeTab);
+    const accs = homeAccounts().filter((t) => t.platform === activeTab);
     const counts = new Map();
     list.forEach((it) => counts.set(it.via, (counts.get(it.via) || 0) + 1)); // 계정마다 전체 글을 다시 세지 않고 한 번에
     const cnt = (id) => counts.get(id) || 0;
@@ -564,46 +627,52 @@ function renderList() {
   if (activeTab === "people") {
     // 사람별: 같은 묶음 이름을 가진 유튜브·X·인스타 계정의 글을 한 사람 기준으로 모아 봅니다.
     // 묶음이 없는 계정은 그 계정 하나를 한 사람처럼 보여 줍니다(묶지 않아도 홈에서 바로 보이게).
-    const people = new Map();
-    tracked.filter((t) => t.kind !== "feed").forEach((t) => {
-      const name = personKey(t);
-      if (!people.has(name)) people.set(name, { name, ids: new Set(), plats: new Set() });
-      const p = people.get(name);
-      p.ids.add(t.id); p.plats.add(t.platform);
-    });
-    if (!people.size) {
-      g.appendChild(el("p", { class: "hint", text: "추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요. 같은 사람의 유튜브·X·인스타 계정에 같은 묶음 이름을 주면 여기서 한 사람으로 모아 봅니다." }));
-      $("empty").hidden = true;
-      // 묶음이 하나도 없을 때도 오른쪽 사람 목록 카드를 같은 자리에 비어 있는 채로 보여줍니다
-      if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "전체" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
+    // 볼 사람은 위쪽 묶음 줄에서 고릅니다(여러 명 가능). 아무도 고르지 않으면 모두 보여 줍니다.
+    const all = [...peopleMap().values()];
+    const hint = (text) => { g.appendChild(el("p", { class: "hint", text })); $("empty").hidden = true; };
+    if (!all.length) { hint("추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요. 같은 사람의 유튜브·X·인스타 계정에 같은 묶음 이름을 주면 여기서 한 사람으로 모아 봅니다."); return; }
+    const vp = visiblePeople();
+    if (!vp.length) {
+      hint(page === "fav" ? "즐겨찾기한 사람이 없습니다. 홈의 사람 이름 옆 ☆를 눌러 추가하세요." : "모든 묶음을 숨겼습니다. 추적 계정 관리의 '홈에 보일 묶음'에서 다시 보이게 할 수 있습니다.");
       return;
     }
-    const rows = [...people.values()].map((p) => ({ ...p, list: list.filter((it) => p.ids.has(it.via)).sort((a, b) => publishedMs(b) - publishedMs(a)) }));
+    const sel = effSel();
+    const rows = (sel.size ? vp.filter((p) => sel.has(p.name)) : vp).map((p) => ({ ...p, list: list.filter((it) => p.ids.has(it.via)).sort((a, b) => publishedMs(b) - publishedMs(a)) }));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
-    // 검색 중에는 어느 사람에도 묶이지 않은 계정(묶음 없음·피드 등)의 결과도 '그 밖의 결과'로 함께 보여줍니다.
-    const personIds = new Set(); people.forEach((p) => p.ids.forEach((id) => personIds.add(id)));
-    const others = q && page !== "fav" ? list.filter((it) => !personIds.has(it.via)) : [];
+    // 검색 중에는 어느 사람에도 묶이지 않은 계정(피드 등)의 결과도 '그 밖의 결과'로 함께 보여줍니다(묶음을 골랐으면 그 묶음만).
+    const personIds = new Set(); all.forEach((p) => p.ids.forEach((id) => personIds.add(id)));
+    const others = q && page !== "fav" && !sel.size ? list.filter((it) => !personIds.has(it.via)) : [];
     if (q) {
       // 검색 중에는 검색에 걸린 글이 있는 사람만 보여줍니다(빈 사람 줄은 숨김).
       rows.splice(0, rows.length, ...rows.filter((r) => r.list.length));
-      if (!rows.length && !others.length) { g.appendChild(el("p", { class: "hint", text: "“" + q + "”에 맞는 글이 없습니다. 검색창을 비우면 모든 글이 보입니다. (계정을 찾으려면 Enter)" })); $("empty").hidden = true; return; }
+      if (!rows.length && !others.length) { hint("“" + q + "”에 맞는 글이 없습니다." + (sel.size ? " 위쪽에서 고른 묶음 안에서만 찾았습니다." : "") + " 검색창을 비우면 모든 글이 보입니다. (계정을 찾으려면 Enter)"); return; }
     }
-    if (page === "fav") {
-      rows.splice(0, rows.length, ...rows.filter((r) => favs.has(r.name)));
-      if (!rows.length) {
-        g.appendChild(el("p", { class: "hint", text: "즐겨찾기한 사람이 없습니다. 홈의 사람 이름 옆 ☆를 눌러 추가하세요." })); $("empty").hidden = true;
-        // 오른쪽 사람 목록 카드도 같은 자리에 비어 있는 채로 보여줍니다(즐겨찾기가 생기면 여기에 뜸)
-        if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "전체" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
-        return;
+    // 매체 이름을 눌러 들어간 '한 사람의 한 매체 전체 보기'는 그 사람이 지금 보이는 동안만 유지합니다.
+    if (personPlat && !rows.some((r) => r.name === personFocus)) { personFocus = ""; personPlat = ""; }
+    // 한 사람만 볼 때(묶음을 하나만 골랐거나, 매체 전체 보기 중): 그 사람의 글을 더 많이 보여 줍니다.
+    const focusName = personPlat ? personFocus : sel.size === 1 && rows.length === 1 ? rows[0].name : "";
+    // 오른쪽 칸: 지금 보이는 묶음 목록(글 수·안 읽은 글 빨간 점). 누르면 그 묶음 줄로 바로 내려갑니다. 고르기는 위쪽 묶음 줄에서 합니다.
+    {
+      const sp = $("sidePeople");
+      const head = el("div", { class: "pb-head" }, [el("b", { text: (sel.size ? "고른 묶음 " : "모든 묶음 ") + rows.length + "개" })]);
+      if (sel.size) {
+        const clr = el("button", { type: "button", class: "pb-clear", text: "선택 풀기" });
+        clr.addEventListener("click", () => { storySel = new Set(); afterStorySelect(""); });
+        head.appendChild(clr);
       }
+      const bar = el("div", { class: "pbar" });
+      rows.forEach((r) => {
+        const label = personLabel(r), accs = personAccounts(r);
+        const chosen = accs.find((t) => t.platform === picPick[r.name]) || accs.find((t) => picMap[t.id]) || accs[0];
+        const unread = r.list.some((it) => !seen.has(it.id));
+        const b = el("button", { type: "button", class: (focusName === r.name ? "active" : "") + (unread ? " new" : ""), "aria-label": label + " " + r.list.length + "건" + (unread ? ", 안 읽은 글 있음" : "") + (focusName ? "" : " · 눌러서 그 줄로 이동") },
+          [picFace(chosen, label.replace(/^@/, ""), "pface"), el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(r.list.length) })]);
+        if (!focusName) b.addEventListener("click", () => jumpToPerson(r.name));
+        bar.appendChild(b);
+      });
+      sp.append(head, bar);
+      sp.hidden = false;
     }
-    if (personFocus && !rows.some((r) => r.name === personFocus)) personFocus = "";
-    const bar = el("div", { class: "pbar" });
-    const chip = (label, n, active, fn) => { const b = el("button", { type: "button", class: active ? "active" : "" }, [el("span", { text: label }), el("span", { class: "n", text: String(n) })]); b.addEventListener("click", fn); bar.appendChild(b); };
-    chip("전체", rows.reduce((s, r) => s + r.list.length, 0), !personFocus, () => { personFocus = ""; personPlat = ""; renderList(); });
-    rows.forEach((r) => chip(r.name, r.list.length, personFocus === r.name, () => { personFocus = r.name; personPlat = ""; renderList(); }));
-    // 벤토 디자인: 사람 목록은 오른쪽 탭 카드 아래 빈 공간에 세로로 둡니다.
-    if (document.documentElement.getAttribute("data-design") === "bento") { const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(bar); } else g.appendChild(bar);
     const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
     // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
     const mediaRows = (r, limit, onMore) => {
@@ -628,8 +697,8 @@ function renderList() {
       return box;
     };
     const body = el("div", { class: "sections" });
-    if (personFocus) {
-      const r = rows.find((x) => x.name === personFocus);
+    if (focusName) {
+      const r = rows.find((x) => x.name === focusName);
       if (personPlat) {
         const back = el("button", { type: "button", text: "← " + r.name });
         back.addEventListener("click", () => { if (backCtx) {
@@ -646,21 +715,23 @@ function renderList() {
       } else {
         body.appendChild(el("section", { class: "sec" }, [
           el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: r.name }), favStar(r.name), platMeta(r)]),
-          mediaRows(r, 30, (k) => { backCtx = null; personPlat = k; renderList(); }),
+          mediaRows(r, 30, (k) => { backCtx = null; personFocus = r.name; personPlat = k; renderList(); }),
         ]));
       }
     } else {
       rows.forEach((r) => {
-        // 이름을 누르면 이 사람만 보기 화면으로 갑니다.
+        // 이름을 누르면 위쪽 묶음 줄에서 이 사람만 고른 것과 같습니다.
         const nameBtn = el("h3", { class: "namelink", text: r.name, role: "button", tabindex: "0", title: "이 사람만 보기" });
-        const go = () => { personFocus = r.name; personPlat = ""; renderList(); };
+        const go = () => { storySel = new Set([r.name]); personFocus = ""; personPlat = ""; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
         nameBtn.addEventListener("click", go);
         nameBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
         const head = el("div", { class: "sec-head" }, [personAvatar(r), nameBtn, favStar(r.name), platMeta(r)]);
-        body.appendChild(el("section", { class: "sec" }, [head, mediaRows(r, 20, null)]));
+        const sec = el("section", { class: "sec" }, [head, mediaRows(r, 20, null)]);
+        sec._person = r.name;
+        body.appendChild(sec);
       });
     }
-    if (others.length && !personFocus) {
+    if (others.length && !focusName) {
       const o = { name: "그 밖의 결과", list: others, plats: new Set(others.map((it) => tabOf(it.source))) };
       body.appendChild(el("section", { class: "sec" }, [
         el("div", { class: "sec-head" }, [el("h3", { text: o.name }), el("span", { class: "n", text: others.length + "건" })]),
@@ -675,7 +746,7 @@ function renderList() {
     // 묶음·계정별: 묶음 이름이 같은 계정은 한 줄로, 묶음 없는 계정은 계정마다 한 줄로 보여줍니다.
     g.classList.add("sections");
     const groups = new Map();
-    tracked.filter((t) => t.kind !== "feed").forEach((t) => {
+    homeAccounts().forEach((t) => {   // 숨긴 묶음은 빼고, 위쪽에서 묶음을 골랐으면 그 묶음만
       const key = t.group ? "g:" + t.group : "a:" + t.id;
       if (!groups.has(key)) groups.set(key, { name: t.group || PLATFORM[t.platform] + " @" + (t.handle || t.channelId || ""), ids: new Set(), plats: [] });
       const gr = groups.get(key);
@@ -733,37 +804,7 @@ function renderList() {
   $("empty").hidden = list.length > 0;
   $("empty").textContent = emptyMsg;
 }
-function renderTracked() {
-  const box = $("tracked");
-  box.textContent = "";
-  tracked.forEach((t) => {
-    const name = t.kind === "feed" ? FEED[t.platform] : t.handle ? "@" + t.handle : t.channelId || t.resolveUrl;
-    const label = el("span", { class: "chip-name", role: "button", tabindex: "0", title: "눌러서 선택(여러 개 가능)", text: PLATFORM[t.platform] + " " + name + (t.group ? " · " + t.group : "") + (t.days ? " · " + t.days + "일" : "") });
-    const toggle = () => { selIds = selIds.includes(t.id) ? selIds.filter((x) => x !== t.id) : selIds.concat(t.id); renderTracked(); };
-    label.addEventListener("click", toggle);
-    label.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
-    box.appendChild(el("span", { class: "chip" + (selIds.includes(t.id) ? " sel" : "") }, [label]));
-  });
-  // 고른 계정(누른 순서)을 한 줄 바에 차례로 보여줍니다. 거기서 묶거나 기간을 정합니다.
-  selIds = selIds.filter((id) => tracked.some((t) => t.id === id));
-  const bar = $("selBar");
-  bar.textContent = "";
-  if (!selIds.length) bar.appendChild(el("span", { class: "ph", text: "위의 계정을 눌러 선택하세요 (여러 개 가능)" }));
-  selIds.forEach((id) => {
-    const t = tracked.find((x) => x.id === id);
-    const nm = PLATFORM[t.platform] + " " + (t.kind === "feed" ? FEED[t.platform] : t.handle ? "@" + t.handle : t.channelId || "");
-    const x = el("button", { type: "button", class: "selx", "aria-label": nm + " 선택 해제", title: "이 계정만 선택 해제", text: "×" });
-    x.addEventListener("click", () => { selIds = selIds.filter((v) => v !== id); renderTracked(); });
-    bar.appendChild(el("span", { class: "selchip" }, [el("span", { text: nm }), x]));
-  });
-  $("selClear").hidden = !selIds.length;
-  $("selAll").hidden = !tracked.length || selIds.length === tracked.length;
-  // 한 개만 골랐다면 그 계정의 현재 기간을 기간 선택에 보여줍니다.
-  if (document.activeElement !== $("dDays")) { const cur = selIds.length === 1 ? tracked.find((t) => t.id === selIds[0]) : null; $("dDays").value = String((cur && cur.days) || 0); }
-  periodDays = winDays;
-  $("dDays").options[0].textContent = "기본(" + winDays + "일)";
-  paintCheckNow();
-}
+// 추적 계정 관리 화면(renderTracked 등)은 js/manage.js에 있습니다.
 // 새로고침(지금 최신화) 버튼: 수집 중이면 돌고(busy), 누르면 '멈추기'로 씁니다.
 function paintCheckNow() {
   const b = $("checkNow"), run = !!(checkStatus && checkStatus.running), wait = typeof refreshing !== "undefined" && refreshing;
@@ -848,7 +889,7 @@ async function refreshPics(max = 3) {
     await fetchAvatars();
     const now = Date.now();
     const due = tracked
-      .filter((t) => t.platform === "youtube" && (t.handle || t.channelId) && !picMap[t.id] && now - (picAt[t.id] || 0) > 86400000)
+      .filter((t) => t.platform === "youtube" && !t.hidden && (t.handle || t.channelId) && !picMap[t.id] && now - (picAt[t.id] || 0) > 86400000)
       .slice(0, max);
     for (const t of due) {
       if (checkStatus && checkStatus.running) break; // 수집이 다시 시작되면 멈춥니다
