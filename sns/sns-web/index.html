@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<script>document.documentElement.setAttribute("data-design","bento");try{if(localStorage.getItem("snsTheme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important}img{max-width:100%}</style>
+<title>SNS 모아보기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css?v=371">
+<link rel="stylesheet" href="bento.css?v=371">
+
+<header>
+  <div id="infoCard2" class="infocard info2"></div>
+  <div class="toolbar">
+    <div id="loginBar" class="loginbar" hidden></div>
+    <button id="checkNow" class="primary refreshbtn" type="button" aria-label="지금 최신화" title="지금 최신화" hidden><span id="dot" class="dot"></span></button>
+  </div>
+  <h1><img id="logoImg" src="logo.png" alt="SNS 모아보기" hidden onload="this.hidden=false" onerror="this.remove()"></h1>
+  <div class="sbox">
+    <button id="sScope" class="sscope" type="button" aria-haspopup="true" aria-expanded="false" aria-label="검색할 매체 설정" title="검색할 매체 설정"><span id="sScopeIcons" class="sicons"></span></button>
+    <div id="sMenu" class="smenu" hidden></div>
+    <input id="q" type="search" placeholder="통합 검색 (제목·내용·작성자·매체·묶음)" aria-label="통합 검색">
+    <button id="sGo" class="sgo" type="button" aria-label="선택한 매체에서 계정 찾기" title="선택한 매체(인스타·X·유튜브)에서 계정 찾기 (Enter)" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
+    <div id="sResults" class="sresults" hidden></div>
+  </div>
+  <button id="brand" class="brand" type="button" title="SNS 모아보기 · 홈으로" aria-label="SNS 모아보기 홈"><svg viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="28" fill="#2a2928"/><circle cx="21" cy="23" r="9" fill="#fff" fill-opacity=".95"/><circle cx="35" cy="23" r="9" fill="#fff" fill-opacity=".6"/><circle cx="28" cy="35" r="9" fill="#fff" fill-opacity=".35"/></svg></button>
+  <button id="themeSwitch" class="themeswitch" type="button" role="switch" aria-checked="false" title="화이트/다크 모드 전환" aria-label="다크 모드">
+    <svg class="sw-day" viewBox="0 0 56 112" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="swSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fcbee"/><stop offset="1" stop-color="#d9ecf9"/></linearGradient><linearGradient id="swCloud" gradientUnits="userSpaceOnUse" x1="0" y1="66" x2="0" y2="112"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f3f9fd"/><stop offset="1" stop-color="#cfe5f6"/></linearGradient></defs><rect width="56" height="112" fill="url(#swSky)"/><g fill="#ffffff" opacity=".6"><circle cx="42" cy="73" r="8"/><circle cx="28" cy="77" r="9"/><circle cx="51" cy="80" r="7"/></g><g fill="url(#swCloud)"><circle cx="9" cy="93" r="10"/><circle cx="21" cy="85" r="11"/><circle cx="35" cy="79" r="12.5"/><circle cx="47" cy="87" r="11"/><circle cx="14" cy="100" r="14"/><circle cx="30" cy="98" r="15"/><circle cx="48" cy="100" r="14"/><rect y="98" width="56" height="14"/></g></svg>
+    <svg class="sw-night" viewBox="0 0 56 112" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="56" height="112" fill="#1b1b1a"/><rect y="0" width="56" height="112" fill="#2c2c2a" opacity=".3" /><g fill="#fff" transform="translate(0 6)"><path opacity=".7" d="M37 7l2.4 6.6 6.6 2.4-6.6 2.4L37 25l-2.4-6.6L28 16l6.6-2.4z"/><path opacity=".55" d="M15 27l1.5 3.9 3.9 1.5-3.9 1.5L15 38l-1.5-4.1L9.6 32.4l3.9-1.5z"/><circle opacity=".5" cx="12" cy="11" r="1.1"/><circle opacity=".4" cx="47" cy="34" r="1.2"/><circle opacity=".35" cx="27" cy="38" r=".9"/><circle opacity=".3" cx="49" cy="8" r=".8"/></g></svg>
+    <span class="knob"><span class="sun"></span><span class="moon"><i></i><i></i><i></i></span></span>
+  </button>
+  <nav class="navbtns" aria-label="화면 이동">
+    <button id="navHome" class="navbtn on" type="button">홈</button>
+    <button id="navFav" class="navbtn" type="button" title="즐겨찾기한 사람만 보기">즐겨찾기</button>
+    <button id="navManage" class="navbtn" type="button" hidden>추적 계정 관리</button>
+    <button id="navHelp" class="navbtn" type="button" title="사용 설명 다시 보기" aria-label="사용 설명">?</button>
+  </nav>
+  <div class="acctwrap">
+    <button id="connAcct" class="avatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="계정 메뉴" hidden><span id="avLetter">?</span><img id="avImg" alt="" hidden></button>
+    <div id="acctMenu" class="acctmenu" role="menu" hidden>
+      <div id="menuWho" class="menuwho"></div>
+      <button id="themeBtn" type="button" role="menuitem">☾ 다크 모드</button>
+      <button id="menuSettings" type="button" role="menuitem">계정 관리</button>
+      <button id="clear" class="danger" type="button" role="menuitem">수집한 글 모두 삭제</button>
+      <button id="connOut" type="button" role="menuitem">로그아웃</button>
+    </div>
+  </div>
+</header>
+
+<span id="connText" hidden>로그인하면 서버와 연결됩니다.</span>
+
+
+<div id="loginModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="lmTitle" hidden>
+  <div class="modal">
+    <button id="lmX" class="x" type="button" aria-label="닫기">×</button>
+    <h2 id="lmTitle">로그인이 필요합니다</h2>
+    <p class="hint">로그인하지 않은 매체는 글을 가져올 수 없습니다. '로그인 하기'로 열리는 창에서 직접 로그인한 뒤 '다시 시도'를 눌러 주세요.</p>
+    <div id="lmList"></div>
+    <div class="foot"><button id="lmLater" type="button">나중에</button><button id="lmRetry" class="primary" type="button">다시 시도</button></div>
+  </div>
+</div>
+
+<div id="tour" hidden>
+  <div class="tour-hole"></div>
+  <div class="tour-tip" role="dialog" aria-live="polite" aria-labelledby="tourTitle">
+    <small class="tour-step"></small>
+    <b id="tourTitle" class="tour-title"></b>
+    <p class="tour-text"></p>
+    <div class="tour-foot"><button id="tourSkip" class="tour-skip" type="button">건너뛰기</button><span class="tour-dots"></span><button id="tourPrev" type="button">이전</button><button id="tourNext" class="primary" type="button">다음</button></div>
+  </div>
+</div>
+
+<div id="acctModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="amTitle" hidden>
+  <div class="modal">
+    <button id="amX" class="x" type="button" aria-label="닫기">×</button>
+    <h2 id="amTitle">계정 관리</h2>
+    <div class="amsec avsec">
+      <b>프로필 이미지</b>
+      <div class="avrow">
+        <span id="avPrev" class="avprev"><span id="avPrevLetter">?</span><img id="avPrevImg" alt="" hidden></span>
+        <button id="avPick" type="button">이미지 선택</button>
+        <button id="avClear" type="button" hidden>지우기</button>
+        <input id="avFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      </div>
+      <p class="hint">정사각형으로 잘라 둥근 네모로 보여줍니다. 이 브라우저에만 저장됩니다.</p>
+    </div>
+    <form id="pwForm" class="amsec" autocomplete="off">
+      <b>비밀번호 변경</b>
+      <input id="pwOld" type="password" placeholder="현재 비밀번호" aria-label="현재 비밀번호" autocomplete="current-password" required>
+      <input id="pwNew" type="password" placeholder="새 비밀번호(6자 이상)" aria-label="새 비밀번호" autocomplete="new-password" required minlength="6">
+      <input id="pwNew2" type="password" placeholder="새 비밀번호 확인" aria-label="새 비밀번호 확인" autocomplete="new-password" required minlength="6">
+      <button class="primary" type="submit">변경</button>
+      <p id="pwMsg" class="hint" hidden></p>
+      <p class="hint">변경하면 다른 기기의 로그인은 모두 풀리고, 이 기기는 유지됩니다.</p>
+    </form>
+    <div class="amsec">
+      <b>계정 삭제</b>
+      <p class="hint">이 아이디와 서버에 저장된 추적 계정·설정·본 글 기록이 지워집니다. 되돌릴 수 없습니다.</p>
+      <input id="delPw" type="password" placeholder="비밀번호 확인" aria-label="비밀번호 확인" autocomplete="current-password">
+      <button id="delBtn" class="danger" type="button">계정 삭제</button>
+      <p id="delMsg" class="hint" hidden></p>
+    </div>
+  </div>
+</div>
+
+<div id="pausedModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="pmTitle" hidden>
+  <div class="modal">
+    <h2 id="pmTitle">수집을 일시정지했습니다</h2>
+    <p>웹화면에서 벗어나 수집을 일시정지했습니다.</p>
+    <p class="hint">'이어서 수집'을 누르면 수집창이 앞으로 나와 이어서 수집합니다. '닫기'는 수집을 종료하고 수집창을 닫습니다(그때까지 모은 글은 남습니다).</p>
+    <div class="foot"><button id="pmClose" type="button">닫기</button><button id="pmResume" class="primary" type="button">이어서 수집</button></div>
+  </div>
+</div>
+
+<div id="closedModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="cmTitle" hidden>
+  <div class="modal">
+    <button id="cmX" class="x" type="button" aria-label="닫기">×</button>
+    <h2 id="cmTitle">수집을 종료했습니다</h2>
+    <p>수집창을 닫아 수집을 종료합니다. 재시도 해주십시오.</p>
+    <p class="hint">그때까지 모은 글은 남아 있습니다.</p>
+    <div class="foot"><button id="cmClose" type="button">닫기</button><button id="cmRetry" class="primary" type="button">재시도</button></div>
+  </div>
+</div>
+
+<div id="gmModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="gmTitle" hidden>
+  <div class="modal">
+    <button id="gmX" class="x" type="button" aria-label="닫기">×</button>
+    <h2 id="gmTitle">묶음 수정</h2>
+    <label class="hint" for="gmSel">수정할 묶음</label>
+    <select id="gmSel"></select>
+    <label class="hint" for="gmName">새 이름</label>
+    <input id="gmName" type="text" maxlength="30" autocomplete="off" placeholder="새 묶음 이름">
+    <p id="gmErr" class="error" hidden></p>
+    <div class="foot"><button id="gmCancel" type="button">취소</button><button id="gmOk" class="primary" type="button">저장</button></div>
+  </div>
+</div>
+
+<div id="rmModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="rmTitle" hidden>
+  <div class="modal">
+    <button id="rmX" class="x" type="button" aria-label="닫기">×</button>
+    <h2 id="rmTitle">선택한 계정을 제거할까요?</h2>
+    <p id="rmList" class="hint"></p>
+    <p class="hint">추적 목록에서 빠지고, 이 계정으로 모은 글도 함께 지워집니다. 되돌릴 수 없습니다.</p>
+    <div class="foot"><button id="rmCancel" type="button">취소</button><button id="rmOk" class="danger" type="button">제거</button></div>
+  </div>
+</div>
+
+<div id="viewer" class="viewer-back" role="dialog" aria-modal="true" aria-label="글 보기" hidden>
+  <button id="vPrev" class="vnav" type="button" aria-label="이전 글">‹</button>
+  <button id="vNext" class="vnav" type="button" aria-label="다음 글">›</button>
+  <div class="viewer">
+    <div class="vh"><b id="vTitle"></b><button id="vWin" type="button">새 크롬 창으로 열기</button><button id="vClose" type="button" aria-label="닫기">×</button></div>
+    <div id="vBody" class="vb"></div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside>
+    <section class="panel" id="connectPanel">
+      <h2>로그인</h2>
+      <div id="acct" hidden>
+        <form id="acctForm" class="row">
+          <input id="acctEmail" type="text" placeholder="아이디(영문·숫자 3~30자)" aria-label="아이디" autocomplete="username" required minlength="3" maxlength="30">
+          <input id="acctPw" type="password" placeholder="비밀번호(6자 이상)" aria-label="비밀번호" autocomplete="current-password" required minlength="6">
+          <button class="primary" type="submit">로그인</button>
+          <button id="acctSignup" type="button">가입</button>
+        </form>
+        <div id="acctUser" class="row" hidden><span id="acctWho" class="hint"></span><button id="acctOut" type="button">로그아웃</button></div>
+        <p id="acctMsg" class="hint" hidden></p>
+      </div>
+    </section>
+
+    <div id="setBack" hidden></div>
+    <section class="panel" id="setPanel" hidden role="dialog" aria-modal="true" aria-label="설정">
+      <button type="button" class="setx" id="setClose" aria-label="닫기">×</button>
+      <h2>설정</h2>
+      <div id="setBody" class="setbody"></div>
+    </section>
+
+    <section class="panel" id="trackPanel" hidden>
+      <h2>추적 계정 관리</h2>
+      <div id="ptAdd" hidden>
+      <div class="row tgroup-row"><input id="tgroup" type="text" maxlength="30" placeholder="묶음 이름 (선택, 예: 취요남)" aria-label="묶음 이름" autocomplete="off"></div>
+      <form id="addForm" class="row" hidden>
+        <select id="tplatform" aria-label="플랫폼"><option value="youtube">유튜브</option><option value="x">X</option><option value="instagram">인스타</option></select>
+        <input id="thandle" type="text" placeholder="이름 검색(Enter) · @계정 · 프로필 주소" aria-label="계정" autocomplete="off">
+        <button type="submit">추가</button>
+        <button id="searchBtn" type="button">이름으로 검색</button>
+        <select id="addDays" aria-label="이 계정에서 가져올 기간" title="새로 추가하는 계정에서 가져올 기간(계정마다 따로 정해집니다)"><option value="7">최근 7일</option><option value="14">최근 14일</option><option value="30" selected>최근 30일</option><option value="60">최근 60일</option></select>
+      </form>
+      <div id="searchResults" class="results" hidden></div>
+      </div>
+      <div id="ptManage">
+      <p id="addError" class="error" hidden></p>
+      <div id="tracked" class="chips"></div>
+      <div id="selBar" class="selbar" aria-label="선택한 계정" aria-live="polite"></div>
+      <div id="gChips" class="gchips2" hidden></div>
+      <div id="manageBottom" class="manage-bottom">
+      <form id="daysForm" class="row">
+        <select id="dDays" aria-label="계정별 가져올 기간"><option value="0">기본(맨 위 기간)</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option><option value="60">60일</option></select>
+        <button type="submit">기간 적용</button>
+        <button id="selRemove" type="button" class="danger">제거</button>
+        <button id="selAll" type="button">전체 선택</button>
+        <button id="selClear" type="button" hidden>선택 해제</button>
+      </form>
+      <form id="groupForm" class="row">
+        <input id="gName" type="text" maxlength="30" placeholder="묶음 이름 (비우면 해제)" aria-label="묶음 이름" autocomplete="off">
+        <button id="gRename" type="button" title="묶음 이름을 고칩니다">묶음 수정</button>
+        <button id="gClear" type="button" title="선택한 계정의 묶음을 없앱니다">묶음 해제</button>
+        <button type="submit">묶기</button>
+      </form>
+      </div>
+      </div>
+    </section>
+
+  </aside>
+
+  <main>
+    <nav id="tabs" class="tabs" aria-label="출처"></nav>
+    <div id="sidePeople" class="sidepeople" hidden></div>
+    <section id="workCard" class="workcard" aria-live="polite" hidden></section>
+    <div id="infoCard" class="infocard"></div>
+    <div id="grid"></div>
+    <div id="vbar" hidden><i></i></div>
+    <p id="empty">아직 보여줄 글이 없습니다. 로그인하고 계정을 추가하면 설정한 기간(최대 60일)의 글이 여기에 모입니다.</p>
+  </main>
+</div>
+
+<script src="js/core.js?v=373"></script>
+<script src="js/bridge.js?v=373"></script>
+<script src="js/store.js?v=373"></script>
+<script src="js/list.js?v=373"></script>
+<script src="js/tracking.js?v=373"></script>
+<script src="js/account.js?v=373"></script>
+<script src="js/ui.js?v=373"></script>
+

@@ -1,0 +1,390 @@
+/* 레이아웃: 상단 고정 바 + 연결 상태 띠 + 왼쪽 관리 패널 / 오른쪽 카드 목록 */
+:root {
+  --bg: #ffffff; --card: #ffffff; --soft: #f3f5f6; --fg: #1b2327; --muted: #5d6a70; --line: #d5dce0;
+  --accent: #0b7a75; --accent-fg: #ffffff; --danger: #b3261e; --ok: #1f7a3d; --warn: #8a5a00;
+  --font: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+:root[data-theme="dark"] {
+  --bg: #141a1c; --card: #1d2528; --soft: #263034; --fg: #e5ecee; --muted: #9eadb2; --line: #2e3a3e;
+  --accent: #4fc3bc; --accent-fg: #0d1a19; --danger: #f2877f; --ok: #6fcf8c; --warn: #e3b44f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 var(--font);
+  padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-block: 0 32px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 12px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+h1 { font-size: 18px; margin: 0 auto 0 0; letter-spacing: -0.01em; }
+input, select, button { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-width: 0; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 500; }
+button.danger { color: var(--danger); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="search"] { width: 200px; }
+.conn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; color: var(--muted); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+.dot.on { background: var(--ok); }
+.results { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+.res { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.res:first-child { border-top: 0; }
+.res .ph { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; }
+.res img, .res .ph { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--line); flex: none; }
+.res .t { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.res .t b { font-weight: 500; overflow-wrap: anywhere; }
+.res .t span { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+.lb { text-decoration: none; color: var(--accent-fg); background: var(--accent); border: 0; border-radius: 6px; padding: 5px 12px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.loginbar .lb { display: inline-flex; align-items: center; text-decoration: none; color: var(--accent-fg); background: var(--accent); border-radius: 6px; padding: 5px 12px; font-weight: 500; }
+.modal-back { position: fixed; inset: 0; z-index: 20; background: rgba(10, 18, 20, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal { position: relative; width: min(420px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.modal h2 { margin: 0; font-size: 16px; padding-right: 28px; }
+.modal .x { position: absolute; top: 10px; right: 10px; border: 0; background: transparent; font-size: 20px; line-height: 1; padding: 4px 8px; color: var(--muted); }
+.modal .lrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.modal .lrow a { text-decoration: none; color: var(--accent-fg); background: var(--accent); border-radius: 6px; padding: 5px 12px; font-weight: 500; white-space: nowrap; }
+.modal .amsec { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.modal .amsec b { font-size: 13px; }
+.modal .amsec p { margin: 0; }
+button.danger { color: #fff; background: #b42318; border-color: #b42318; }
+.modal .foot { display: flex; justify-content: flex-end; }
+.viewer-back { position: fixed; inset: 0; z-index: 30; background: rgba(10, 18, 20, .6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.viewer { width: min(760px, 100%); max-height: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+.card.seen { opacity: .6; }
+.card.flash { outline: 3px solid var(--accent); outline-offset: 2px; }
+.resume { font-size: 12px; padding: 2px 10px; }
+#resumeFab { position: fixed; right: 16px; bottom: 16px; z-index: 20; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+#resumeFab button { box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+.vnav { position: fixed; top: 50%; transform: translateY(-50%); z-index: 31; width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--fg, inherit); font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.25); cursor: pointer; }
+.vnav:disabled { opacity: .35; cursor: default; }
+#vPrev { left: max(8px, calc(50% - 380px - 52px)); }
+#vNext { right: max(8px, calc(50% - 380px - 52px)); }
+.viewer .vh { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.viewer .vh b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.viewer .vb { overflow: auto; background: var(--bg); display: flex; justify-content: center; }
+.viewer iframe { width: 100%; border: 0; display: block; background: var(--bg); }
+.post { width: 100%; max-width: 640px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--card); }
+.post .ph2 { display: flex; align-items: center; gap: 10px; }
+.post .av { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--line); flex: none; }
+.post .who { display: flex; flex-direction: column; min-width: 0; }
+.post .who b { font-weight: 500; overflow-wrap: anywhere; }
+.post .who span { font-size: 12px; color: var(--muted); }
+.post .txt { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.post .imgs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.post .vid iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; background: #000; }
+.post .imgs img { width: 100%; border-radius: 8px; display: block; background: var(--line); }
+.layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 12px; align-items: start; padding-top: 8px; }
+@media (max-width: 800px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+aside { display: flex; flex-direction: column; gap: 16px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.panel h2 { font-size: 13px; margin: 0; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row input[type="text"], .row input[type="password"] { flex: 1 1 140px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); max-width: 100%; }
+.chip span { overflow-wrap: anywhere; }
+.chip button { border: 0; background: transparent; padding: 0 6px; color: var(--muted); }
+.error { color: var(--danger); margin: 0; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 12px; }
+.tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.pbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pbar button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.pbar .n { font-family: var(--mono); font-size: 12px; margin-left: 4px; opacity: .85; }
+.tabs .n { font-family: var(--mono); font-size: 12px; margin-left: 4px; opacity: .85; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.row-cards { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; cursor: grab; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.row-cards.wheeling { scroll-snap-type: none; }
+.row-cards.sb { scroll-snap-type: none; }
+.row-cards.dragging { cursor: grabbing; scroll-snap-type: none; user-select: none; }
+.row-cards .card { flex: 0 0 240px; scroll-snap-align: start; }
+.row-cards img { -webkit-user-drag: none; user-select: none; }
+.sections { display: flex; flex-direction: column; gap: 24px; }
+.sec { display: flex; flex-direction: column; gap: 10px; }
+.sec-head { display: flex; align-items: center; gap: 10px; }
+.sec-head h3 { margin: 0; font-size: 15px; }
+.sec-head .n { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-right: auto; }
+.card { display: flex; flex-direction: column; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; color: inherit; text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--line); display: block; }
+.card .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.badge { align-self: flex-start; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.title { font-weight: 500; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.meta { font-size: 12px; color: var(--muted); }
+#empty { padding: 40px 0; text-align: center; color: var(--muted); }
+
+#notice { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; background: rgba(27,35,39,.92); color: #fff; padding: 16px 28px; border-radius: 12px; font-size: 15px; box-shadow: 0 6px 24px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .15s; }
+#notice.show { opacity: 1; }
+
+/* 글 뷰어가 열려 있는 동안에는 뒤의 페이지가 휠로 움직이지 않게 합니다. */
+html:has(#viewer:not([hidden])), body:has(#viewer:not([hidden])) { overflow: hidden; }
+.viewer-back { overscroll-behavior: contain; }
+
+.ptabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.ptabs button{border:0;background:none;padding:8px 10px;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs button.active{color:var(--fg);border-bottom-color:var(--accent)}
+
+.tgroup-row{margin:4px 0 12px}
+#addForm{margin-bottom:10px}
+
+.manage-pick{margin:10px 0 8px}
+#groupForm,#daysForm{margin-bottom:8px}
+
+.chip-name{cursor:pointer;user-select:none}
+.chip.sel{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.chip.sel button{color:var(--accent-fg)}
+.selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:42px;padding:6px 10px;margin:10px 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.selbar .ph{color:var(--muted);font-size:14px}
+.selbar.need{border-color:var(--danger);box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 25%,transparent)}
+.selchip{padding:3px 9px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:13px}
+.manage-pick{margin:0 0 8px}
+
+.selchip{display:inline-flex;align-items:center;gap:4px}
+.selx{border:0;background:none;color:inherit;cursor:pointer;padding:0 2px;font:inherit;line-height:1;opacity:.85}
+.selx:hover{opacity:1}
+
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 8px}
+.toolbar .loginbar{padding:0}
+
+.lb.ok,.lb.ok:disabled{background:color-mix(in srgb,var(--ok) 18%,var(--card));color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 45%,var(--line));cursor:default;opacity:1}
+
+/* 매체 아이콘 버튼: 둥근 네모, 상태는 테두리 색으로 */
+.loginbar{display:flex;gap:8px}
+
+.lb.pi.stop{border-color:var(--danger)!important}
+
+.lb.pi.nl::after{content:"";position:absolute;inset:0;background:rgba(120,130,135,.72)}
+.lb.pi:hover{filter:brightness(1.05)}
+.lb.pi:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.themebtn{width:40px;height:40px;padding:0;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+/* 계정 버튼: 우상단, 누르면 메뉴(계정 관리 · 로그아웃) */
+.acctwrap{position:relative;margin-left:8px}
+.acctmenu{position:absolute;right:0;top:calc(100% + 6px);min-width:140px;display:flex;flex-direction:column;gap:2px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);z-index:20}
+.acctmenu button{border:0;text-align:left;padding:8px 10px;border-radius:6px;background:transparent}
+.acctmenu button:hover{background:color-mix(in srgb,var(--accent) 12%,var(--card))}
+#connOut{color:var(--danger)}
+
+.acctmenu{min-width:180px}.acctmenu button{white-space:nowrap}
+
+.avrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.avprev{width:48px;height:48px;border-radius:14px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:20px}
+.avprev img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* 매체별 보기: 유튜브(영상·게시물)는 각각 한 줄, X와 인스타그램은 반줄씩 한 줄에 나란히 */
+.media-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 10px}
+.media-grid>.sec{min-width:0}
+.media-grid>.sec.full{grid-column:1 / -1}
+@media (max-width:760px){.media-grid{grid-template-columns:minmax(0,1fr)}}
+.themebtn,.acctwrap,#connAcct.avatar{flex:none}
+
+/* 구역 머리: 아이콘 + 건수, 버튼은 줄바꿈 없이 */
+.sicon{display:inline-flex;width:30px;height:30px;border-radius:9px;overflow:hidden;flex:none;border:1px solid var(--line)}
+.sicon .pg{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.sicon .pg img{width:100%;height:100%;object-fit:cover;display:block}
+.sicon .pg:not(:has(img)){background:var(--soft);color:var(--fg)}
+.sec-head{flex-wrap:wrap}
+.sec-head button{white-space:nowrap}
+.sec-head .n{white-space:nowrap}
+/* 계정 메뉴의 삭제 버튼: 라이트 모드에서도 보이게 */
+.acctmenu button.danger,.acctmenu #connOut{color:var(--danger);background:transparent}
+.acctmenu button.danger:hover,.acctmenu #connOut:hover{background:color-mix(in srgb,var(--danger) 12%,var(--card))}
+/* 추적 계정 목록: 한 줄에 하나씩 알약 모양, 길어지면 아래로 스크롤 */
+#tracked.chips{flex-direction:column;flex-wrap:nowrap;align-items:flex-start;max-height:260px;overflow-y:auto;overscroll-behavior:contain;padding:2px 6px 2px 0;scrollbar-width:thin}
+#tracked .chip{max-width:100%;flex:none}
+#tracked .chip-name{overflow-wrap:anywhere}
+
+/* ‹ 이어보기 › */
+.resumegrp{display:inline-flex;align-items:center;gap:6px;margin-left:auto;white-space:nowrap}
+.resumegrp .rl{font-size:12px;color:var(--muted)}
+.resumegrp button{min-width:30px;font-size:16px;line-height:1;padding:3px 9px}
+.resumegrp button.primary .rl{color:inherit}
+#resumeFab .resumegrp{margin:0;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 8px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#resumeFab .resumegrp .rl{color:var(--fg)}
+
+/* 유튜브 탭 보기 방식 */
+.media-grid>.segbar{grid-column:1 / -1}
+.segbar{display:inline-flex;width:fit-content;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.segbar button{border:0;border-radius:0;background:transparent;padding:7px 14px;white-space:nowrap}
+.segbar button+button{border-left:1px solid var(--line)}
+.segbar button.active{background:var(--accent);color:var(--accent-fg);font-weight:500}
+/* ‹ | 이어보기 | › : 겉모양은 버튼 하나, 왼쪽·오른쪽은 각각 동작 */
+.resumegrp{gap:0!important;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card);align-items:stretch}
+.resumegrp button,.resumegrp button.resume,.resumegrp button.primary{border:0!important;border-radius:0!important;background:transparent!important;color:var(--fg)!important;box-shadow:none!important;min-width:32px;padding:4px 10px;font-size:16px;line-height:1.2}
+.resumegrp button:hover{background:color-mix(in srgb,var(--accent) 14%,var(--card))!important}
+.resumegrp .rl{display:inline-flex;align-items:center;padding:0 10px;font-size:12px;color:var(--fg);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+#resumeFab .resumegrp{padding:0;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+
+/* 지금 최신화: 새로고침 화살표 아이콘 버튼 (진행 중에는 빙글빙글) */
+.refreshbtn{width:44px;height:44px;padding:0;border-radius:12px;display:inline-flex;align-items:center;justify-content:center}
+
+/* 모든 스크롤바 숨김 (스크롤은 그대로 동작합니다) */
+*{scrollbar-width:none!important;-ms-overflow-style:none}
+*::-webkit-scrollbar{display:none!important;width:0;height:0}
+
+/* 스크롤바는 보이지 않게(스크롤 자체는 그대로 동작) */
+html, html * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+html::-webkit-scrollbar, html *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+
+/* 왼쪽 위: 매체 아이콘 3개 + 새로고침을 2x2로 */
+
+header h1{margin:0 auto 0 4px}
+[hidden]{display:none!important}
+/* 2x2 순서: 인스타 | X / 유튜브 | 새로고침 */
+header .toolbar .pi-instagram{order:1}
+header .toolbar .pi-x{order:2}
+header .toolbar .pi-youtube{order:3}
+
+/* 2x2 버튼: 간격은 좁게, 뒤에 둥근 네모 박스 */
+
+/* 1x4 한 줄 */
+
+/* 통합 검색창: 아이콘 박스 바로 오른쪽에서 남는 폭을 차지 */
+header h1{margin:0}
+header #q{flex:1 1 220px;width:auto;max-width:560px;min-width:140px;height:40px}
+header #view{margin-left:auto}
+
+/* 통합 검색창 = [매체 설정 버튼 | 입력] 한 덩어리 */
+header .sbox{position:relative;display:flex;align-items:center;flex:1 1 240px;min-width:180px;max-width:600px;height:40px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+header .sbox:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+header .sbox #q{flex:1;min-width:0;width:auto;max-width:none;height:100%;border:0;border-radius:0 10px 10px 0;background:transparent;box-shadow:none;outline:0}
+.sscope{display:inline-flex;align-items:center;gap:6px;height:100%;padding:0 10px;border:0;border-right:1px solid var(--line);border-radius:10px 0 0 10px;background:var(--soft);flex:none}
+.sscope .caret{font-size:11px;color:var(--muted)}
+.sicons{display:inline-flex;gap:3px;align-items:center}
+.si{display:inline-flex;width:20px;height:20px;border-radius:6px;overflow:hidden;flex:none}
+.si.lg{width:26px;height:26px;border-radius:8px}
+.si .pg{display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.si .pg img{width:100%;height:100%;object-fit:cover;display:block}
+.si .pg:not(:has(img)){background:var(--soft);color:var(--fg)}
+.smenu{position:absolute;left:0;top:calc(100% + 6px);min-width:200px;display:flex;flex-direction:column;gap:2px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);z-index:30}
+.sopt{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:7px 10px;border-radius:8px;text-align:left}
+.sopt:hover{background:color-mix(in srgb,var(--accent) 12%,var(--card))}
+.sopt .nm{flex:1}
+.sopt .ck{width:16px;color:var(--ok);font-weight:700}
+
+.sgo{flex:none;height:100%;width:40px;padding:0;border:0;border-left:1px solid var(--line);border-radius:0 10px 10px 0;background:var(--soft);display:inline-flex;align-items:center;justify-content:center}
+.sgo:hover{background:color-mix(in srgb,var(--accent) 14%,var(--soft))}
+header .sbox #q{border-radius:0}
+.sresults{position:absolute;left:0;right:0;top:calc(100% + 6px);max-height:60vh;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:30;padding:6px 10px 10px;display:flex;flex-direction:column;gap:8px}
+.sr-head{display:flex;align-items:center;justify-content:space-between;padding:4px 0}
+.sr-head .x{border:0;background:transparent;font-size:20px;line-height:1;padding:0 6px}
+.sr-plat{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;padding:6px 0 4px;border-top:1px solid var(--line)}
+.sresults .res{display:flex;align-items:center;gap:10px;padding:6px 0}
+
+.si.allglyph{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:var(--soft);padding:1px}
+.si.allglyph .mini{display:block;width:100%;height:100%;border-radius:3px;overflow:hidden}
+.si.allglyph .mini .pg{font-size:7px}
+.si>img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* 매체 선택 메뉴: 글자 없이 아이콘만, 가로로 나열 */
+.smenu{flex-direction:row;gap:6px;min-width:0;width:max-content;padding:6px}
+.sopt{padding:3px;border-radius:12px;border:2px solid transparent}
+.sopt.on{border-color:var(--ok)}
+.sopt .si.lg{width:34px;height:34px;border-radius:10px}
+
+/* scope button: icon only, fills the button */
+.sscope{padding:0;gap:0;width:44px;overflow:hidden;background:transparent;border-right:0}
+.sscope .sicons{width:100%;height:100%;gap:0}
+.sscope .sicons .si{width:100%;height:100%;border-radius:0}
+.sscope .sicons .si.allglyph{padding:0;gap:0}
+.sscope{width:38px;height:38px;border-radius:9px 0 0 9px;overflow:hidden;position:relative}
+.sscope .sicons,.sscope .sicons .si,.sscope .sicons .si>img,.sscope .sicons .si .pg,.sscope .sicons .si .pg img{border-radius:inherit}
+.sscope .sicons .si>img,.sscope .sicons .si .pg img{object-fit:cover}
+/* search box: slimmer, clearer border */
+header .sbox{height:34px;border:2px solid var(--muted);border-radius:12px}
+header .sbox:focus-within{border-color:var(--accent);box-shadow:none}
+.sscope{width:30px;height:30px;border-radius:9px 0 0 9px;border-right:2px solid var(--muted)}
+.sscope .sicons .si{width:100%;height:100%}
+header .sbox{border:2px solid var(--muted);border-radius:12px}
+header .sbox:focus-within{border-color:var(--accent);box-shadow:none}
+.sscope{width:36px;height:36px;border-radius:10px 0 0 10px}
+header .sbox{box-sizing:border-box;height:40px;overflow:hidden}
+header .sbox .sscope{width:36px;height:100%;flex:none}
+header .sbox{border-width:10px;height:58px;border-radius:18px}
+header .sbox .sscope{width:38px;height:100%;border-radius:8px 0 0 8px}
+header .sbox{border-width:7px;height:52px;border-radius:16px}
+header .sbox .sscope{border-radius:9px 0 0 9px}
+
+/* 통합검색 매체 아이콘 오른쪽: 새 계정 가져올 기간 버튼 */
+.speriod{flex:none;height:100%;min-width:42px;padding:0 8px;border:0;border-right:1px solid var(--line);border-radius:0;background:var(--soft);color:var(--fg);font-weight:700;font-size:13px;letter-spacing:.02em}
+.pmenu{left:40px}
+.pmenu .sopt{padding:6px 10px;font-weight:700;font-size:13px;min-width:44px;justify-content:center}
+.sbox{position:relative}
+header .sbox{overflow:visible}
+header .sbox .sgo{border-radius:0 9px 9px 0}
+.periodrow{display:flex;gap:8px}
+.pbtn{flex:1;padding:12px 0;font-weight:700;font-size:15px;border:2px solid var(--line);border-radius:12px;background:var(--soft);color:var(--fg)}
+.pbtn.on{border-color:var(--ok)}
+.pbtn:hover{border-color:var(--accent)}
+.gchips{display:flex;flex-wrap:wrap;gap:6px;max-height:110px;overflow:auto}
+.gchip{padding:5px 12px;border:2px solid var(--line);border-radius:999px;background:var(--soft);color:var(--fg);font-size:13px}
+.gchip.on{border-color:var(--ok)}
+.modal h2+.periodrow{margin-top:-4px}
+header .acctwrap{margin-left:auto}
+header #connAcct.avatar{width:52px;height:52px;min-width:52px;padding:0;border-radius:14px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+header #connAcct.avatar img{width:100%;height:100%;object-fit:cover;border-radius:0}
+/* 계정 메뉴: 프로필 버튼의 오른쪽 끝에 맞춰 버튼 바로 아래로 펼쳐집니다(버튼은 가리지 않음) */
+.acctwrap .acctmenu{top:calc(100% + 4px);right:0;border-radius:14px;z-index:40}
+/* 계정 메뉴: 상자는 프로필 사진 높이만큼 위(사진의 윗선)에서 시작하고, demo는 사진 옆(왼쪽)에, 메뉴 항목은 사진 아래에 놓입니다 */
+.acctwrap .acctmenu{top:0;right:0;padding-top:56px;border-radius:14px;z-index:40}
+.acctwrap #connAcct{position:relative;z-index:41}
+.acctwrap .acctmenu .menuwho{position:absolute;top:0;left:0;right:60px;height:52px;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 테두리: 프로필 버튼은 더 두껍게, 검색창은 조금 얇게 */
+header #connAcct.avatar{box-sizing:border-box;border:4px solid var(--muted)}
+header .sbox{border-width:5px;border-radius:15px}
+header .sbox .sscope{border-radius:10px 0 0 10px}
+header .sbox .sgo{border-radius:0 10px 10px 0}
+header .sbox .sscope{border-radius:10px}
+header .sbox .sscope{width:42px;height:42px;min-width:42px;flex:none;border-radius:11px}
+header .sbox .sscope{border:0;padding:0;box-sizing:border-box}header .sbox .sscope .sicons,header .sbox .sscope .sicons .si{width:42px;height:42px}
+/* 계정 메뉴 테두리: 프로필 버튼과 같은 두께 */
+.acctwrap .acctmenu{border:4px solid var(--muted);padding-top:52px}
+.acctwrap .acctmenu .menuwho{top:-4px;left:-4px}
+header .sbox .sscope,header .sbox .sscope .sicons,header .sbox .sscope .sicons .si,header .sbox .sscope .si>img{border-radius:10px}
+header .sbox .sscope{box-shadow:0 0 0 1px var(--muted)}
+header .sbox .sscope{box-shadow:0 0 0 5px var(--muted);margin-right:5px}
+/* 검색창 오른쪽: 왼쪽 매체 아이콘을 거울처럼 뒤집은 모양(같은 크기·둥근 모서리·같은 두께 틀) */
+header .sbox .sgo{width:42px;height:42px;min-width:42px;flex:none;border:0;padding:0;border-radius:10px;margin-left:5px;box-shadow:0 0 0 5px var(--muted);background:var(--soft);display:inline-flex;align-items:center;justify-content:center}
+header .sbox #q{margin-right:0}
+
+/* ===== 검색창 최종 구조: [매체 아이콘 블록] + [입력창] 두 개의 둥근 상자(테두리 5px) ===== */
+header .sbox{border:0;background:transparent;box-shadow:none;border-radius:0;overflow:visible;height:52px;gap:6px;position:relative}
+header .sbox:focus-within{border:0;box-shadow:none}
+header .sbox .sscope{box-sizing:border-box;width:52px;height:52px;min-width:52px;flex:none;margin:0;padding:0;border:5px solid var(--muted);border-radius:15px;box-shadow:none;background:var(--soft);overflow:hidden}
+header .sbox .sscope .sicons,header .sbox .sscope .sicons .si,header .sbox .sscope .si>img{width:100%;height:100%;border-radius:0}
+header .sbox #q{box-sizing:border-box;height:52px;flex:1;min-width:0;border:5px solid var(--muted);border-radius:15px;padding:0 54px 0 12px;background:var(--card)}
+header .sbox:focus-within #q{border-color:var(--accent)}
+header .sbox .sgo{position:absolute;right:5px;top:5px;width:42px;height:42px;min-width:42px;margin:0;border:0;border-radius:10px;box-shadow:none;background:var(--soft)}
+header .sbox .sgo,header .sbox .sgo:hover{background:transparent}
+/* 검색창을 클릭(포커스)해도 테두리 색이 바뀌지 않게 */
+header .sbox:focus-within #q,header .sbox #q:focus,header .sbox #q:focus-visible{border-color:var(--muted);box-shadow:none;outline:0}
+header .sbox:focus-within{border:0;box-shadow:none}
+
+/* 홈 / 추적 계정 관리 화면 분리 */
+.layout{grid-template-columns:minmax(0,1fr)}
+aside:not(:has(> section:not([hidden]))){display:none}
+.navbtns{display:flex;gap:8px;align-items:center;margin-left:8px}
+.navbtn{box-sizing:border-box;height:52px;padding:0 16px;border:5px solid var(--muted);border-radius:15px;background:var(--card);color:var(--fg);font-weight:700;white-space:nowrap}
+.navbtn.on{background:var(--accent);color:var(--accent-fg,#fff);border-color:var(--accent)}
+.navbtn:hover:not(.on){background:var(--soft)}
+header .acctwrap{margin-left:auto}
+
+/* 연결 상태 점: 새로고침 버튼 가운데 */
+
+/* 새로고침 버튼: 무채색 배경 + 진한 화살표 */
+header .toolbar .refreshbtn,header .toolbar .refreshbtn:hover:not(:disabled){background:var(--soft);color:var(--fg);border:2px solid var(--muted)}
+
+.namelink{cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px;transition:text-decoration-color .15s}
+.namelink:hover,.namelink:focus-visible{text-decoration-color:currentColor;outline:0}
+
+.brand{display:none}
+
+.themeswitch{display:none}
+
+#tabs .tabico{display:none}
+
+/* 기간 선택 창이 검색 결과 목록 위에 오도록 */
+.modal-back{z-index:100}
+.pbtn.on{border-color:var(--accent)}

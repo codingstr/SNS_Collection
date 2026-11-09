@@ -1,0 +1,240 @@
+"""/api/call : 웹 화면의 글 목록·추적 계정·수집 요청을 처리합니다.
+
+화면(js/bridge.js의 call 함수)이 보내는 형식:
+  POST /api/call  {"session": "...", "op": "get" | "set" | "checkNow" | ..., "payload": {...}}
+  성공: {"ok": true, "result": ...}   실패: {"ok": false, "error": "메시지"}
+
+op 이름과 result 형식은 예전 크롬 확장 시절과 같게 유지해서 화면 코드를 거의 그대로 씁니다.
+실제 수집(checkNow, searchAccount 등)은 수집기(collector)가 서버 PC의 크롬으로 합니다.
+"""
+import base64
+import hashlib
+import json
+import logging
+import re
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import APIRouter, Body
+from fastapi.responses import JSONResponse
+
+from auth import user_by_session
+from collector import collector, get_login_state
+from db import get_db
+
+router = APIRouter()
+log = logging.getLogger("api_call")
+
+PLATFORMS = ("youtube", "x", "instagram")
+MAX_TRACKED = 30
+MAX_ITEMS = 5000
+DAYS_OK = (7, 14, 30, 60)
+HANDLE_OK = re.compile(r"^[^\s/?#@]{1,60}$")
+CHANNEL_OK = re.compile(r"^UC[\w-]{22}$")
+RESOLVE_OK = re.compile(r"^https://www\.youtube\.com/(c|user)/[^/?#]+$")
+
+COLLECTOR_OPS = ("checkNow", "checkLogin", "cancelCheck", "searchAccount", "fetchPost")
+
+
+class OpError(Exception):
+    """화면에 그대로 보여 줄 오류 메시지."""
+
+
+# ---------- 사용자 상태 ----------
+def load_state(db, uid: str) -> dict:
+    db.execute("INSERT OR IGNORE INTO user_state(user_id) VALUES (?)", (uid,))
+    row = db.execute("SELECT * FROM user_state WHERE user_id = ?", (uid,)).fetchone()
+    return {
+        "tracked": json.loads(row["tracked"]),
+        "settings": json.loads(row["settings"]),
+        "windowDays": row["window_days"],
+        "status": json.loads(row["status"]),
+        "clearedBefore": row["cleared_before"],
+    }
+
+
+def clean_tracked(lst) -> list:
+    """추적 계정 목록 검사: 이상한 값은 버립니다."""
+    if not isinstance(lst, list):
+        raise OpError("계정 목록 형식이 올바르지 않습니다.")
+    out = []
+    for t in lst[:MAX_TRACKED]:
+        if not isinstance(t, dict) or t.get("platform") not in PLATFORMS:
+            continue
+        tid = t.get("id")
+        if not isinstance(tid, str) or len(tid) > 200:
+            continue
+        if t.get("kind") == "feed":
+            continue  # "내 피드"는 서버 방식에서 지원하지 않습니다(서버 테스트 계정의 피드가 되기 때문)
+        c = {"id": tid, "platform": t["platform"], "handle": ""}
+        handle = t.get("handle")
+        if isinstance(handle, str) and (handle == "" or HANDLE_OK.match(handle)):
+            c["handle"] = handle
+        else:
+            continue
+        if isinstance(t.get("channelId"), str) and CHANNEL_OK.match(t["channelId"]):
+            c["channelId"] = t["channelId"]
+        if isinstance(t.get("resolveUrl"), str) and len(t["resolveUrl"]) < 200 and RESOLVE_OK.match(t["resolveUrl"]):
+            c["resolveUrl"] = t["resolveUrl"]
+        if isinstance(t.get("group"), str) and t["group"].strip():
+            c["group"] = t["group"].strip()[:30]
+        if t.get("days") in DAYS_OK:
+            c["days"] = t["days"]
+        out.append(c)
+    return out
+
+
+# ---------- 글 ----------
+def item_dict(r) -> dict:
+    return {
+        "id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"],
+        "thumb": r["thumb"], "publishedAt": r["published_at"], "publishedText": r["published_text"],
+        "via": r["via"], "collectedAt": r["collected_at"],
+    }
+
+
+def items_for(db, state: dict, known_ver: str):
+    """이 사용자가 추적 중인 계정의 글. 화면이 가진 버전(ver)과 같으면 글 목록은 보내지 않습니다(데이터 절약)."""
+    vias = [t["id"] for t in state["tracked"]]
+    if not vias:
+        return "empty", {}
+    marks = ",".join("?" * len(vias))
+    where = f"via IN ({marks}) AND collected_at > ?"
+    args = (*vias, state["clearedBefore"])
+    cnt, mx = db.execute(f"SELECT COUNT(*), MAX(collected_at) FROM items WHERE {where}", args).fetchone()
+    ver = hashlib.sha1(f"{cnt}:{mx}:{','.join(vias)}:{state['clearedBefore']}".encode()).hexdigest()[:16]
+    if ver == known_ver:
+        return ver, None
+    rows = db.execute(f"SELECT * FROM items WHERE {where} ORDER BY collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
+    return ver, {r["id"]: item_dict(r) for r in rows}
+
+
+# ---------- 요청 처리 ----------
+def handle(db, uid: str, op: str, p: dict):
+    if op == "resumeCheck":
+        return True  # 수집 일시정지는 서버 방식에서 생기지 않습니다(화면 호환용)
+
+    if op == "get":
+        st = load_state(db, uid)
+        ver, items = items_for(db, st, str(p.get("ver") or ""))
+        res = {
+            "ver": ver,
+            "settings": st["settings"],
+            "tracked": st["tracked"],
+            "autoCheck": {"enabled": True, "hours": 1},
+            "status": st["status"],
+            "loginState": get_login_state(),  # 서버 테스트 계정의 로그인 상태(모든 사용자 공통)
+            "windowDays": st["windowDays"],
+        }
+        if items is None:
+            res["same"] = True        # 화면이 가진 글 목록 그대로 쓰면 됨
+        else:
+            res["items"] = items
+        return res
+
+    if op == "set":
+        load_state(db, uid)  # 행이 없으면 만듭니다
+        if "tracked" in p:
+            db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?",
+                       (json.dumps(clean_tracked(p["tracked"]), ensure_ascii=False), uid))
+        if isinstance(p.get("settings"), dict):
+            s = {k: p["settings"][k] for k in PLATFORMS if isinstance(p["settings"].get(k), bool)}
+            db.execute("UPDATE user_state SET settings = ? WHERE user_id = ?", (json.dumps(s), uid))
+        if p.get("windowDays") in DAYS_OK:
+            db.execute("UPDATE user_state SET window_days = ? WHERE user_id = ?", (p["windowDays"], uid))
+        return True
+
+    if op == "removeVia":
+        # 글은 다른 사용자도 쓸 수 있어서 지우지 않습니다. 추적 목록에서 빠지면 이 사용자에게는 안 보입니다.
+        return 0
+    if op == "clearItems":
+        load_state(db, uid)
+        db.execute("UPDATE user_state SET cleared_before = ? WHERE user_id = ?", (int(time.time() * 1000), uid))
+        return True
+
+    if op == "openWindow":
+        raise OpError("새 창은 브라우저에서 직접 엽니다.")  # 화면이 이 오류를 받으면 새 탭으로 엽니다
+    if op == "openLogin":
+        raise OpError("SNS 로그인은 서버 PC에서 관리자가 합니다. (server 폴더의 login_setup.bat)")
+    if op == "image":
+        return ""  # 화면은 이미지를 직접 불러옵니다
+
+    raise OpError("알 수 없는 요청입니다.")
+
+
+# ---------- 수집기 요청 ----------
+# DB를 연 채로 기다리면 수집기가 글을 저장하지 못하므로, 이 요청들은 DB 연결 밖에서 처리합니다.
+def inline_image(url: str, max_bytes: int = 150000) -> str:
+    """검색 결과 프로필 사진을 작은 데이터 주소로 바꿉니다(화면이 사진 주소를 못 불러오는 경우 대비)."""
+    if not url.startswith("https://"):
+        return ""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            ctype = r.headers.get("Content-Type", "")
+            data = r.read(max_bytes + 1)
+        if len(data) > max_bytes or not ctype.startswith("image/"):
+            return ""
+        return f"data:{ctype};base64," + base64.b64encode(data).decode()
+    except Exception:
+        return ""
+
+
+def handle_collector(uid: str, op: str, p: dict):
+    if op == "checkNow":
+        only = p.get("only") if isinstance(p.get("only"), str) else ""
+        collector.request_collect(uid, "deep", only[:200])
+        return True
+    if op == "checkLogin":
+        plats = p.get("platforms") if isinstance(p.get("platforms"), list) else []
+        collector.request_login_check([x for x in plats if x in PLATFORMS])
+        return True
+    if op == "cancelCheck":
+        collector.cancel(uid)
+        return True
+    if op == "searchAccount":
+        q = p.get("q").strip()[:60] if isinstance(p.get("q"), str) else ""
+        if not q or p.get("platform") not in PLATFORMS:
+            raise OpError("검색어나 매체가 올바르지 않습니다.")
+        try:
+            results = collector.run_blocking({"kind": "search", "platform": p["platform"], "q": q}, 60)
+        except Exception as e:
+            raise OpError(str(e))
+        with ThreadPoolExecutor(8) as ex:
+            pics = list(ex.map(inline_image, [r["avatar"] for r in results]))
+        return [{**r, "avatarUrl": r["avatar"], "avatar": pic or r["avatar"]} for r, pic in zip(results, pics)]
+    if op == "fetchPost":
+        url = p.get("url") if isinstance(p.get("url"), str) else ""
+        if not re.match(r"^https://www\.youtube\.com/post/[\w-]{10,60}$", url):
+            raise OpError("게시물 주소가 올바르지 않습니다.")
+        try:
+            return collector.run_blocking({"kind": "post", "url": url}, 60)
+        except Exception as e:
+            raise OpError(str(e))
+    raise OpError("알 수 없는 요청입니다.")
+
+
+@router.post("/api/call")
+def api_call(body: dict = Body(...)):
+    op, payload = body.get("op"), body.get("payload") or {}
+    if not isinstance(op, str) or not isinstance(payload, dict):
+        code, res = 400, {"ok": False, "error": "요청 형식이 올바르지 않습니다."}
+    else:
+        try:
+            with get_db() as db:
+                user = user_by_session(db, body.get("session"))
+                uid = user["id"] if user else None
+            if not uid:
+                code, res = 401, {"ok": False, "error": "로그인이 필요합니다."}
+            elif op in COLLECTOR_OPS:
+                code, res = 200, {"ok": True, "result": handle_collector(uid, op, payload)}
+            else:
+                with get_db() as db:
+                    code, res = 200, {"ok": True, "result": handle(db, uid, op, payload)}
+        except OpError as e:
+            code, res = 200, {"ok": False, "error": str(e)}
+        except Exception:
+            log.exception("api_call 오류: %s", op)
+            code, res = 500, {"ok": False, "error": "서버 오류가 발생했습니다."}
+    return JSONResponse(res, status_code=code, headers={"Cache-Control": "no-store"})
