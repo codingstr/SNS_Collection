@@ -100,8 +100,7 @@ $("gClear").addEventListener("click", () => applyToSelected((c) => { delete c.gr
   const groupsNow = () => { const c = new Map(); tracked.forEach((t) => { if (t.group) c.set(t.group, (c.get(t.group) || 0) + 1); }); return c; };
   $("gRename").addEventListener("click", () => {
     const c = groupsNow();
-    if (!c.size) { const e = $("addError"); e.textContent = "수정할 묶음이 없습니다. 계정을 골라 '묶기'로 먼저 묶어 주세요."; e.hidden = false; return; }
-    $("addError").hidden = true;
+    if (!c.size) { toast("수정할 묶음이 없습니다. 계정을 골라 '묶기'로 먼저 묶어 주세요.", "error"); return; }
     sel.textContent = "";
     c.forEach((n, name) => sel.appendChild(el("option", { value: name, text: name + " (" + n + "개 계정)" })));
     let start = selGroup;
@@ -120,7 +119,7 @@ $("gClear").addEventListener("click", () => applyToSelected((c) => { delete c.gr
     if (neu === old) { say("현재 이름과 같습니다."); return; }
     const before = tracked;
     tracked = tracked.map((t) => (t.group === old ? { ...t, group: neu } : t));
-    if (typeof favs !== "undefined" && favs.has(old)) { favs.delete(old); favs.add(neu); try { localStorage.setItem("snsFavs", JSON.stringify([...favs])); } catch (e) {} }
+    if (typeof favs !== "undefined" && favs.has(old)) { favs.delete(old); favs.add(neu); saveFavs(); }
     if (typeof groupFocus !== "undefined" && groupFocus === old) groupFocus = neu;
     if (typeof personFocus !== "undefined" && personFocus === old) personFocus = neu;
     selGroup = ""; close(); renderTracked(); renderList();
@@ -181,39 +180,22 @@ async function saveTracked() {
   trackedHold = Date.now() + 8000;
   try { return await call("set", { tracked }); } finally { trackedHold = Date.now() + 4000; }
 }
-// 새로 추가하는 계정에서 가져올 기간(마지막 선택을 기억합니다). 추가한 뒤에는 '추적 계정 관리'에서 계정별로 바꿉니다.
-// 주소나 @계정이 아니면(예: 그냥 이름) 추가하지 않고 이름으로 검색합니다.
-const isDirect = (v) => /^https?:\/\//i.test(v) || v.startsWith("@") || SITE_START.test(v);
-$("addForm").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const err = $("addError"); err.hidden = true;
-  const raw = $("thandle").value.trim();
-  if (raw && !isDirect(raw)) { $("searchBtn").click(); return; }
-  const r = parseAccount($("tplatform").value, $("thandle").value);
-  if (r.error) { err.textContent = r.error; err.hidden = false; return; }
-  const acc = r.account;
-  const grp = $("tgroup").value.trim().slice(0, 30);
-  if (grp && acc.kind !== "feed") acc.group = grp;
-  if (!acc.days) acc.days = Number($("addDays").value) || 30; // 이 계정만의 가져올 기간
-  if (tracked.some((t) => t.id === acc.id)) { err.textContent = "이미 추가된 계정입니다."; err.hidden = false; return; }
-  if (tracked.length >= MAX_TRACKED) { err.textContent = "계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다."; err.hidden = false; return; }
-  const before = tracked;
-  tracked = [...tracked, acc];
-  $("thandle").value = "";
-  renderTracked(); renderList();
-  try { await saveTracked(); } catch (e) { tracked = before; renderTracked(); showErr(e); return; }
-  call("checkNow", { only: acc.id }).catch(showErr);
-});
-/* ---------- 이름으로 검색 ---------- */
+/* ---------- 계정 추가 ---------- */
+// 추가하면 그 계정의 글을 바로 한 번 모읍니다(다른 수집이 진행 중이면 끝난 뒤 이어서).
 function addAccount(acc) {
-  const err = $("addError"); err.hidden = true;
-  if (tracked.some((t) => t.id === acc.id)) { err.textContent = "이미 추가된 계정입니다."; err.hidden = false; return Promise.resolve(false); }
-  if (tracked.length >= MAX_TRACKED) { err.textContent = "계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다."; err.hidden = false; return Promise.resolve(false); }
-  if (!acc.days) acc.days = Number($("addDays").value) || 30; // 이 계정만의 가져올 기간
+  if (tracked.some((t) => t.id === acc.id)) { toast("이미 추가된 계정입니다.", "error"); return Promise.resolve(false); }
+  if (tracked.length >= MAX_TRACKED) { toast("계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다.", "error"); return Promise.resolve(false); }
+  if (!acc.days) acc.days = 30; // 이 계정만의 가져올 기간
   const before = tracked;
+  removedIds.delete(acc.id); // 방금 지웠던 계정을 다시 추가하는 경우
   tracked = [...tracked, acc];
-  renderTracked(); renderList();
-  return saveTracked().then(() => { call("checkNow", { only: acc.id }).catch(showErr); return true; }, (e) => { tracked = before; renderTracked(); showErr(e); return false; });
+  renderTracked(); renderTabs(); renderList();
+  return saveTracked().then(() => {
+    toast(PLATFORM[acc.platform] + " " + (acc.handle ? "@" + acc.handle : acc.channelId || "계정") + " 추가됨 · 글을 모으는 중입니다");
+    call("checkNow", { only: acc.id }).catch(showErr);
+    fetchAvatars().catch(() => {});
+    return true;
+  }, (e) => { tracked = before; renderTracked(); renderTabs(); renderList(); showErr(e); return false; });
 }
 // 추가 버튼을 누르면 이 계정에서 가져올 기간을 모달에서 고릅니다(1W·2W·1M·2M). 기본은 1M입니다.
 function pickPeriod() {
@@ -263,15 +245,16 @@ function pickPeriod() {
 }
 function fillResults(box, platform, list) {
   if (!list.length) {
-    const needLog = platform !== "youtube" && loginState[platform] && loginState[platform].loggedIn === false;
-    const why = platform === "youtube" ? "" : needLog ? " " + PLATFORM[platform] + "에 로그인되어 있는지 확인하세요." : " " + PLATFORM[platform] + "이 이름 검색을 막았거나 결과가 없을 수 있습니다. @아이디나 주소로 직접 추가해 보세요.";
+    const why = platform === "youtube" ? "" : loggedOut(platform) ? " " + LOGIN_HELP(platform) : " " + PLATFORM[platform] + "이 이름 검색을 막았거나 결과가 없을 수 있습니다. @아이디나 프로필 주소로 검색하면 바로 추가할 수 있습니다.";
     box.appendChild(el("p", { class: "hint", text: "검색 결과가 없습니다." + why }));
-    if (needLog) box.appendChild(el("div", { class: "row", style: "padding:0 10px 10px" }, [loginLink(platform, PLATFORM[platform] + " 로그인 창 열기", "lb")]));
   }
   list.forEach((r) => {
-    const key = (r.handle || r.channelId).toLowerCase();
-    const acc = { id: platform + ":" + key, platform, handle: r.handle || "" };
-    if (r.channelId) acc.channelId = r.channelId;
+    let acc;
+    if (r.acc) acc = { ...r.acc }; // 주소·@계정으로 바로 추가하는 항목
+    else {
+      acc = { id: platform + ":" + (r.handle || r.channelId).toLowerCase(), platform, handle: r.handle || "" };
+      if (r.channelId) acc.channelId = r.channelId;
+    }
     const add = el("button", { type: "button", text: "추가" });
     // 이미 추적 중인 계정이면 "제거", 아니면 "추가"로 보여 줍니다(누를 때마다 바뀜).
     let armed = 0;
@@ -284,10 +267,12 @@ function fillResults(box, platform, list) {
         clearTimeout(armed); armed = 0; add.disabled = true;
         await removeTrackedIds([acc.id]); paint(); return;
       }
-      const pk = await pickPeriod(); if (!pk) return; acc.days = pk.days; if (pk.group) acc.group = pk.group; add.disabled = true;
-      if (await addAccount(acc)) { paint(); if (r.avatar) storePic(acc.id, r.avatar).then((ok) => { if (ok) renderList(); }); } else paint();
+      const pk = await pickPeriod(); if (!pk) return;
+      const a = { ...acc, days: pk.days }; if (pk.group) a.group = pk.group;
+      add.disabled = true;
+      if (await addAccount(a)) { paint(); if (r.avatar) storePic(a.id, r.avatar).then((ok) => { if (ok) renderList(); }); } else paint();
     });
-    const initial = (r.name || r.handle || "?").trim().charAt(0).toUpperCase();
+    const initial = (r.name || r.handle || acc.handle || "?").trim().charAt(0).toUpperCase();
     const ph = (why) => el("span", { class: "ph", text: initial, title: why || "" });
     let thumb = ph("사진 주소를 읽지 못했습니다");
     const swap = (img, kind, src) => img.addEventListener("error", () => img.replaceWith(ph("사진 불러오기 실패(" + kind + "): " + String(src).slice(0, 80))));
@@ -296,51 +281,32 @@ function fillResults(box, platform, list) {
       if (window.claude) { thumb = el("img", { alt: "", referrerpolicy: "no-referrer" }); loadImg(r.avatarUrl, thumb); }
       else { thumb = el("img", { src: r.avatarUrl, alt: "", referrerpolicy: "no-referrer" }); swap(thumb, "주소로 직접", r.avatarUrl); }
     }
-    box.appendChild(el("div", { class: "res" }, [thumb, el("div", { class: "t" }, [el("b", { text: (() => { const n = (r.name || "").replace(/\s+/g, " ").trim(), h = Math.floor(n.length / 2); return n.length > 1 && n.length % 2 === 1 && n[h] === " " && n.slice(0, h) === n.slice(h + 1) ? n.slice(0, h) : n || "@" + (r.handle || r.channelId); })() }), el("span", { text: [r.handle ? "@" + r.handle : "", r.desc && r.desc.replace(/^@/, "").toLowerCase() !== String(r.handle || "").toLowerCase() ? r.desc : ""].filter(Boolean).join(" · ") })]), add]));
+    box.appendChild(el("div", { class: "res" }, [thumb, el("div", { class: "t" }, [el("b", { text: (() => { const n = (r.name || "").replace(/\s+/g, " ").trim(), h = Math.floor(n.length / 2); return n.length > 1 && n.length % 2 === 1 && n[h] === " " && n.slice(0, h) === n.slice(h + 1) ? n.slice(0, h) : n || (acc.handle ? "@" + acc.handle : acc.channelId || acc.resolveUrl || ""); })() }), el("span", { text: [r.handle ? "@" + r.handle : "", r.desc && r.desc.replace(/^@/, "").toLowerCase() !== String(r.handle || "").toLowerCase() ? r.desc : ""].filter(Boolean).join(" · ") })]), add]));
   });
 }
-let searchWaiting = false;
-$("searchBtn").addEventListener("click", async () => {
-  const q = $("thandle").value.trim();
-  const box = $("searchResults"), err = $("addError");
-  err.hidden = true;
-  if (!q) { err.textContent = "검색할 이름을 입력하세요."; err.hidden = false; return; }
-  const platform = $("tplatform").value;
-  box.hidden = false; box.textContent = "";
-  box.appendChild(el("p", { class: "hint", text: "검색 중… 크롬에서 탭이 잠깐 열렸다 닫힙니다." }));
-  $("searchBtn").disabled = true; searchActive++; // 검색은 수집보다 우선(수집 중에도 바로 실행)
-  try {
-    const list = await call("searchAccount", { platform, q }, 40000);
-    box.textContent = "";
-    fillResults(box, platform, list);
-  } catch (e) { box.textContent = ""; showErr(e); box.hidden = true; }
-  finally { $("searchBtn").disabled = false; searchActive = Math.max(0, searchActive - 1); }
-});
-
-// 지금 최신화: 먼저 로그인 상태를 확인하고, 로그인이 안 된 매체가 있으면 모달(로그인 하기)을 띄웁니다. 모두 로그인되어 있으면 바로 가져옵니다.
-let refreshing = false;
+// 지금 최신화: 서버에 수집을 요청합니다. 서버 테스트 계정이 로그인되어 있지 않은 매체(X·인스타)는 서버가 건너뛰고 알려 줍니다.
+// 수집 중에 누르면 '멈추기'(한 번 더 눌러야 멈춤).
+let stopArmed = 0;
 async function startRefresh() {
   if (refreshing || !connected) return;
-  refreshing = true;
-  const btn = $("checkNow");
-  btn.disabled = true; btn.classList.add("busy"); btn.title = "로그인 확인 중…";
+  if (checkStatus && checkStatus.running) {
+    if (!stopArmed) { toast("한 번 더 누르면 수집을 멈춥니다."); stopArmed = setTimeout(() => { stopArmed = 0; }, 4000); return; }
+    clearTimeout(stopArmed); stopArmed = 0;
+    try { await call("cancelCheck"); toast("수집을 멈추는 중입니다. 지금 보고 있는 페이지까지만 모읍니다."); } catch (e) { showErr(e); }
+    return;
+  }
+  if (!tracked.length) { toast("먼저 위쪽 검색창에서 추적할 계정을 찾아 추가하세요.", "error"); return; }
+  refreshing = true; paintCheckNow();
   try {
     const plats = Array.from(new Set(tracked.filter((t) => settings[t.platform] !== false).map((t) => t.platform)));
-    const t0 = Date.now();
-    if (plats.length) {
-      await call("checkLogin", { platforms: plats }).catch(() => {});
-      // 확인 결과가 올 때까지 최대 약 30초 기다립니다(못 알아낸 매체는 막지 않고 진행합니다).
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        await refresh().catch(() => {});
-        if (plats.every((p) => loginState[p] && loginState[p].at >= t0 - 1000)) break;
-      }
-    }
-    const need = plats.filter((p) => loginState[p] && loginState[p].loggedIn === false);
-    if (need.length) { openLoginModal(need); return; }
+    if (!plats.length) { toast("모든 매체의 수집이 꺼져 있습니다. 위쪽 매체 아이콘을 눌러 켜세요.", "error"); return; }
+    const out = plats.filter(loggedOut);
+    if (out.length) toast(out.map((p) => PLATFORM[p]).join("·") + "는 서버 테스트 계정이 로그인되어 있지 않아 건너뜁니다(관리자 확인 필요).", "error");
     await call("checkNow", { only: "" });
+    checkStatus = { ...checkStatus, running: true, message: "수집 대기 중…" }; // 서버 상태를 다시 읽기 전에도 바로 '수집 중'으로 보이게
+    renderWork();
   } catch (e) { showErr(e); }
-  finally { refreshing = false; btn.title = "지금 최신화"; btn.classList.toggle("busy", !!(checkStatus && checkStatus.running)); btn.disabled = !!(checkStatus && checkStatus.running) || tracked.length === 0; }
+  finally { refreshing = false; paintCheckNow(); }
 }
 $("checkNow").addEventListener("click", startRefresh);
 let clearArmed = null;
@@ -348,36 +314,16 @@ $("clear").addEventListener("click", async (e) => {
   e.stopPropagation(); // 메뉴가 닫히지 않게 합니다(한 번 더 눌러야 삭제)
   if (!clearArmed) { $("clear").textContent = "한 번 더 누르면 삭제됩니다"; clearArmed = setTimeout(() => { clearArmed = null; $("clear").textContent = "수집한 글 모두 삭제"; }, 4000); return; }
   clearTimeout(clearArmed); clearArmed = null; $("clear").textContent = "수집한 글 모두 삭제";
-  items = [];
-  await call("clearItems").catch(showErr);
-  renderList();
+  try {
+    await call("clearItems");
+    items = []; serverItems = [];
+    renderTabs(); renderList(); renderWork();
+    toast("모은 글을 모두 지웠습니다. 다음 수집부터 다시 모입니다.");
+  } catch (err) { showErr(err); }
   $("acctMenu").hidden = true; $("connAcct").setAttribute("aria-expanded", "false");
 });
 
 
-
-// 추적 계정 패널의 두 탭: '추적 계정'(추가·가져오기) / '추적 계정 관리'(계정 목록·묶음·계정별 기간)
-(function () {
-  const show = (manage) => {
-    $("ptAdd").hidden = manage; $("ptManage").hidden = !manage;
-  };
-  show(true);
-})();
-
-// 수집창을 닫아 수집이 종료됐을 때 뜨는 안내 모달
-(function () {
-  const close = () => { $("closedModal").hidden = true; };
-  $("cmX").addEventListener("click", close);
-  $("cmClose").addEventListener("click", close);
-  $("closedModal").addEventListener("click", (e) => { if (e.target === $("closedModal")) close(); });
-  $("cmRetry").addEventListener("click", () => { close(); startRefresh(); });
-})();
-
-// 수집이 일시정지됐을 때의 모달: 이어서 수집(수집창을 앞으로) / 닫기(수집 종료)
-(function () {
-  $("pmResume").addEventListener("click", () => { pauseDismissed = true; $("pausedModal").hidden = true; call("resumeCheck").catch(showErr); });
-  $("pmClose").addEventListener("click", () => { pauseDismissed = true; $("pausedModal").hidden = true; call("cancelCheck").catch(showErr); });
-})();
 
 /* 묶음 이름 입력: 이미 만들어 둔 묶음을 보여주고, 입력하면 연관 묶음으로 걸러서 고를 수 있게 합니다 */
 (function () {
@@ -430,5 +376,4 @@ $("clear").addEventListener("click", async (e) => {
     });
   }
   attach($("gName"));
-  attach($("tgroup"));
 })();

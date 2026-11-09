@@ -2,9 +2,16 @@
 
   POST /api/auth  {"action": "signup" | "login" | "me" | "logout" | "changePassword" | "deleteAccount", ...}
   성공: {"ok": true, ...}   실패: {"ok": false, "error": "메시지"}
+
+시도 횟수 제한(한 IP에 여러 사람이 있는 학교·회사 와이파이도 고려):
+  - 로그인 실패: 같은 IP에서 같은 아이디로 15분에 10번까지 (맞는 비밀번호로 로그인하는 다른 사람은 막지 않습니다)
+  - 로그인 실패 전체: 같은 IP에서 15분에 100번까지 (여러 아이디를 돌려 가며 맞혀 보는 것 방지)
+  - 가입: 같은 IP에서 1시간에 60번까지
+  - 비밀번호 변경·계정 삭제의 비밀번호 틀림: 계정마다 15분에 10번까지
 """
 import hashlib
 import hmac
+import json
 import logging
 import re
 import secrets
@@ -21,7 +28,12 @@ log = logging.getLogger("auth")
 
 SESSION_TTL = 30 * 86400          # 세션 30일
 ID_RE = re.compile(r"^[a-z0-9_.-]{3,30}$")
-RL_MAX, RL_WINDOW = 10, 15 * 60   # 비밀번호 틀림: IP당 15분에 10번까지
+# (최대 횟수, 기간 초)
+RL_LOGIN_ID = (10, 15 * 60)       # 로그인 실패: IP+아이디
+RL_LOGIN_IP = (100, 15 * 60)      # 로그인 실패: IP 전체
+RL_SIGNUP = (60, 60 * 60)         # 가입: IP
+RL_ACCOUNT = (10, 15 * 60)        # 비밀번호 확인 실패: 계정
+LOGIN_COLLECT_COOLDOWN = 10 * 60  # 저장된 로그인으로 다시 들어왔을 때 자동 수집: 마지막 수집 뒤 10분이 지났을 때만(초)
 
 
 # ---------- 도구 ----------
@@ -57,19 +69,20 @@ def user_by_session(db, sess):
     ).fetchone()
 
 
-def rl_blocked(db, ip: str) -> bool:
-    row = db.execute("SELECT count, reset_at FROM rate_limits WHERE key = ?", (sha(ip),)).fetchone()
-    return bool(row and row["reset_at"] > time.time() and row["count"] >= RL_MAX)
+def rl_blocked(db, key: str, limit) -> bool:
+    row = db.execute("SELECT count, reset_at FROM rate_limits WHERE key = ?", (sha(key),)).fetchone()
+    return bool(row and row["reset_at"] > time.time() and row["count"] >= limit[0])
 
 
-def rl_bump(db, ip: str):
+def rl_bump(db, key: str, limit):
+    """횟수 하나 올리기. 기간이 지났으면 1부터 다시 셉니다(기간은 처음 센 때부터)."""
     now = int(time.time())
     db.execute(
         """INSERT INTO rate_limits(key, count, reset_at) VALUES (?, 1, ?)
            ON CONFLICT(key) DO UPDATE SET
              count = CASE WHEN reset_at <= ? THEN 1 ELSE count + 1 END,
-             reset_at = excluded.reset_at""",
-        (sha(ip), now + RL_WINDOW, now),
+             reset_at = CASE WHEN reset_at <= ? THEN excluded.reset_at ELSE reset_at END""",
+        (sha(key), now + limit[1], now, now),
     )
 
 
@@ -95,11 +108,11 @@ def handle(db, act: str, body: dict, ip: str):
             return fail(400, "아이디는 영문·숫자·_ . - 로 3~30자여야 합니다.")
         if not 6 <= len(pw) <= 200:
             return fail(400, "비밀번호는 6자 이상이어야 합니다.")
-        if rl_blocked(db, ip):
-            return fail(429, "시도가 너무 많습니다. 15분 뒤에 다시 하세요.")
 
         if act == "signup":
-            rl_bump(db, ip)  # 가입도 횟수에 넣어 무더기 가입을 막습니다
+            if rl_blocked(db, "signup:" + ip, RL_SIGNUP):
+                return fail(429, "이 네트워크에서 가입이 너무 많았습니다. 1시간 뒤에 다시 하세요.")
+            rl_bump(db, "signup:" + ip, RL_SIGNUP)  # 무더기 가입을 막습니다
             salt = secrets.token_hex(16)
             try:
                 db.execute(
@@ -110,9 +123,12 @@ def handle(db, act: str, body: dict, ip: str):
                 return fail(409, "이미 사용 중인 아이디입니다.")
             return 200, {"ok": True, "session": new_session(db, uid, 0), "id": uid}
 
+        if rl_blocked(db, f"login:{ip}:{uid}", RL_LOGIN_ID) or rl_blocked(db, "loginip:" + ip, RL_LOGIN_IP):
+            return fail(429, "로그인 실패가 너무 많습니다. 15분 뒤에 다시 하세요.")
         user = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
         if not user or not pw_ok(pw, user):
-            rl_bump(db, ip)
+            rl_bump(db, f"login:{ip}:{uid}", RL_LOGIN_ID)
+            rl_bump(db, "loginip:" + ip, RL_LOGIN_IP)
             return fail(401, "아이디 또는 비밀번호가 맞지 않습니다.")
         return 200, {"ok": True, "session": new_session(db, uid, user["sv"]), "id": uid}
 
@@ -126,11 +142,11 @@ def handle(db, act: str, body: dict, ip: str):
         user = user_by_session(db, body.get("session"))
         if not user:
             return fail(401, "로그인이 필요합니다.")
-        if rl_blocked(db, ip):
-            return fail(429, "시도가 너무 많습니다. 15분 뒤에 다시 하세요.")
+        if rl_blocked(db, "acct:" + user["id"], RL_ACCOUNT):
+            return fail(429, "비밀번호를 너무 많이 틀렸습니다. 15분 뒤에 다시 하세요.")
         if not pw_ok(str(body.get("password") or ""), user):
-            rl_bump(db, ip)
-            return fail(401, "현재 비밀번호가 맞지 않습니다.")
+            rl_bump(db, "acct:" + user["id"], RL_ACCOUNT)
+            return fail(403, "현재 비밀번호가 맞지 않습니다.")
 
         if act == "changePassword":
             np = str(body.get("newPassword") or "")
@@ -154,6 +170,28 @@ def handle(db, act: str, body: dict, ip: str):
     return fail(400, "알 수 없는 요청입니다.")
 
 
+def collect_on_login(uid: str, fresh_login: bool):
+    """로그인하면 그 사용자의 추적 계정을 바로 한 번 모읍니다.
+    - 아이디·비밀번호로 로그인: 항상
+    - 저장된 로그인으로 화면을 다시 연 경우(me): 마지막 수집 뒤 LOGIN_COLLECT_COOLDOWN이 지났을 때만
+      (새로고침·탭 열기마다 수집하지 않게. X·인스타는 수집기의 페이지별 최소 간격도 따로 지켜짐)
+    추적 계정이 없거나 이미 수집 중이면 아무것도 하지 않습니다. 실패해도 로그인은 그대로 성공합니다."""
+    from collector import collector   # 수집기는 auth보다 무거워서 필요할 때 불러옵니다
+    try:
+        with get_db() as db:
+            row = db.execute("SELECT tracked, settings, status FROM user_state WHERE user_id = ?", (uid,)).fetchone()
+        if not row:
+            return
+        tracked, settings, status = json.loads(row["tracked"]), json.loads(row["settings"]), json.loads(row["status"])
+        if status.get("running") or not any(settings.get(t.get("platform")) is not False for t in tracked):
+            return
+        if not fresh_login and time.time() * 1000 - (status.get("lastRun") or 0) < LOGIN_COLLECT_COOLDOWN * 1000:
+            return
+        collector.request_collect(uid, "deep")
+    except Exception:
+        log.exception("로그인 후 자동 수집 요청 오류: %s", uid)
+
+
 @router.post("/api/auth")
 def auth(request: Request, body: dict = Body(...)):
     act = body.get("action")
@@ -166,4 +204,7 @@ def auth(request: Request, body: dict = Body(...)):
         except Exception:
             log.exception("auth 오류")
             code, res = 500, {"ok": False, "error": "서버 오류가 발생했습니다."}
+        # 로그인 직후 자동 수집. 로그인 처리(DB 저장)가 끝난 뒤에 요청해야 수집기의 상태 저장과 잠금을 다투지 않습니다.
+        if code == 200 and act in ("login", "me"):
+            collect_on_login(res["id"], act == "login")
     return JSONResponse(res, status_code=code, headers={"Cache-Control": "no-store"})

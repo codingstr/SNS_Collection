@@ -34,10 +34,31 @@
     let auto = false; // 확장이 계정 확인용으로 연 탭이면 true
     let mode = ""; // "deep": 지금 확인(보이는 창, 깊게) / "shallow": 자동 확인(백그라운드, 얕게)
     let since = 0; // 이 시각보다 오래된 글은 가져오지 않음
+    // 이미 모은 글에서 멈추기: 서버가 이 페이지를 예전에 끝까지(기간 끝까지) 모은 적이 있으면, 이미 모은 글이
+    // 연달아 나오는 곳부터는 그 아래도 이미 모은 글이므로 더 내려가지 않습니다. 고정 글·리포스트(_noStop)는 세지 않습니다.
+    const KNOWN_RUN = 6; // 이만큼 연달아 이미 모은 글이면 멈춤(인스타 고정 게시물 최대 3개보다 넉넉히)
+    let known = new Set(), stopKnown = false, stoppedKnown = false;
+    const knownRun = (list) => {
+      if (!stopKnown) return false;
+      let run = 0;
+      for (const it of list) {
+        if (!it || !it.id || it._noStop) continue;
+        run = known.has(it.id) ? run + 1 : 0;
+        if (run >= KNOWN_RUN) return true;
+      }
+      return false;
+    };
     let helloTries = 0;
     let collecting = false;
     let found = 0; // 진단용: 화면에서 본 글 수(최대), 보낸 새 글 수
     let sentCount = 0;
+    // 지금까지 닿은 가장 오래된 글의 시각(밀리초). 로딩이 도중에 멈췄을 때 서버가 "어디까지 빠짐없이 모았는지" 기억하는 데 씁니다.
+    let oldest = 0;
+    const noteOldest = (item) => {
+      if (!item || item._noStop || !item.publishedAt) return;
+      const t = Date.parse(item.publishedAt);
+      if (t && (!oldest || t < oldest)) oldest = t;
+    };
 
     // 로그인 여부를 확장에 알립니다(모르면 몇 번 더 확인). 이 페이지에서 한 번만 보냅니다.
     let loginSent = false;
@@ -100,6 +121,8 @@
             auto = true;
             mode = res.mode || "shallow";
             since = Number(res.since) || 0;
+            known = new Set(Array.isArray(res.known) ? res.known : []);
+            stopKnown = !!res.stopKnown && known.size > 0;
             if (!collecting) autoCollect();
           }
           schedule();
@@ -155,6 +178,7 @@
           hitOld = true;
           break;
         }
+        noteOldest(item);
         if (seen.has(item.id)) continue;
         seen.add(item.id);
         fresh.push(item);
@@ -167,7 +191,7 @@
           /* 연결 끊김 */
         }
       }
-      return { raw, fresh: fresh.length, hitOld };
+      return { raw, fresh: fresh.length, hitOld, hitKnown: auto && knownRun(raw) };
     }
 
     function run() {
@@ -209,6 +233,7 @@
                   hitOld = true;
                   break;
                 }
+                noteOldest(item);
                 if (seen.has(item.id)) continue;
                 seen.add(item.id);
                 fresh.push(item);
@@ -217,11 +242,12 @@
                 sentCount += fresh.length;
                 try { chrome.runtime.sendMessage({ type: "items", items: fresh }); } catch (e) { /* 연결 끊김 */ }
               }
+              if (!hitOld && knownRun(items)) { stoppedKnown = true; return true; }
               return hitOld;
             },
           });
           if (api) {
-            diag = { why: api.why + " · 요청 " + api.pages + "회", scrolls: api.pages, api: true };
+            diag = { why: (stoppedKnown ? "이미 모은 글 도달(데이터 요청)" : api.why) + " · 요청 " + api.pages + "회", scrolls: api.pages, api: true };
             return;
           }
         }
@@ -249,10 +275,11 @@
         await waitVisible();
         for (let i = 0; i < maxScrolls && Date.now() < deadline; i++) {
           await waitVisible();
-          const { raw, fresh, hitOld } = collectOnce();
+          const { raw, fresh, hitOld, hitKnown } = collectOnce();
           // 고정/리포스트처럼 날짜 순서에서 벗어난 글은 중단 판단에서 제외합니다.
           const reachedOld = hitOld;
           if (reachedOld) { why = "기간 밖 글 도달"; break; }
+          if (hitKnown) { why = "이미 모은 글 도달"; break; }
           // 날짜가 없는 화면(인스타그램 프로필 격자)은 어디까지가 기간 안인지 알 수 없어서, 기간에 비례한 횟수까지만 내려갑니다.
           if (deep && raw.length && raw.every((it) => !it.publishedAt)) {
             const d = Math.max(1, (Date.now() - since) / 86400000);
@@ -300,7 +327,7 @@
         diag = { why: why + " · 위치 " + Math.round((document.scrollingElement || document.documentElement).scrollTop || 0) + "px", scrolls };
       } finally {
         try {
-          chrome.runtime.sendMessage({ type: "autoDone", found, sent: sentCount, vis: diag.api ? "visible" : document.visibilityState, why: diag.why || "중단", scrolls: diag.scrolls || 0 });
+          chrome.runtime.sendMessage({ type: "autoDone", found, sent: sentCount, oldest, vis: diag.api ? "visible" : document.visibilityState, why: diag.why || "중단", scrolls: diag.scrolls || 0 });
         } catch (e) {
           /* 연결 끊김 */
         }

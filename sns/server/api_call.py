@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from auth import user_by_session
 from collector import collector, get_login_state
+from collector.runner import AUTO_EVERY_MS
 from db import get_db
 
 router = APIRouter()
@@ -35,6 +36,7 @@ CHANNEL_OK = re.compile(r"^UC[\w-]{22}$")
 RESOLVE_OK = re.compile(r"^https://www\.youtube\.com/(c|user)/[^/?#]+$")
 
 COLLECTOR_OPS = ("checkNow", "checkLogin", "cancelCheck", "searchAccount", "fetchPost")
+AVATAR_MAX = 80000                 # 계정 사진 캐시에 넣는 데이터 주소 최대 길이(글자)
 
 
 class OpError(Exception):
@@ -43,8 +45,11 @@ class OpError(Exception):
 
 # ---------- 사용자 상태 ----------
 def load_state(db, uid: str) -> dict:
-    db.execute("INSERT OR IGNORE INTO user_state(user_id) VALUES (?)", (uid,))
     row = db.execute("SELECT * FROM user_state WHERE user_id = ?", (uid,)).fetchone()
+    if row is None:
+        # 처음 한 번만 행을 만듭니다(예전에는 화면이 상태를 읽을 때마다 쓰기가 일어나 수집기의 저장과 잠금을 다퉜음).
+        db.execute("INSERT OR IGNORE INTO user_state(user_id) VALUES (?)", (uid,))
+        row = db.execute("SELECT * FROM user_state WHERE user_id = ?", (uid,)).fetchone()
     return {
         "tracked": json.loads(row["tracked"]),
         "settings": json.loads(row["settings"]),
@@ -90,23 +95,29 @@ def item_dict(r) -> dict:
     return {
         "id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"],
         "thumb": r["thumb"], "publishedAt": r["published_at"], "publishedText": r["published_text"],
-        "via": r["via"], "collectedAt": r["collected_at"],
+        "via": r["uvia"], "collectedAt": r["collected_at"],
     }
 
 
 def items_for(db, state: dict, known_ver: str):
-    """이 사용자가 추적 중인 계정의 글. 화면이 가진 버전(ver)과 같으면 글 목록은 보내지 않습니다(데이터 절약)."""
+    """이 사용자가 추적 중인 계정의 글. 화면이 가진 버전(ver)과 같으면 글 목록은 보내지 않습니다(데이터 절약).
+
+    글과 추적 계정은 item_via로 이어져 있어서, 같은 계정을 다른 사용자가 다른 이름으로 추가해도 각자 보입니다.
+    via는 이 사용자의 추적 계정 ID로 돌려줍니다(화면이 계정별로 묶는 데 씀).
+    '글 모두 삭제'를 누른 뒤에는 그 뒤에 새로 모았거나 다시 본 글만 보입니다.
+    """
     vias = [t["id"] for t in state["tracked"]]
     if not vias:
         return "empty", {}
     marks = ",".join("?" * len(vias))
-    where = f"via IN ({marks}) AND collected_at > ?"
+    src = f"FROM item_via v JOIN items i ON i.id = v.item_id WHERE v.via IN ({marks}) AND MAX(i.collected_at, i.seen_at) > ?"
     args = (*vias, state["clearedBefore"])
-    cnt, mx = db.execute(f"SELECT COUNT(*), MAX(collected_at) FROM items WHERE {where}", args).fetchone()
-    ver = hashlib.sha1(f"{cnt}:{mx}:{','.join(vias)}:{state['clearedBefore']}".encode()).hexdigest()[:16]
+    # 버전: 글 수·가장 최근 수집·가장 최근 내용 변경(썸네일·제목·날짜 보충 등). 내용이 바뀐 글도 화면에 다시 보내집니다.
+    cnt, mx, upd = db.execute(f"SELECT COUNT(DISTINCT i.id), MAX(i.collected_at), MAX(i.updated_at) {src}", args).fetchone()
+    ver = hashlib.sha1(f"{cnt}:{mx}:{upd}:{','.join(vias)}:{state['clearedBefore']}".encode()).hexdigest()[:16]
     if ver == known_ver:
         return ver, None
-    rows = db.execute(f"SELECT * FROM items WHERE {where} ORDER BY collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
+    rows = db.execute(f"SELECT i.*, MIN(v.via) AS uvia {src} GROUP BY i.id ORDER BY i.collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
     return ver, {r["id"]: item_dict(r) for r in rows}
 
 
@@ -122,10 +133,11 @@ def handle(db, uid: str, op: str, p: dict):
             "ver": ver,
             "settings": st["settings"],
             "tracked": st["tracked"],
-            "autoCheck": {"enabled": True, "hours": 1},
+            "autoCheck": {"enabled": True, "minutes": AUTO_EVERY_MS // 60000},
             "status": st["status"],
             "loginState": get_login_state(),  # 서버 테스트 계정의 로그인 상태(모든 사용자 공통)
             "windowDays": st["windowDays"],
+            "nextAuto": int(collector.next_auto * 1000),  # 다음 서버 자동 수집 시각(밀리초)
         }
         if items is None:
             res["same"] = True        # 화면이 가진 글 목록 그대로 쓰면 됨
@@ -159,6 +171,13 @@ def handle(db, uid: str, op: str, p: dict):
         raise OpError("SNS 로그인은 서버 PC에서 관리자가 합니다. (server 폴더의 login_setup.bat)")
     if op == "image":
         return ""  # 화면은 이미지를 직접 불러옵니다
+    if op == "avatars":
+        # 계정 프로필 사진(검색할 때 받아 둔 것). {계정 ID: 데이터 주소}
+        ids = [x for x in (p.get("ids") or []) if isinstance(x, str) and len(x) <= 200][:60] if isinstance(p.get("ids"), list) else []
+        if not ids:
+            return {}
+        rows = db.execute(f"SELECT id, data FROM avatars WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        return {r["id"]: r["data"] for r in rows}
 
     raise OpError("알 수 없는 요청입니다.")
 
@@ -179,6 +198,19 @@ def inline_image(url: str, max_bytes: int = 150000) -> str:
         return f"data:{ctype};base64," + base64.b64encode(data).decode()
     except Exception:
         return ""
+
+
+def save_avatars(platform: str, results: list, pics: list):
+    """검색 결과의 프로필 사진을 계정 ID별로 저장해 둡니다(다른 기기·사용자도 다시 검색하지 않고 씀)."""
+    rows = []
+    for r, pic in zip(results, pics):
+        if not pic or len(pic) > AVATAR_MAX:
+            continue
+        for key in {(r.get("handle") or "").lower(), (r.get("channelId") or "").lower()} - {""}:  # 유튜브는 @핸들·채널 ID 둘 다
+            rows.append((f"{platform}:{key}", pic, int(time.time() * 1000)))
+    if rows:
+        with get_db() as db:
+            db.executemany("INSERT OR REPLACE INTO avatars(id, data, at) VALUES (?, ?, ?)", rows)
 
 
 def handle_collector(uid: str, op: str, p: dict):
@@ -203,6 +235,7 @@ def handle_collector(uid: str, op: str, p: dict):
             raise OpError(str(e))
         with ThreadPoolExecutor(8) as ex:
             pics = list(ex.map(inline_image, [r["avatar"] for r in results]))
+        save_avatars(p["platform"], results, pics)
         return [{**r, "avatarUrl": r["avatar"], "avatar": pic or r["avatar"]} for r, pic in zip(results, pics)]
     if op == "fetchPost":
         url = p.get("url") if isinstance(p.get("url"), str) else ""

@@ -1336,3 +1336,24 @@ html[data-design="bento"] #navHelp{--ico:url("data:image/svg+xml,%3Csvg xmlns='h
 /* 노트북 트랙패드 가로 스와이프로 브라우저가 뒤로/앞으로 가기를 하거나 화면이 출렁이지 않게 */
 html,body{overscroll-behavior-x:none}
 html[data-design="bento"] #grid,html[data-design="bento"] #setPanel,html[data-design="bento"] #trackPanel{overscroll-behavior:contain}
+
+/* ===== 매체 구분(유튜브·X·인스타): 카드 위쪽 색 띠 + 매체 색 이름표, 사람별 화면의 매체 칸은 매체 색 테두리·바탕 ===== */
+html[data-design="bento"] [data-plat="youtube"]{--mc:#ff0033;--mcg:#ff0033}
+html[data-design="bento"] [data-plat="x"]{--mc:#0f1419;--mcg:#0f1419}
+html[data-design="bento"][data-theme="dark"] [data-plat="x"]{--mc:#e7e9ea;--mcg:#e7e9ea}
+html[data-design="bento"] [data-plat="instagram"]{--mc:#a03bd0;--mcg:linear-gradient(90deg,#f9a03f,#e1306c 50%,#833ab4)}
+html[data-design="bento"] #grid .card[data-plat]{position:relative;overflow:hidden}
+html[data-design="bento"] #grid .card[data-plat]::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--mcg);z-index:3;pointer-events:none}
+html[data-design="bento"] #grid .card[data-plat] .badge,html[data-design="bento"] .media-grid .card[data-plat] .badge{background:var(--mcg) !important;color:#fff !important;font-weight:600 !important;box-shadow:0 1px 4px rgba(0,0,0,.18) !important;border:0 !important}
+html[data-design="bento"][data-theme="dark"] #grid .card[data-plat="x"] .badge{color:#0f1419 !important}
+/* 사람별 화면: 매체별 칸(유튜브 영상·유튜브 게시물·X·인스타)을 매체 색 상자로 나눔 */
+html[data-design="bento"] #grid .media-grid > .sec[data-plat]{border:1.5px solid color-mix(in srgb,var(--mc) 32%,transparent) !important;background:color-mix(in srgb,var(--mc) 6%,transparent) !important;border-radius:22px !important;padding:10px 10px 12px !important;overflow:hidden}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head{display:flex !important;align-items:center;gap:7px;margin:0 2px 9px !important;position:static !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .sicon{display:inline-flex !important;width:20px !important;height:20px !important;border:0 !important;box-shadow:none !important;border-radius:50% !important;overflow:hidden;position:static !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .sicon img,html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .sicon .pg{width:20px;height:20px}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .slabel{display:inline-flex !important;font:600 13px/1 var(--font);color:var(--fg)}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .slabel::before{display:none}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{display:inline !important;position:static !important;background:none !important;box-shadow:none !important;padding:0 !important;color:var(--muted) !important;font-size:12px !important;margin:0 !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head button{position:static !important;margin-left:auto !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card .badge{display:none !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card:not(:has(> img)) .body{padding-top:16px}

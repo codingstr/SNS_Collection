@@ -4,6 +4,7 @@
 확인: http://localhost:8080  /  http://localhost:8080/api/health
 """
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -21,10 +22,17 @@ BASE_DIR = Path(__file__).resolve().parent      # .../server
 WEB_DIR = BASE_DIR.parent / "sns-web"           # .../sns-web (기존 웹 화면)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s", datefmt="%H:%M:%S")
-init_db()
-collector.start()   # 수집 작업 스레드 (크롬 창은 수집할 때만 뜹니다)
 
-app = FastAPI(title="SNS Collector")
+
+@asynccontextmanager
+async def lifespan(_app):
+    # 파일을 불러오기만 할 때(테스트·uvicorn --reload 감시 프로세스 등)는 수집기를 띄우지 않고, 서버가 실제로 켜질 때 한 번만 시작합니다.
+    init_db()
+    collector.start()   # 수집 작업 스레드 (크롬 창은 수집할 때만 뜹니다)
+    yield
+
+
+app = FastAPI(title="SNS Collector", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # 응답 압축: ngrok 무료 데이터 한도(월 1GB) 절약
 
 

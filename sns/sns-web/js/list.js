@@ -8,9 +8,16 @@ function relative(ms) {
 // 기간은 계정마다 따로 정합니다(계정에 days가 있으면 그 기간으로 가져오고 보여줍니다). 없는 계정은 기본 기간(periodDays)을 따릅니다.
 let periodDays = 30;
 const publishedMs = (it) => { const t = Date.parse(it.publishedAt || ""); return Number.isNaN(t) ? it.collectedAt : t; };
+// 추적 계정 ID → 계정. 글마다 tracked.find를 하면 (글 5000 × 계정 30)번 비교하므로, 목록이 바뀔 때만 한 번 만듭니다.
+// (tracked는 늘 새 배열로 바꿔 끼우므로 배열이 같으면 내용도 같습니다)
+let _tmapOf = null, _tmap = new Map();
+function trackedOf(id) {
+  if (_tmapOf !== tracked) { _tmapOf = tracked; _tmap = new Map(tracked.map((t) => [t.id, t])); }
+  return _tmap.get(id) || null;
+}
 // 계정별 기간이 있으면 그 계정의 글은 그 기간으로, 없으면 맨 위 기간으로 거릅니다.
 const inPeriod = (it) => {
-  const t = it.via ? tracked.find((x) => x.id === it.via) : null;
+  const t = it.via ? trackedOf(it.via) : null;
   const d = (t && t.days) || periodDays;
   return !d || publishedMs(it) >= Date.now() - d * 86400000;
 };
@@ -31,20 +38,45 @@ function pumpImg() {
 
 // 카드는 폭 240px 안팎인데 원본 썸네일(특히 인스타그램)은 1000px 이상이라, 큰 채로 올려 두면 메모리·디코딩 부담으로 스크롤이 끊깁니다.
 // 한 번 받아서 폭 520px(2배 화면 대응)로 줄인 JPEG로 바꿔 쓰고, 같은 주소는 다시 받지 않습니다. 줄이기가 막히면(CORS 등) 원본을 그대로 씁니다.
-const smallCache = new Map(); // 원본 주소 -> 줄인 그림 주소
+// 줄인 그림은 최근에 쓴 것부터 SMALL_MAX장만 기억하고, 밀려난 것은 메모리에서 풉니다(URL.revokeObjectURL).
+const SMALL_MAX = 600;
+const smallCache = new Map(); // 원본 주소 -> 줄인 그림 주소 (Map 순서 = 최근에 쓴 순서)
+function smallGet(url) {
+  const u = smallCache.get(url);
+  if (u !== undefined) { smallCache.delete(url); smallCache.set(url, u); } // 최근에 씀으로 표시
+  return u;
+}
+function smallPut(url, u) {
+  smallCache.delete(url);
+  smallCache.set(url, u);
+  while (smallCache.size > SMALL_MAX) {
+    const [k, v] = smallCache.entries().next().value;
+    smallCache.delete(k);
+    if (v.startsWith("blob:")) URL.revokeObjectURL(v);
+  }
+}
+// 그림을 다른 사이트에서 읽어 줄이는 것(CORS)을 허용하지 않는 곳(인스타그램 CDN 등): 몇 번 실패하면 그 곳은 바로 원본으로 띄웁니다.
+// (예전에는 그림마다 받기 실패 → 다른 방법 실패 → 원본, 이렇게 요청이 세 번씩 갔습니다)
+const noCorsHits = new Map();
+const hostOf = (u) => { try { return new URL(u).host; } catch (e) { return ""; } };
 const smallQueue = [];
 let smallActive = 0;
 function pumpSmall() {
   while (smallActive < 3 && smallQueue.length) {
     const { url, img } = smallQueue.shift();
-    if (smallCache.has(url)) { if (img.isConnected) img.src = smallCache.get(url); continue; }
+    const hit = smallGet(url);
+    if (hit !== undefined) { if (img.isConnected) img.src = hit; continue; }
+    if (!img.isConnected) continue; // 기다리는 사이 화면에서 사라진 카드
     smallActive++;
+    const host = hostOf(url);
     const done = () => { smallActive--; pumpSmall(); };
     const direct = () => { if (img.isConnected) { img.addEventListener("error", () => img.remove(), { once: true }); img.src = url; } done(); };
-    // 빠른 길: 받아서 줄이는 것(디코딩·인코딩)을 메인 화면 작업과 따로(비동기) 처리합니다. 안 되면 아래 기존 방식으로.
+    const corsFailed = () => { noCorsHits.set(host, (noCorsHits.get(host) || 0) + 1); direct(); };
+    if ((noCorsHits.get(host) || 0) >= 3) { direct(); continue; }
+    // 받아서 줄이는 것(디코딩·인코딩)을 메인 화면 작업과 따로(비동기) 처리합니다.
     if (typeof createImageBitmap === "function" && typeof OffscreenCanvas === "function") {
       fetch(url, { mode: "cors", referrerPolicy: "no-referrer", credentials: "omit" })
-        .then((r) => { if (!r.ok) throw new Error("http"); return r.blob(); })
+        .then((r) => { if (!r.ok) throw new Error("http"); return r.blob(); }, (e) => { e.cors = true; throw e; })
         .then((blob) => createImageBitmap(blob, { resizeWidth: 520, resizeQuality: "medium" }))
         .then((bm) => {
           const oc = new OffscreenCanvas(bm.width, bm.height);
@@ -52,38 +84,36 @@ function pumpSmall() {
           if (bm.close) bm.close();
           return oc.convertToBlob({ type: "image/jpeg", quality: 0.82 });
         })
-        .then((b2) => { const u = URL.createObjectURL(b2); smallCache.set(url, u); if (img.isConnected) img.src = u; done(); })
-        .catch(() => slow());
+        .then((b2) => { const u = URL.createObjectURL(b2); smallPut(url, u); if (img.isConnected) img.src = u; done(); })
+        .catch((e) => { if (e && e.cors) corsFailed(); else direct(); }); // 받기 자체가 막혔으면(CORS) 다른 방법도 똑같이 막히므로 바로 원본으로
       continue;
     }
-    slow();
-    continue;
-    function slow() {
+    // 오래된 브라우저: 그림을 불러와 캔버스로 줄입니다.
     const t = new Image();
     t.crossOrigin = "anonymous"; t.referrerPolicy = "no-referrer"; t.decoding = "async";
-    t.onerror = direct;
+    t.onerror = corsFailed;
     t.onload = () => {
       try {
         const w = Math.min(520, t.naturalWidth || 520);
-        if (!t.naturalWidth || t.naturalWidth <= 560) { smallCache.set(url, url); if (img.isConnected) img.src = url; done(); return; } // 이미 작으면 그대로
+        if (!t.naturalWidth || t.naturalWidth <= 560) { smallPut(url, url); if (img.isConnected) img.src = url; done(); return; } // 이미 작으면 그대로
         const c = document.createElement("canvas");
         c.width = w; c.height = Math.max(1, Math.round((t.naturalHeight * w) / t.naturalWidth));
         c.getContext("2d").drawImage(t, 0, 0, c.width, c.height);
         c.toBlob((b) => {
           if (!b) { direct(); return; }
           const u = URL.createObjectURL(b);
-          smallCache.set(url, u);
+          smallPut(url, u);
           if (img.isConnected) img.src = u;
           done();
         }, "image/jpeg", 0.82);
       } catch (e) { direct(); }
     };
     t.src = url;
-    }
   }
 }
 function loadSmall(url, img) {
-  if (smallCache.has(url)) { img.src = smallCache.get(url); return; }
+  const hit = smallGet(url);
+  if (hit !== undefined) { img.src = hit; return; }
   smallQueue.push({ url, img });
   pumpSmall();
 }
@@ -110,11 +140,11 @@ function embedFor(it) {
   const u = it.url || "";
   let m;
   if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "16 / 9" };
-  if (it.source === "x" && (m = /\/status\/(\d+)/.exec(u))) return { src: "https://platform.twitter.com/embed/Tweet.html?id=" + m[1], h: 640 };
+  if (it.source === "x" && (m = /\/status\/(\d+)/.exec(u))) return { src: "https://platform.twitter.com/embed/Tweet.html?id=" + m[1] + "&dnt=true&lang=ko&theme=" + (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"), h: 420, tweet: m[1] };
   if (it.source === "instagram" && (m = /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(u))) return { src: "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed", h: 700 };
   return null;
 }
-function openWindow(url) { call("openWindow", { url }).catch(() => window.open(url, "_blank", "noopener")); }
+function openWindow(url) { if (/^https:\/\//.test(url || "")) window.open(url, "_blank", "noopener"); }
 let viewerUrl = "";
 let viewCtx = [], viewIdx = -1;
 // 누른 카드가 속한 줄(또는 격자)의 카드들을 이전/다음 이동 순서로 씁니다.
@@ -136,7 +166,38 @@ function navView(d) {
   viewIdx = n;
   openItem(viewCtx[n]);
 }
-function closeViewer() { $("viewer").hidden = true; $("vBody").textContent = ""; }
+function closeViewer() { $("viewer").hidden = true; $("vBody").textContent = ""; setViewerKind(""); }
+// 보기 창 모양: X 글은 글 폭(최대 550px)에 맞춘 좁은 창, 그 밖은 기본
+function setViewerKind(k) { const v = document.querySelector("#viewer .viewer"); v.classList.toggle("vx", k === "x"); v.classList.toggle("vig", k === "instagram"); }
+// X 공식 위젯(widgets.js): 글 내용 높이에 꼭 맞게 띄웁니다. 못 불러오면 iframe으로 대신합니다.
+let twttrLoad = null;
+function loadTwttr() {
+  if (window.twttr && window.twttr.widgets && window.twttr.widgets.createTweet) return Promise.resolve(window.twttr);
+  if (!twttrLoad) {
+    twttrLoad = new Promise((resolve, reject) => {
+      const sc = document.createElement("script");
+      sc.src = "https://platform.twitter.com/widgets.js"; sc.async = true; sc.charset = "utf-8";
+      const t = setTimeout(() => reject(new Error("timeout")), 8000);
+      sc.onload = () => { clearTimeout(t); window.twttr && window.twttr.widgets && window.twttr.widgets.createTweet ? resolve(window.twttr) : reject(new Error("no twttr")); };
+      sc.onerror = () => { clearTimeout(t); reject(new Error("load")); };
+      document.head.appendChild(sc);
+    }).catch((e) => { twttrLoad = null; throw e; });
+  }
+  return twttrLoad;
+}
+// 임베드 iframe이 알려 주는 실제 높이로 맞춥니다(X: twttr.private.resize, 인스타: MEASURE). 고정 높이로 생기던 빈 여백을 없앱니다.
+window.addEventListener("message", (e) => {
+  if (e.origin !== "https://platform.twitter.com" && e.origin !== "https://www.instagram.com") return;
+  let d = e.data;
+  if (typeof d === "string") { try { d = JSON.parse(d); } catch (x) { return; } }
+  if (!d || typeof d !== "object") return;
+  let h = 0;
+  const tw = d["twttr.embed"];
+  if (tw && tw.method === "twttr.private.resize" && tw.params && tw.params[0]) h = Number(tw.params[0].height) || 0;
+  if (d.type === "MEASURE" && d.details) h = Number(d.details.height) || 0;
+  if (!h) return;
+  document.querySelectorAll("#vBody iframe").forEach((f) => { if (f.contentWindow === e.source) f.style.height = Math.ceil(h) + "px"; });
+});
 const postCache = new Map();
 function renderPost(p, it) {
   const wrap = el("div", { class: "post" });
@@ -164,22 +225,23 @@ function renderPost(p, it) {
 }
 async function openPost(it) {
   viewerUrl = it.url;
+  setViewerKind("");
   updateNav();
   $("vTitle").textContent = it.author || "유튜브 게시물";
   const body = $("vBody");
   body.textContent = "";
-  body.appendChild(el("p", { class: "hint", style: "padding:24px", text: "게시물을 불러오는 중… 크롬에서 탭이 잠깐 열렸다 닫힙니다." }));
+  body.appendChild(el("p", { class: "hint", style: "padding:24px", text: "서버에서 게시물을 읽어 오는 중… (10~30초 걸릴 수 있습니다)" }));
   $("viewer").hidden = false;
   try {
     let p = postCache.get(it.url);
-    if (!p) { p = await call("fetchPost", { url: it.url }, 45000); postCache.set(it.url, p); }
+    if (!p) { p = await call("fetchPost", { url: it.url }, LONG_WAIT); postCache.set(it.url, p); }
     if ($("viewer").hidden || viewerUrl !== it.url) return;
     body.textContent = "";
     body.appendChild(renderPost(p, it));
   } catch (e) {
     if (viewerUrl !== it.url) return;
     body.textContent = "";
-    body.appendChild(el("p", { class: "error", style: "padding:24px", text: "게시물을 불러오지 못했습니다. " + (e && e.message ? e.message : "") + " 아래 버튼으로 원본을 열어 주세요." }));
+    body.appendChild(el("p", { class: "error", style: "padding:24px", text: "게시물을 불러오지 못했습니다. " + (e && e.message ? e.message : "") + " 위의 '새 창으로 열기'로 원본을 열어 주세요." }));
   }
 }
 function openItem(it) {
@@ -189,13 +251,28 @@ function openItem(it) {
   if (!e) { openWindow(it.url); return; }
   viewerUrl = it.url;
   updateNav();
+  setViewerKind(it.source === "x" ? "x" : it.source === "instagram" ? "instagram" : "");
   $("vTitle").textContent = it.title || it.author || "";
-  const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
-  if (e.ratio) f.style.aspectRatio = e.ratio; else f.style.height = e.h + "px";
   const body = $("vBody");
   body.textContent = "";
-  body.appendChild(f);
   $("viewer").hidden = false;
+  const frame = () => {
+    const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
+    if (e.ratio) f.style.aspectRatio = e.ratio; else f.style.height = e.h + "px";
+    return f;
+  };
+  if (it.source === "x" && e.tweet) {
+    const wrap = el("div", { class: "xwrap" }, [el("p", { class: "hint", text: "글을 불러오는 중…" })]);
+    body.appendChild(wrap);
+    const url = it.url;
+    const fallback = () => { if (viewerUrl !== url || !wrap.isConnected) return; wrap.textContent = ""; wrap.appendChild(frame()); };
+    loadTwttr()
+      .then((t) => t.widgets.createTweet(e.tweet, wrap, { theme: document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light", align: "center", dnt: true, conversation: "none", lang: "ko" }))
+      .then((node) => { if (!wrap.isConnected) return; if (!node) fallback(); else { const h = wrap.querySelector(".hint"); if (h) h.remove(); } })
+      .catch(fallback);
+    return;
+  }
+  body.appendChild(frame());
 }
 $("vClose").addEventListener("click", closeViewer);
 $("vPrev").addEventListener("click", () => navView(-1));
@@ -265,7 +342,7 @@ function card(it) {
   kids.push(el("div", { class: "body" }, [el("span", { class: "badge", text: SRC_LABELS[it.source] || it.source }), el("div", { class: "title", text: it.title }), el("div", { class: "meta", text: meta })]));
   const safe = /^https:\/\//.test(it.url || "") ? it.url : "#";
   // href를 달지 않아 브라우저가 마우스를 올렸을 때 왼쪽 아래에 주소 띠를 띄우지 않습니다. 열기는 클릭 처리로 대신합니다.
-  const a = el("a", { class: "card", role: "link", tabindex: "0" }, kids);
+  const a = el("a", { class: "card", role: "link", tabindex: "0", "data-plat": tabOf(it.source), "data-src": it.source }, kids);
   a._item = it;
   if (seen.has(it.id)) a.classList.add("seen");
   const outside = () => { if (safe !== "#") window.open(safe, "_blank", "noopener,noreferrer"); };
@@ -298,7 +375,7 @@ function renderTabs() {
   const vis = items.filter(inPeriod);
   const counts = { all: vis.length };
   vis.forEach((it) => { const k = tabOf(it.source); counts[k] = (counts[k] || 0) + 1; });
-  counts.people = new Set(tracked.filter((t) => t.kind !== "feed" && t.group).map((t) => t.group)).size;
+  counts.people = new Set(tracked.filter((t) => t.kind !== "feed").map(personKey)).size;
   const nav = $("tabs");
   nav.textContent = "";
   Object.keys(LABELS).forEach((k) => {
@@ -327,20 +404,31 @@ function enableDrag(box) {
     }
     down = true; moved = false; startX = e.clientX; startLeft = box.scrollLeft;
   });
-  window.addEventListener("pointermove", (e) => {
+  // 끄는 동안의 이동·놓기는 이 줄에서만 받습니다. 줄 밖으로 끌고 나가도 놓치지 않게, 실제로 끌기 시작하면 포인터를 이 줄에 붙잡습니다.
+  // (예전에는 window에 리스너를 붙였는데, 화면을 다시 그릴 때마다 줄 수만큼 쌓이고 지워진 옛 줄을 메모리에 붙잡고 있었습니다.)
+  box.addEventListener("pointermove", (e) => {
     if (!down) return;
+    if (!e.buttons) { down = false; box.classList.remove("dragging"); return; } // 끌기 전에 줄 밖에서 버튼을 놓은 경우
     const dx = e.clientX - startX;
-    if (!moved && Math.abs(dx) > 5) { moved = true; box.classList.add("dragging"); }
+    if (!moved && Math.abs(dx) > 5) {
+      moved = true; box.classList.add("dragging");
+      try { box.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
+    }
     if (moved) box.scrollLeft = startLeft - dx;
   });
-  window.addEventListener("pointerup", () => { down = false; box.classList.remove("dragging"); });
+  const endDrag = () => { down = false; box.classList.remove("dragging"); };
+  box.addEventListener("pointerup", endDrag);
+  box.addEventListener("pointercancel", endDrag);
+  box.addEventListener("lostpointercapture", endDrag);
   box.addEventListener("click", (e) => { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
   box.addEventListener("dragstart", (e) => e.preventDefault());
 }
+// 사람별 화면에서 한 줄의 이름: 묶음 이름, 묶음이 없으면 "매체 @계정"
+const personKey = (t) => t.group || PLATFORM[t.platform] + " @" + (t.handle || t.channelId || t.resolveUrl || "");
 /* 사람별 프로필 사진: 계정별 사진은 이 브라우저에 작게 저장하고, 이름 옆에 쓸 사진(유튜브·X·인스타)은 사람마다 고릅니다. */
 let picMap = {}, picPick = {};
-try { picMap = JSON.parse(localStorage.getItem("snsPics") || "{}") || {}; picPick = JSON.parse(localStorage.getItem("snsPicPick") || "{}") || {}; } catch (e) {}
-function savePics() { try { localStorage.setItem("snsPics", JSON.stringify(picMap)); localStorage.setItem("snsPicPick", JSON.stringify(picPick)); } catch (e) {} }
+try { picMap = JSON.parse(lsGet("snsPics", "{}")) || {}; picPick = JSON.parse(lsGet("snsPicPick", "{}")) || {}; } catch (e) {}
+function savePics() { lsSet("snsPics", JSON.stringify(picMap)); lsSet("snsPicPick", JSON.stringify(picPick)); }
 // 사진을 96px 정사각형으로 줄여 저장합니다(계정당 약 3~6KB).
 function storePic(id, src) {
   return new Promise((resolve) => {
@@ -371,8 +459,9 @@ function pickPicFile(id) {
 }
 let acctFocus = ""; // 매체 탭에서 고른 계정(없으면 전체)
 let favs = new Set();
-try { favs = new Set(JSON.parse(localStorage.getItem("snsFavs") || "[]")); } catch (e) {}
-function toggleFav(name) { if (favs.has(name)) favs.delete(name); else favs.add(name); try { localStorage.setItem("snsFavs", JSON.stringify([...favs])); } catch (e) {} renderList(); }
+try { favs = new Set(JSON.parse(lsGet("snsFavs", "[]"))); } catch (e) {}
+const saveFavs = () => lsSet("snsFavs", JSON.stringify([...favs]));
+function toggleFav(name) { if (favs.has(name)) favs.delete(name); else favs.add(name); saveFavs(); renderList(); }
 function favStar(name) {
   const on = favs.has(name);
   const b = el("button", { type: "button", class: "pstar" + (on ? " on" : ""), text: on ? "★" : "☆", title: on ? "즐겨찾기 해제" : "즐겨찾기에 추가", "aria-pressed": String(on), "aria-label": name + " 즐겨찾기" });
@@ -425,7 +514,7 @@ function renderList() {
     // 통합 검색: 제목·본문·작성자·매체 이름·묶음 이름·계정을 한 번에 찾습니다(공백으로 나눈 단어가 모두 들어 있어야 함).
     const words = q.split(/\s+/).filter(Boolean);
     const hay = (it) => {
-      const t = it.via ? tracked.find((x) => x.id === it.via) : null;
+      const t = it.via ? trackedOf(it.via) : null;
       return [it.title, it.text, it.preview, it.author, SRC_LABELS[it.source], PLATFORM[tabOf(it.source)], t && t.group, t && t.handle].filter(Boolean).join(" ").toLowerCase();
     };
     list = list.filter((it) => searchPlats.includes(tabOf(it.source)) && (() => { const h = hay(it); return words.every((w) => h.includes(w)); })());
@@ -433,13 +522,17 @@ function renderList() {
   const bySort = true; // 항상 게시 시각 순
   list.sort((a, b) => (bySort ? publishedMs(b) - publishedMs(a) : b.collectedAt - a.collectedAt));
   const g = $("grid");
+  g.querySelectorAll("img[data-src]").forEach((img) => imgObserver.unobserve(img)); // 지울 카드의 그림은 더 지켜보지 않습니다
   g.textContent = "";
   g.className = "";
+  let ytBar = null;
   { const sp = $("sidePeople"); sp.textContent = ""; sp.hidden = true; }
   // 매체 탭(유튜브·X·인스타그램): 오른쪽 아래에 그 매체의 계정 목록(묶음 아님)을 보여주고, 누르면 그 계정 글만 봅니다.
   if (activeTab !== "people" && activeTab !== "all") {
     const accs = tracked.filter((t) => t.platform === activeTab);
-    const cnt = (id) => list.filter((it) => it.via === id).length;
+    const counts = new Map();
+    list.forEach((it) => counts.set(it.via, (counts.get(it.via) || 0) + 1)); // 계정마다 전체 글을 다시 세지 않고 한 번에
+    const cnt = (id) => counts.get(id) || 0;
     if (acctFocus && !accs.some((t) => t.id === acctFocus)) acctFocus = "";
     if (document.documentElement.getAttribute("data-design") === "bento" && accs.length) {
       const bar = el("div", { class: "pbar" });
@@ -456,23 +549,35 @@ function renderList() {
       const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb);
     }
     if (acctFocus) list = list.filter((it) => it.via === acctFocus);
+    // 유튜브 탭: 영상만 / 둘 다 / 게시물만
+    if (activeTab === "youtube") {
+      const bar = el("div", { class: "segbar", role: "group", "aria-label": "유튜브 보기 방식" });
+      [["video", "영상만"], ["both", "영상+게시물"], ["post", "게시물만"]].forEach(([m, label]) => {
+        const b = el("button", { type: "button", class: ytMode === m ? "active" : "", text: label, "aria-pressed": String(ytMode === m) });
+        b.addEventListener("click", () => { ytMode = m; try { localStorage.setItem("snsYtMode", m); } catch (e) {} renderList(); });
+        bar.appendChild(b);
+      });
+      ytBar = bar;
+      if (ytMode !== "both") list = list.filter((it) => it.source === "youtube-" + ytMode);
+    }
   }
   if (activeTab === "people") {
     // 사람별: 같은 묶음 이름을 가진 유튜브·X·인스타 계정의 글을 한 사람 기준으로 모아 봅니다.
+    // 묶음이 없는 계정은 그 계정 하나를 한 사람처럼 보여 줍니다(묶지 않아도 홈에서 바로 보이게).
     const people = new Map();
-    tracked.filter((t) => t.kind !== "feed" && t.group).forEach((t) => {
-      if (!people.has(t.group)) people.set(t.group, { name: t.group, ids: new Set(), plats: new Set() });
-      const p = people.get(t.group);
+    tracked.filter((t) => t.kind !== "feed").forEach((t) => {
+      const name = personKey(t);
+      if (!people.has(name)) people.set(name, { name, ids: new Set(), plats: new Set() });
+      const p = people.get(name);
       p.ids.add(t.id); p.plats.add(t.platform);
     });
     if (!people.size) {
-      g.appendChild(el("p", { class: "hint", text: "아직 묶음이 없습니다. 왼쪽 '추적 계정'에서 같은 사람의 유튜브·X·인스타 계정에 같은 묶음 이름을 지정하면, 여기서 그 사람 기준으로 모아 볼 수 있습니다." }));
+      g.appendChild(el("p", { class: "hint", text: "추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요. 같은 사람의 유튜브·X·인스타 계정에 같은 묶음 이름을 주면 여기서 한 사람으로 모아 봅니다." }));
       $("empty").hidden = true;
       // 묶음이 하나도 없을 때도 오른쪽 사람 목록 카드를 같은 자리에 비어 있는 채로 보여줍니다
-      if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "모든 묶음" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
+      if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "전체" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
       return;
     }
-    const platOf = (it) => (it.source.startsWith("youtube") ? "youtube" : it.source);
     const rows = [...people.values()].map((p) => ({ ...p, list: list.filter((it) => p.ids.has(it.via)).sort((a, b) => publishedMs(b) - publishedMs(a)) }));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
     // 검색 중에는 어느 사람에도 묶이지 않은 계정(묶음 없음·피드 등)의 결과도 '그 밖의 결과'로 함께 보여줍니다.
@@ -481,21 +586,21 @@ function renderList() {
     if (q) {
       // 검색 중에는 검색에 걸린 글이 있는 사람만 보여줍니다(빈 사람 줄은 숨김).
       rows.splice(0, rows.length, ...rows.filter((r) => r.list.length));
-      if (!rows.length && !others.length) { g.appendChild(el("p", { class: "hint", text: "검색 결과가 없습니다." })); $("empty").hidden = true; return; }
+      if (!rows.length && !others.length) { g.appendChild(el("p", { class: "hint", text: "“" + q + "”에 맞는 글이 없습니다. 검색창을 비우면 모든 글이 보입니다. (계정을 찾으려면 Enter)" })); $("empty").hidden = true; return; }
     }
     if (page === "fav") {
       rows.splice(0, rows.length, ...rows.filter((r) => favs.has(r.name)));
       if (!rows.length) {
         g.appendChild(el("p", { class: "hint", text: "즐겨찾기한 사람이 없습니다. 홈의 사람 이름 옆 ☆를 눌러 추가하세요." })); $("empty").hidden = true;
         // 오른쪽 사람 목록 카드도 같은 자리에 비어 있는 채로 보여줍니다(즐겨찾기가 생기면 여기에 뜸)
-        if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "모든 묶음" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
+        if (document.documentElement.getAttribute("data-design") === "bento") { const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "전체" }), el("span", { class: "n", text: "0" })])); const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb); }
         return;
       }
     }
     if (personFocus && !rows.some((r) => r.name === personFocus)) personFocus = "";
     const bar = el("div", { class: "pbar" });
     const chip = (label, n, active, fn) => { const b = el("button", { type: "button", class: active ? "active" : "" }, [el("span", { text: label }), el("span", { class: "n", text: String(n) })]); b.addEventListener("click", fn); bar.appendChild(b); };
-    chip("모든 묶음", rows.reduce((s, r) => s + r.list.length, 0), !personFocus, () => { personFocus = ""; personPlat = ""; renderList(); });
+    chip("전체", rows.reduce((s, r) => s + r.list.length, 0), !personFocus, () => { personFocus = ""; personPlat = ""; renderList(); });
     rows.forEach((r) => chip(r.name, r.list.length, personFocus === r.name, () => { personFocus = r.name; personPlat = ""; renderList(); }));
     // 벤토 디자인: 사람 목록은 오른쪽 탭 카드 아래 빈 공간에 세로로 둡니다.
     if (document.documentElement.getAttribute("data-design") === "bento") { const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(bar); } else g.appendChild(bar);
@@ -566,9 +671,9 @@ function renderList() {
     $("empty").hidden = true;
     return;
   }
-  if (activeTab !== "people" && !q ) {
+  if (!q) {
     // 묶음·계정별: 묶음 이름이 같은 계정은 한 줄로, 묶음 없는 계정은 계정마다 한 줄로 보여줍니다.
-    g.className = "sections";
+    g.classList.add("sections");
     const groups = new Map();
     tracked.filter((t) => t.kind !== "feed").forEach((t) => {
       const key = t.group ? "g:" + t.group : "a:" + t.id;
@@ -588,6 +693,7 @@ function renderList() {
     if (focused) {
       // 한 묶음의 글을 전부 펼쳐서 보여줍니다.
       g.className = "cards";
+      if (ytBar) g.appendChild(el("div", { style: "grid-column: 1 / -1" }, [ytBar]));
       const back = el("button", { type: "button", text: "← 묶음 목록으로" });
       back.addEventListener("click", () => { groupFocus = ""; renderList(); });
       g.appendChild(el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: focused.name }), el("span", { class: "n", text: focused.list.length + "건" })]));
@@ -595,6 +701,7 @@ function renderList() {
       $("empty").hidden = list.length > 0;
       return;
     }
+    if (ytBar) g.appendChild(el("div", { class: "segwrap" }, [ytBar]));
     // 특정 매체 탭에서는 그 매체에 글이 없는 계정·묶음 줄은 숨깁니다.
     (activeTab === "all" ? rows : rows.filter((r) => r.list.length)).forEach((r) => {
       const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: r.name }), el("span", { class: "n", text: r.list.length + "건" + (r.plats.length ? " · " + platOrder([...new Set(r.plats)].map((n) => Object.keys(PLATFORM).find((k) => PLATFORM[k] === n) || n)).map((k) => PLATFORM[k] || k).join("·") : "") })]);
@@ -608,42 +715,23 @@ function renderList() {
       else grid.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
       g.appendChild(el("section", { class: "sec" }, [head, grid]));
     });
-  } else if ((activeTab === "all" || activeTab === "youtube") && !q) {
-    // 한눈에 보기: 출처별 구역으로 나눠 최신 글을 한 화면에 모아 보여줍니다.
-    g.className = "sections media-grid";
-    // 유튜브 탭에서는 영상과 게시물이 각각 따로 구역으로 나뉘어 보입니다.
-    const lim = activeTab === "all" ? 30 : 80;
-    if (activeTab === "youtube") {
-      // 영상만 / 둘 다(각각 한 줄) / 게시물만
-      const bar = el("div", { class: "segbar full", role: "group", "aria-label": "유튜브 보기 방식" });
-      [["video", "영상만 보기"], ["both", "둘 다 보기"], ["post", "게시물만 보기"]].forEach(([m, label]) => {
-        const b = el("button", { type: "button", class: ytMode === m ? "active" : "", text: label, "aria-pressed": String(ytMode === m) });
-        b.addEventListener("click", () => { ytMode = m; try { localStorage.setItem("snsYtMode", m); } catch (e) {} renderList(); });
-        bar.appendChild(b);
-      });
-      g.appendChild(bar);
-    }
-    Object.keys(SRC_LABELS).filter((k) => activeTab === "all" || (tabOf(k) === activeTab && (ytMode === "both" || k === "youtube-" + ytMode))).forEach((k) => {
-      const part = list.filter((it) => it.source === k);
-      if (!part.length) return;
-      const head = el("div", { class: "sec-head" }, [srcIcon(k), el("span", { class: "slabel", text: SRC_LABELS[k] }), el("span", { class: "n", text: part.length + "건" })]);
-      if (part.length > lim && activeTab === "all") {
-        const more = el("button", { type: "button", text: "전체 보기" });
-        more.addEventListener("click", () => { activeTab = tabOf(k); renderList(); });
-        head.appendChild(more);
-      }
-      const grid = el("div", { class: "row-cards" });
-      fillRow(grid, part.slice(0, lim));
-      enableDrag(grid);
-      const full = activeTab === "youtube" || !list.some((it) => it.source === PARTNER[k]);
-      g.appendChild(el("section", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(k) }, [head, grid]));
-    });
   } else {
     g.className = "cards";
+    if (ytBar) g.appendChild(el("div", { style: "grid-column: 1 / -1" }, [ytBar]));
     appendProgressive(g, list.slice(0, 300));
   }
+  const emptyMsg = q ? "“" + q + "”에 맞는 글이 없습니다. 검색창을 비우면 모든 글이 보입니다."
+    : ytBar && ytMode !== "both" ? "이 기간에 모은 유튜브 " + (ytMode === "video" ? "영상" : "게시물") + "이 없습니다."
+    : connected ? (tracked.length ? "이 기간에 모은 글이 없습니다. '지금 최신화'를 눌러 보세요." : "추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요.")
+    : "아직 보여줄 글이 없습니다. 로그인하고 계정을 추가하면 설정한 기간(최대 60일)의 글이 여기에 모입니다.";
+  if (ytBar && !list.length) {
+    // 영상/게시물 선택 막대가 가려지지 않게, 빈 안내는 글 영역 안(막대 아래)에 둡니다.
+    g.appendChild(el("p", { class: "hint", style: "grid-column: 1 / -1; padding: 24px 4px", text: emptyMsg }));
+    $("empty").hidden = true;
+    return;
+  }
   $("empty").hidden = list.length > 0;
-  $("empty").textContent = connected ? "이 기간에 모은 글이 없습니다. 계정을 추가하고 '지금 최신화'를 눌러 보세요." : "아직 보여줄 글이 없습니다. 로그인하고 계정을 추가하면 설정한 기간(최대 60일)의 글이 여기에 모입니다.";
+  $("empty").textContent = emptyMsg;
 }
 function renderTracked() {
   const box = $("tracked");
@@ -674,8 +762,15 @@ function renderTracked() {
   if (document.activeElement !== $("dDays")) { const cur = selIds.length === 1 ? tracked.find((t) => t.id === selIds[0]) : null; $("dDays").value = String((cur && cur.days) || 0); }
   periodDays = winDays;
   $("dDays").options[0].textContent = "기본(" + winDays + "일)";
-  $("checkNow").classList.toggle("busy", !!checkStatus.running || (typeof refreshing !== "undefined" && refreshing));
-  $("checkNow").disabled = !!checkStatus.running || tracked.length === 0 || (typeof refreshing !== "undefined" && refreshing);
+  paintCheckNow();
+}
+// 새로고침(지금 최신화) 버튼: 수집 중이면 돌고(busy), 누르면 '멈추기'로 씁니다.
+function paintCheckNow() {
+  const b = $("checkNow"), run = !!(checkStatus && checkStatus.running), wait = typeof refreshing !== "undefined" && refreshing;
+  b.classList.toggle("busy", run || wait);
+  b.disabled = wait || (!run && tracked.length === 0) || !connected;
+  const t = run ? "수집 중 · 눌러서 멈추기" : tracked.length ? "지금 최신화" : "지금 최신화 (먼저 추적할 계정을 추가하세요)";
+  b.title = t; b.setAttribute("aria-label", t);
 }
 function renderSettings() {
 }
@@ -683,7 +778,7 @@ function renderAll() {
   renderSettings(); renderTracked(); renderList();
   updateConnText(); renderWork();
 }
-function showErr(e) { const p = $("addError"); p.textContent = e.message; p.hidden = false; }
+function showErr(e) { if (e && e.authLost) return; toast((e && e.message) || String(e), "error"); }
 
 
 /* 오른쪽 아래 "현재 작업" 카드: 수집 상태·진행·마지막/다음 확인·글/계정 수·매체 로그인 상태를 한눈에 보여줍니다. */
@@ -710,8 +805,8 @@ function renderWork() {
   const rows = [];
   if (connected) {
     if (st.lastRun) rows.push(["마지막 확인", relative(st.lastRun)]);
-    if (!st.running && st.lastRun) {
-      const left = Math.max(0, Math.round((st.lastRun + 3600000 - Date.now()) / 60000));
+    if (nextAuto) {
+      const left = Math.round((nextAuto - Date.now()) / 60000);
       rows.push(["다음 자동 확인", left <= 0 ? "곧" : left + "분 후"]);
     }
     rows.push(["수집한 글", items.length + "건"]);
@@ -727,28 +822,42 @@ function renderWork() {
 function placeWork() { const w = $("workCard"); if (w) w.style.top = ""; }
 setInterval(() => { try { renderWork(); } catch (e) {} }, 15000);
 
-/* 프로필 사진 최신화: '최신화'(수집)가 끝난 뒤, 사진이 없는 계정(5분 이상 지난 시도)이나 3일 넘은 계정부터 한 번에 최대 6개씩 사진을 다시 가져옵니다. */
+/* 프로필 사진: 서버에 저장된 계정 사진(검색할 때 받아 둔 것)을 받아 이 브라우저에 작게 저장합니다.
+   서버에도 없는 유튜브 계정만, 하루에 한 번까지 유튜브에서 다시 찾아 봅니다.
+   (X·인스타는 서버 테스트 계정으로 반복 검색하면 계정이 잠길 수 있어 자동으로 찾지 않습니다. 필요하면 '사진 올리기'로 직접 올립니다.) */
 let picAt = {}, picBusy = false;
-try { picAt = JSON.parse(localStorage.getItem("snsPicAt") || "{}") || {}; } catch (e) {}
-const savePicAt = () => { try { localStorage.setItem("snsPicAt", JSON.stringify(picAt)); } catch (e) {} };
-async function refreshPics(max = 6) {
+const avAsked = new Set();
+try { picAt = JSON.parse(lsGet("snsPicAt", "{}")) || {}; } catch (e) {}
+const savePicAt = () => lsSet("snsPicAt", JSON.stringify(picAt));
+async function fetchAvatars() {
+  if (!connected) return false;
+  const ids = tracked.map((t) => t.id).filter((id) => !picMap[id] && !avAsked.has(id));
+  if (!ids.length) return false;
+  ids.forEach((id) => avAsked.add(id));
+  let got = {};
+  try { got = (await call("avatars", { ids })) || {}; } catch (e) { ids.forEach((id) => avAsked.delete(id)); return false; }
+  let n = 0;
+  for (const [id, data] of Object.entries(got)) if (!picMap[id] && (await storePic(id, data))) n++;
+  if (n) renderList();
+  return n > 0;
+}
+async function refreshPics(max = 3) {
   if (picBusy || !connected) return;
   picBusy = true;
   try {
+    await fetchAvatars();
     const now = Date.now();
     const due = tracked
-      .filter((t) => t.kind !== "feed" && (t.handle || t.channelId))
-      .filter((t) => !picMap[t.id] ? now - (picAt[t.id] || 0) > 5 * 60000 : now - (picAt[t.id] || 0) > 3 * 86400000)
-      .sort((a, b) => (picAt[a.id] || 0) - (picAt[b.id] || 0))
+      .filter((t) => t.platform === "youtube" && (t.handle || t.channelId) && !picMap[t.id] && now - (picAt[t.id] || 0) > 86400000)
       .slice(0, max);
     for (const t of due) {
       if (checkStatus && checkStatus.running) break; // 수집이 다시 시작되면 멈춥니다
-      picAt[t.id] = Date.now(); savePicAt(); // 실패해도 당분간 다시 시도하지 않게 먼저 기록
+      picAt[t.id] = Date.now(); savePicAt(); // 실패해도 하루 동안은 다시 시도하지 않게 먼저 기록
       let res = [];
-      try { res = await call("searchAccount", { platform: t.platform, q: t.handle || t.channelId }); } catch (e) { continue; }
-      const h = String(t.handle || "").replace(/^@/, "").toLowerCase();
-      const hit = (res || []).find((r) => (h && String(r.handle || "").replace(/^@/, "").toLowerCase() === h) || (t.channelId && r.channelId === t.channelId));
-      if (hit && hit.avatar && (await storePic(t.id, hit.avatar))) { renderList(); }
+      try { res = await call("searchAccount", { platform: t.platform, q: t.handle ? "@" + t.handle : t.channelId }, LONG_WAIT); } catch (e) { continue; }
+      const h = String(t.handle || "").toLowerCase();
+      const hit = (res || []).find((r) => (h && String(r.handle || "").toLowerCase() === h) || (t.channelId && r.channelId === t.channelId));
+      if (hit && hit.avatar && (await storePic(t.id, hit.avatar))) renderList();
     }
   } finally { picBusy = false; }
 }

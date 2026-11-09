@@ -1,6 +1,7 @@
 """테스트 계정 로그인 도구 (서버를 끈 상태에서 실행하세요)
 
-수집기가 쓰는 크롬 프로필(server/profiles/<매체>)을 '보통 크롬 창'으로 열어 줍니다.
+수집기가 쓰는 크롬 프로필(server/profiles/<컴퓨터 이름>/<매체>)을 '보통 크롬 창'으로 열어 줍니다.
+로그인 정보는 컴퓨터마다 따로 저장되므로, 처음 쓰는 컴퓨터에서는 한 번씩 로그인해야 합니다.
 열린 창에서 테스트 계정으로 직접 로그인한 뒤 창을 닫으면, 로그인 정보가 프로필에 남아 수집기가 그대로 씁니다.
 
 자동화(Playwright)가 아닌 보통 크롬으로 여는 이유: 구글 등은 자동화된 브라우저에서의 로그인을 막기 때문입니다.
@@ -13,7 +14,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROFILES = Path(__file__).resolve().parent / "profiles"
+from machine import machine_name
+
+PROFILES = Path(__file__).resolve().parent / "profiles" / machine_name()
 LOGIN = {
     "youtube": "https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/",
     "x": "https://x.com/i/flow/login",
@@ -43,7 +46,7 @@ def main():
     if not chrome:
         print("크롬을 찾지 못했습니다. 서버 PC에 구글 크롬을 설치하세요.")
         return 1
-    print("테스트 계정 로그인 창을 엽니다:", ", ".join(plats))
+    print(f"[{machine_name()}] 테스트 계정 로그인 창을 엽니다:", ", ".join(plats))
     print("※ 서버(start.bat)가 켜져 있으면 먼저 끄세요. 같은 프로필을 동시에 쓸 수 없습니다.\n")
     procs = []
     for p in plats:

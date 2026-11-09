@@ -4,9 +4,10 @@ cd /d "%~dp0"
 rem ---- settings ----
 set "NGROK_URL=https://startle-convent-garland.ngrok-free.dev"
 set "PORT=8080"
+set "VENV=.venv-%COMPUTERNAME%"
 
-if not exist ".venv\Scripts\python.exe" (
-  echo Run setup.bat first.
+if not exist "%VENV%\Scripts\python.exe" (
+  echo This computer [%COMPUTERNAME%] is not set up yet. Run setup.bat first.
   pause
   exit /b 1
 )
@@ -21,5 +22,5 @@ if errorlevel 1 (
 )
 
 rem ---- server in this window. Ctrl+C to stop ----
-".venv\Scripts\python.exe" main.py
+"%VENV%\Scripts\python.exe" main.py
 pause

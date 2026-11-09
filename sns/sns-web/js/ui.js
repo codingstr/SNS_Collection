@@ -173,7 +173,9 @@ function addResumeButtons() {
     }
   } else if (fab) fab.remove();
 }
-new MutationObserver(() => addResumeButtons()).observe($("grid"), { childList: true, subtree: true });
+// 이어보기 버튼을 쓸 때만 글 영역 변화를 지켜봅니다(숨겨 둔 동안에는 카드가 바뀔 때마다 헛일을 하지 않게).
+if (SHOW_RESUME) new MutationObserver(() => addResumeButtons()).observe($("grid"), { childList: true, subtree: true });
+else addResumeButtons();
 
 renderAll();
 
@@ -263,31 +265,50 @@ renderAll();
     box.scrollTop = frac * (box.scrollHeight - box.clientHeight);
   });
   const close = () => { box.hidden = true; };
-  const refreshGo = () => { go.hidden = false; };
-  setInterval(refreshGo, 1000); refreshGo();
+  go.hidden = false; // (예전에는 1초마다 다시 켰지만 숨기는 곳이 없어 한 번이면 됩니다)
+  const section = (p) => {
+    const sec = el("div", { class: "sr-sec" });
+    sec.appendChild(el("div", { class: "sr-plat" }, [el("span", { class: "si" }, [pIcon(p)]), el("span", { text: PLATFORM[p] })]));
+    const body = el("div", { class: "sr-body" });
+    sec.appendChild(body); box.appendChild(sec);
+    return body;
+  };
   const run = async () => {
     const name = q.value.trim();
-    if (!name || busy) return;
-    if (!connected) { box.hidden = false; box.textContent = ""; box.appendChild(el("p", { class: "hint", text: "로그인해야 계정을 찾을 수 있습니다." })); return; }
-    busy = true; go.disabled = true; searchActive++; // 검색은 수집보다 우선(수집 중에도 바로 실행)
+    if (!name) return;
+    if (busy) { toast("계정을 찾는 중입니다. 끝난 뒤 다시 검색하세요."); return; }
     box.hidden = false; box.textContent = "";
-    const head = el("div", { class: "sr-head" }, [el("b", { text: "“" + name + "” 계정 검색" })]);
+    if (!connected) { box.appendChild(el("p", { class: "hint", text: "로그인해야 계정을 찾을 수 있습니다." })); return; }
+    const head = el("div", { class: "sr-head" }, [el("b", { text: "“" + name + "” 계정 찾기" })]);
     const x = el("button", { type: "button", class: "x", text: "×", "aria-label": "닫기" });
     x.addEventListener("click", close); head.appendChild(x);
     box.appendChild(head);
-    for (const p of ["instagram", "x", "youtube"].filter((p) => searchPlats.includes(p))) {
-      const sec = el("div", { class: "sr-sec" });
-      sec.appendChild(el("div", { class: "sr-plat" }, [el("span", { class: "si" }, [pIcon(p)]), el("span", { text: PLATFORM[p] })]));
-      const body = el("div", { class: "sr-body" });
-      body.appendChild(el("p", { class: "hint", text: "검색 중… 크롬에서 탭이 잠깐 열렸다 닫힙니다." }));
-      sec.appendChild(body); box.appendChild(sec);
-      try {
-        const list = await call("searchAccount", { platform: p, q: name }, 40000);
-        body.textContent = "";
-        fillResults(body, p, list);
-      } catch (e) { body.textContent = ""; body.appendChild(el("p", { class: "hint", text: "검색하지 못했습니다: " + ((e && e.message) || "오류") })); }
+    // 프로필 주소: 검색하지 않고 그 매체에 바로 추가합니다.
+    if (/^https?:\/\//i.test(name) || SITE_START.test(name)) {
+      const r = parseAccount("youtube", name);
+      if (r.error) { box.appendChild(el("p", { class: "hint", text: r.error })); return; }
+      fillResults(section(r.account.platform), r.account.platform, [{ acc: r.account, desc: "프로필 주소로 바로 추가" }]);
+      return;
     }
-    busy = false; go.disabled = false; searchActive = Math.max(0, searchActive - 1);
+    busy = true; go.disabled = true;
+    try {
+      for (const p of ["instagram", "x", "youtube"].filter((p) => searchPlats.includes(p))) {
+        const body = section(p);
+        // @아이디: 검색 결과와 함께 '바로 추가' 항목을 맨 위에 둡니다(검색이 막힌 매체도 추가할 수 있게).
+        const direct = name.startsWith("@") ? parseAccount(p, name) : null;
+        if (direct && direct.account) fillResults(body, p, [{ acc: direct.account, desc: "검색 없이 바로 추가" }]);
+        const res = el("div");
+        res.appendChild(el("p", { class: "hint", text: "서버에서 " + PLATFORM[p] + " 계정을 찾는 중… (10~30초)" }));
+        body.appendChild(res);
+        try {
+          let list = await call("searchAccount", { platform: p, q: name }, LONG_WAIT);
+          if (direct && direct.account) list = list.filter((r) => p + ":" + (r.handle || r.channelId).toLowerCase() !== direct.account.id);
+          res.textContent = "";
+          if (direct && direct.account && !list.length) continue;
+          fillResults(res, p, list);
+        } catch (e) { res.textContent = ""; res.appendChild(el("p", { class: "hint", text: "검색하지 못했습니다: " + ((e && e.message) || "오류") })); }
+      }
+    } finally { busy = false; go.disabled = false; }
   };
   go.addEventListener("click", run);
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
@@ -429,15 +450,15 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   const STEPS = [
     { t: "SNS 모아보기에 오신 걸 환영해요", d: "인스타그램·X·유튜브의 새 글을 한곳에 모아 봅니다. 화면을 하나씩 짚어 드릴게요." },
     { sel: [".sbox"], t: "통합 검색창", d: "글 제목·내용·작성자·매체·묶음 이름으로 모아 둔 글을 바로 검색합니다. 왼쪽 동그라미는 '계정 찾기'에서 검색할 매체(인스타·X·유튜브)를 고르는 버튼이에요." },
-    { sel: ["#sGo"], t: "계정 찾기", d: "검색창에 이름을 적고 누르면(Enter도 가능) 선택한 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
+    { sel: ["#sGo"], t: "계정 찾기", d: "검색창에 이름·@아이디·프로필 주소를 적고 누르면(Enter도 가능) 선택한 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
     { sel: ["#empty:not([hidden])", "#grid:not([hidden])"], t: "글이 모이는 곳", d: "추적 중인 계정의 새 글이 여기에 모입니다. 카드를 누르면 바로 열어 볼 수 있어요." },
-    { sel: ["#sidePeople"], t: "묶음 목록", d: "같은 사람의 인스타·X·유튜브 계정을 한 묶음으로 만들어 두면, 묶음을 골라 그 사람의 글만 볼 수 있어요." },
+    { sel: ["#sidePeople"], t: "사람 목록", d: "같은 사람의 인스타·X·유튜브 계정을 한 묶음으로 만들어 두면 한 사람으로 모아 봅니다. 목록에서 골라 그 사람의 글만 볼 수 있어요." },
     { sel: ["#tabs"], t: "매체별 보기", d: "인스타·X·유튜브 버튼으로 매체별 글만 모아 볼 수 있습니다. 숫자는 글 개수예요." },
-    { sel: ["#workCard", "header .toolbar"], t: "로그인 확인과 최신화", d: "위쪽 동그라미 버튼은 매체별 로그인 확인, '지금 최신화'는 새 글 즉시 가져오기예요. 로그인 안 된 매체는 건너뜁니다." },
+    { sel: ["#workCard", "header .toolbar"], t: "수집 켜기·최신화", d: "매체 아이콘을 누르면 그 매체 수집을 켜고 끕니다(회색이면 서버 테스트 계정 로그인이 필요해 관리자에게 알려 주세요). 동그란 버튼은 '지금 최신화'이고, 수집 중에 두 번 누르면 멈춥니다." },
     { sel: ["#brand"], t: "로고", d: "어느 화면에서든 로고를 누르면 처음 홈 화면(전체 글)으로 돌아옵니다." },
     { sel: ["#navHome"], t: "홈", d: "추적 중인 모든 계정의 글을 한꺼번에 보는 기본 화면이에요." },
     { sel: ["#navFav"], t: "즐겨찾기", d: "☆를 눌러 둔 사람의 글만 모아서 봅니다." },
-    { sel: ["#navManage"], t: "추적 계정 관리", d: "추적할 계정을 추가·삭제하고 묶음을 정리하는 화면이에요. 로그인하면 나타납니다." },
+    { sel: ["#navManage"], t: "추적 계정 관리", d: "추적 중인 계정을 골라 묶음·기간을 정리하거나 제거하는 화면이에요. 계정 추가는 위쪽 검색창에서 해요." },
     { sel: ["#navHelp"], t: "사용 설명", d: "지금 보는 이 안내예요. 언제든 눌러서 다시 볼 수 있어요." },
     { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "눌러서 밝은 화면과 어두운 화면을 바꿀 수 있어요." },
     { sel: ["#connAcct"], t: "계정 메뉴", d: "프로필 이미지 설정, 계정 관리, 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },

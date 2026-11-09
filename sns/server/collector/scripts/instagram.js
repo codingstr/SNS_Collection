@@ -53,13 +53,19 @@
     });
   }
 
+  // 프로필 격자에는 게시 날짜가 보이지 않습니다. 서버 수집기가 이 화면이 받아 온 응답에서 읽은 날짜를
+  // window.__snsIgDates({게시물 코드: {t: 초, pin: 고정 여부}})로 넣어 줍니다(사이트에 따로 요청하지 않음).
+  // 날짜를 아직 모르는 글은 날짜 없이 보내고, 서버가 나중에 알게 되면 채웁니다.
+  const PIN_ICON = 'svg[aria-label*="고정"], svg[aria-label*="Pinned"], svg[aria-label*="pinned"]';
   function scanGrid(out) {
     const profile = /^\/([\w.]+)\/?$/.exec(location.pathname);
+    const dates = window.__snsIgDates || {};
     document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').forEach((a) => {
       if (a.closest("article")) return;
       const m = CODE.exec(a.getAttribute("href") || "");
       const img = a.querySelector("img");
       if (!m || !img || !(img.currentSrc || img.src)) return;
+      const d = dates[m[2]];
       out.push({
         id: "ig:" + m[2],
         source: "instagram",
@@ -67,6 +73,8 @@
         title: clip(img.alt, 200) || "(게시물)",
         author: profile ? profile[1] : "",
         thumb: img.currentSrc || img.src,
+        publishedAt: d && d.t ? new Date(d.t * 1000).toISOString() : "",
+        _noStop: !!((d && d.pin) || a.querySelector(PIN_ICON)), // 고정 게시물은 날짜 순서에서 벗어나므로 멈춤 판단에서 제외
       });
     });
   }
@@ -104,7 +112,15 @@
     return list;
   }
 
+  // 계정 주소처럼 보이지만 계정이 아닌 경로(메뉴·푸터 링크 등)
+  const NOT_USER = new Set(["explore", "reels", "direct", "accounts", "p", "reel", "reels", "tv", "stories", "about", "legal", "web", "api",
+    "emails", "challenge", "your_activity", "settings", "popular", "privacy", "terms", "developer", "directory", "locations", "lite",
+    "blog", "jobs", "help", "press", "session", "topics", "contact", "download", "meta", "threads", "verified", "notifications", "create"]);
+  const userOfHref = (href) => { const m = /^\/([\w.]{1,30})\/$/.exec(href || ""); return m && !NOT_USER.has(m[1].toLowerCase()) ? m[1] : ""; };
+
   // 인스타그램 화면의 검색창에 직접 입력해서 결과 목록을 읽습니다(사이트가 보여주는 그대로).
+  // 검색어를 넣기 전부터 화면에 있던 링크(메뉴·피드·푸터의 계정 링크 등)는 결과로 치지 않고,
+  // 검색어를 넣은 뒤 검색창 근처(검색 패널)에 새로 나타난 계정만 읽습니다.
   async function searchByUi(q) {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const findInput = () => document.querySelector('input[aria-label="검색 입력"], input[aria-label="Search input"], input[placeholder="검색"], input[placeholder="Search"], input[type="search"]');
@@ -118,43 +134,56 @@
       input = findInput();
     }
     if (!input) return [];
+    await wait(300);
+    const before = new Set(Array.from(document.querySelectorAll("a[href]")).map((a) => a.getAttribute("href")));
+    // 검색 패널: 검색창을 감싼 요소 중 링크를 담을 만큼 큰 조상(없으면 문서 전체)
+    const panelOf = () => {
+      let el = input;
+      for (let i = 0; i < 12 && el && el.parentElement; i++) {
+        el = el.parentElement;
+        if (el.querySelectorAll("a[href]").length && el.getBoundingClientRect().height > 200) return el;
+      }
+      return document;
+    };
     input.focus();
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     setter.call(input, q);
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    const RESERVED = new Set(["explore", "reels", "direct", "accounts", "p", "reel", "stories", "about", "legal", "web", "api", "emails", "challenge", "your_activity", "settings"]);
     const read = () => {
       const out = [], seen = new Set();
-      document.querySelectorAll("a[href]").forEach((a) => {
-        const m = /^\/([\w.]{1,30})\/$/.exec(a.getAttribute("href") || "");
-        if (!m || RESERVED.has(m[1].toLowerCase()) || seen.has(m[1].toLowerCase())) return;
-        if (a.closest("header") || /프로필|Profile/.test(a.getAttribute("aria-label") || "")) return;
+      panelOf().querySelectorAll("a[href]").forEach((a) => {
+        const href = a.getAttribute("href") || "";
+        const h = userOfHref(href);
+        if (!h || before.has(href) || seen.has(h.toLowerCase())) return;
+        if (a.closest("header, nav, footer") || /프로필|Profile/.test(a.getAttribute("aria-label") || "")) return;
         const lines = String(a.innerText || "").split("\n").map((t) => t.trim()).filter(Boolean);
         if (!lines.length || /^(프로필|Profile|더 보기|More)$/.test(lines[0])) return;
         const img = a.querySelector("img");
-        seen.add(m[1].toLowerCase());
-        out.push({
-          handle: m[1],
-          name: clip(lines[1] || lines[0], 80),
-          desc: clip(lines.slice(2).join(" "), 80),
-          avatar: (img && (img.currentSrc || img.src)) || "",
-        });
+        seen.add(h.toLowerCase());
+        out.push({ handle: h, name: clip(lines[1] || lines[0], 80), desc: clip(lines.slice(2).join(" "), 80), avatar: (img && (img.currentSrc || img.src)) || "" });
       });
       return out;
     };
-    for (let i = 0; i < 28; i++) {
+    let last = -1;
+    for (let i = 0; i < 32; i++) {
       await wait(250);
-      const list = read();
-      if (list.length) { await wait(300); return fillAvatars(read().slice(0, 8)); }
+      const n = read().length;
+      if (n && n === last) return read().slice(0, 8); // 결과 수가 한 번 더 같으면(다 그려졌으면) 읽습니다
+      last = n;
     }
-    return [];
+    return read().slice(0, 8);
+  }
+
+  // 검색어와 아이디가 정확히 같은 계정을 맨 앞으로(없고 아이디 모양이면 그 계정을 직접 찾아 맨 앞에 넣음)
+  async function exactFirst(q, list, lookup) {
+    const name = q.replace(/^@/, "").trim().toLowerCase();
+    const i = list.findIndex((r) => r.handle.toLowerCase() === name);
+    if (i > 0) list.unshift(list.splice(i, 1)[0]);
+    if (i < 0 && /^[\w.]{1,30}$/.test(name)) { const u = await lookup(name); if (u) list.unshift(u); }
+    return list.slice(0, 8);
   }
 
   async function search(q) {
-    try {
-      const ui = await searchByUi(q);
-      if (ui.length) return ui;
-    } catch (e) { /* 다음 방법 */ }
     const csrf = (/(?:^|;\s*)csrftoken=([^;]+)/.exec(document.cookie) || [])[1] || "";
     const headers = { "x-ig-app-id": "936619743392459", "x-requested-with": "XMLHttpRequest", "x-asbd-id": "129477", "x-csrftoken": csrf };
     const mapUser = (u) => ({
@@ -163,31 +192,33 @@
       desc: u && u.is_verified ? "인증된 계정" : "",
       avatar: (u && u.profile_pic_url) || "",
     });
-    const urls = [
-      "/api/v1/web/search/topsearch/?context=blended&include_reel=false&query=",
-      "/web/search/topsearch/?context=blended&include_reel=false&query=",
-    ];
-    for (const base of urls) {
+    const lookup = async (name) => {
+      try {
+        const r = await fetch("/api/v1/users/web_profile_info/?username=" + encodeURIComponent(name), { credentials: "include", headers });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const u = j && j.data && j.data.user;
+        return u && u.username ? mapUser(u) : null;
+      } catch (e) { return null; }
+    };
+    // 1) 인스타그램 검색 주소(로그인된 테스트 계정으로): 화면 상태와 상관없이 검색 결과만 받아 옵니다.
+    for (const base of ["/api/v1/web/search/topsearch/?context=blended&include_reel=false&query=", "/web/search/topsearch/?context=blended&include_reel=false&query="]) {
       try {
         const r = await fetch(base + encodeURIComponent(q), { credentials: "include", headers });
         if (!r.ok) continue;
         const j = await r.json();
-        const list = (j.users || []).map((x) => mapUser(x.user)).filter((x) => x.handle).slice(0, 8);
-        if (list.length) return fillAvatars(list);
+        const list = (j.users || []).map((x) => mapUser(x.user)).filter((x) => x.handle && !NOT_USER.has(x.handle.toLowerCase()));
+        if (list.length) return fillAvatars(await exactFirst(q, list, lookup));
       } catch (e) { /* 다음 방법 */ }
     }
-    // 아이디 모양이면 프로필 조회로 한 건이라도 찾아 봅니다.
+    // 2) 화면의 검색창에 직접 입력
+    try {
+      const ui = await searchByUi(q);
+      if (ui.length) return fillAvatars(await exactFirst(q, ui, lookup));
+    } catch (e) { /* 다음 방법 */ }
+    // 3) 아이디 모양이면 프로필 조회로 한 건이라도 찾아 봅니다.
     const name = q.replace(/^@/, "").trim();
-    if (/^[\w.]{1,30}$/.test(name)) {
-      try {
-        const r = await fetch("/api/v1/users/web_profile_info/?username=" + encodeURIComponent(name), { credentials: "include", headers });
-        if (r.ok) {
-          const j = await r.json();
-          const u = j && j.data && j.data.user;
-          if (u && u.username) return [mapUser(u)];
-        }
-      } catch (e) { /* 무시 */ }
-    }
+    if (/^[\w.]{1,30}$/.test(name)) { const u = await lookup(name); if (u) return fillAvatars([u]); }
     return [];
   }
 
