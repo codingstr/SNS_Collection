@@ -59,6 +59,11 @@ def new_session(db, uid: str, sv: int) -> str:
     return s
 
 
+def who(user) -> dict:
+    """로그인·me 응답에 붙이는 사용자 정보. admin: 관리 탭을 보여 줌, mustChange: 관리자가 비밀번호를 초기화함."""
+    return {"id": user["id"], "admin": bool(user["is_admin"]), "mustChange": bool(user["must_change"])}
+
+
 def user_by_session(db, sess):
     if not isinstance(sess, str) or not 20 <= len(sess) <= 200:
         return None
@@ -130,13 +135,13 @@ def handle(db, act: str, body: dict, ip: str):
             rl_bump(db, f"login:{ip}:{uid}", RL_LOGIN_ID)
             rl_bump(db, "loginip:" + ip, RL_LOGIN_IP)
             return fail(401, "아이디 또는 비밀번호가 맞지 않습니다.")
-        return 200, {"ok": True, "session": new_session(db, uid, user["sv"]), "id": uid}
+        return 200, {"ok": True, "session": new_session(db, uid, user["sv"]), **who(user)}
 
     if act == "me":
         user = user_by_session(db, body.get("session"))
         if not user:
             return fail(401, "로그인이 필요합니다.")
-        return 200, {"ok": True, "id": user["id"]}
+        return 200, {"ok": True, **who(user)}
 
     if act in ("changePassword", "deleteAccount"):
         user = user_by_session(db, body.get("session"))
@@ -152,12 +157,16 @@ def handle(db, act: str, body: dict, ip: str):
             np = str(body.get("newPassword") or "")
             if not 6 <= len(np) <= 200:
                 return fail(400, "새 비밀번호는 6자 이상이어야 합니다.")
+            if np == str(body.get("password") or ""):
+                return fail(400, "새 비밀번호가 지금 비밀번호와 같습니다.")
             salt, sv = secrets.token_hex(16), user["sv"] + 1
-            db.execute("UPDATE users SET salt = ?, hash = ?, sv = ? WHERE id = ?", (salt, hash_pw(np, salt), sv, user["id"]))
+            db.execute("UPDATE users SET salt = ?, hash = ?, sv = ?, must_change = 0 WHERE id = ?", (salt, hash_pw(np, salt), sv, user["id"]))
             db.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))  # 다른 기기 로그인 해제
             return 200, {"ok": True, "session": new_session(db, user["id"], sv)}
 
         # 계정 삭제: 세션 등 이 계정에 딸린 데이터는 ON DELETE CASCADE로 같이 지워집니다.
+        if user["is_admin"] and not db.execute("SELECT 1 FROM users WHERE is_admin = 1 AND id != ?", (user["id"],)).fetchone():
+            return fail(400, "마지막 관리자 계정은 지울 수 없습니다. (서버 PC의 admin_setup으로 다른 관리자를 먼저 정하세요)")
         db.execute("DELETE FROM users WHERE id = ?", (user["id"],))
         return 200, {"ok": True}
 

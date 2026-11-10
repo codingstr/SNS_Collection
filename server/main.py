@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
+import admin
 import api_call
 import auth
 import sync
@@ -46,6 +47,7 @@ def health():
 app.include_router(auth.router)      # /api/auth  로그인·가입·비밀번호 변경·계정 삭제
 app.include_router(api_call.router)  # /api/call  글 목록·추적 계정·수집 요청
 app.include_router(sync.router)      # /api/sync  본 글 기록
+app.include_router(admin.router)     # /api/admin 관리자 전용(관리 탭)
 
 
 # ---------- 웹 화면 ----------

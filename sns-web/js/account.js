@@ -38,7 +38,7 @@ function acctSay(t, isErr) { const m = $("acctMsg"); m.textContent = t || ""; m.
 function setSess(s) { sess = s || ""; try { if (sess) localStorage.setItem("snsSess", sess); else localStorage.removeItem("snsSess"); } catch (e) {} }
 // 로그인되면 화면을 로그인 상태로 바꾸고 서버에 연결합니다(글·추적 계정은 서버에 있습니다).
 // 이 브라우저에 마지막으로 로그인했던 아이디와 다르면, 그 아이디의 저장값(본 글 기록·사진·즐겨찾기)을 쓰도록 한 번 다시 엽니다.
-async function afterLogin(uid) {
+async function afterLogin(uid, info) {
   if (uid !== UID0) {
     let saved = false;
     try { localStorage.setItem("snsUid", uid); saved = localStorage.getItem("snsUid") === uid; } catch (e) {}
@@ -47,8 +47,18 @@ async function afterLogin(uid) {
   $("acctForm").hidden = true; $("acctUser").hidden = false; $("acctWho").textContent = uid + " 로그인됨";
   $("connAcct").hidden = false; setAvatarWho(uid); $("connOut").textContent = "로그아웃";
   acctSay("");
+  setAdmin(!!(info && info.admin)); // 관리자면 왼쪽에 '관리' 탭(js/admin.js)
   pullSeen();
   await connect(true);
+  if (info && info.mustChange) askNewPassword();
+}
+// 관리자가 비밀번호를 초기화한 계정: 로그인하면 계정 관리 창을 열어 새 비밀번호로 바꾸라고 안내합니다.
+function askNewPassword() {
+  $("acctModal").hidden = false;
+  const m = $("pwMsg");
+  m.textContent = "관리자가 비밀번호를 초기화했습니다. 지금 비밀번호(초기화된 값)를 넣고 새 비밀번호로 바꿔 주세요.";
+  m.hidden = false; m.className = "error";
+  $("pwOld").focus();
 }
 // 예전(크롬 확장 시절) 브라우저에 남은 값 정리
 try { ["snsToken", "snsLocal", "snsLocalToken"].forEach((k) => localStorage.removeItem(k)); } catch (e) {}
@@ -64,7 +74,7 @@ async function initAccount() {
       const j = await api(action, { id: $("acctEmail").value.trim(), password: $("acctPw").value });
       $("acctPw").value = "";
       setSess(j.session);
-      await afterLogin(j.id);
+      await afterLogin(j.id, j);
     } catch (e) { acctSay(e.message, true); }
     finally { btns.forEach((b) => { b.disabled = false; }); }
   };
@@ -123,7 +133,7 @@ async function initAccount() {
     // 저장된 로그인을 확인하는 사이에 사용자가 새로 로그인했으면(느린 연결에서 생길 수 있음), 늦게 온 옛 확인 결과는 무시합니다.
     // (예전에는 옛 세션의 '만료' 응답이 방금 받은 새 세션까지 지워, 새로고침하면 로그아웃되어 있었음)
     const used = sess;
-    try { const j = await api("me"); if (sess === used) await afterLogin(j.id); }
+    try { const j = await api("me"); if (sess === used) await afterLogin(j.id, j); }
     catch (e) {
       if (sess !== used) return;
       if (e && e.offline) {

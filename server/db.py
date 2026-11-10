@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
   hash        TEXT NOT NULL,               -- scrypt(비밀번호, salt)
   token       TEXT NOT NULL DEFAULT '',    -- (사용 안 함: 예전 확장 연결 코드)
   sv          INTEGER NOT NULL DEFAULT 0,  -- 세션 버전: 비밀번호를 바꾸면 +1 → 예전 세션 무효
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  is_admin    INTEGER NOT NULL DEFAULT 0,  -- 관리자(웹의 '관리' 탭). 가입으로는 만들 수 없고 admin_setup으로만 정합니다
+  must_change INTEGER NOT NULL DEFAULT 0   -- 관리자가 비밀번호를 초기화함: 다음 로그인 때 새 비밀번호로 바꾸라고 안내
 );
 CREATE TABLE IF NOT EXISTS sessions (
   hash        TEXT PRIMARY KEY,            -- sha256(세션 값). 원래 값은 저장하지 않습니다
@@ -83,6 +85,17 @@ CREATE TABLE IF NOT EXISTS coverage (
   data        TEXT NOT NULL,               -- JSON: {"since", "full_at"} / {"gap": true} / 로딩이 막혔을 때 {"stalled_at", "want"}
   at          INTEGER NOT NULL             -- 마지막으로 고친 시각(밀리초). 오래 안 쓴 주소는 정리합니다
 );
+-- 페이지별 마지막 수집 결과(관리 탭의 'SNS 계정 상태'에 씀). 주소마다 마지막 한 번만 남깁니다.
+CREATE TABLE IF NOT EXISTS page_log (
+  url         TEXT PRIMARY KEY,
+  at          INTEGER NOT NULL,            -- 끝난 시각(밀리초)
+  mode        TEXT NOT NULL DEFAULT '',    -- deep(사용자 수집) / shallow(자동 수집)
+  why         TEXT NOT NULL DEFAULT '',    -- 멈춘 이유(수집 스크립트가 알려 준 것)
+  found       INTEGER NOT NULL DEFAULT 0,  -- 화면에서 본 글 수
+  added       INTEGER NOT NULL DEFAULT 0,  -- 새로 저장한 글 수
+  error       TEXT NOT NULL DEFAULT '',    -- 실패했으면 그 이유
+  ok_at       INTEGER NOT NULL DEFAULT 0   -- 마지막으로 성공한 시각(밀리초)
+);
 """
 SCHEMA_VERSION = 2   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
 
@@ -116,6 +129,11 @@ def init_db():
             for col in ("seen_at", "updated_at"):
                 if col not in cols:
                     db.execute(f"ALTER TABLE items ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone():
+            cols = {r["name"] for r in db.execute("PRAGMA table_info(users)")}
+            for col in ("is_admin", "must_change"):
+                if col not in cols:
+                    db.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
         db.executescript(SCHEMA)
         if ver < SCHEMA_VERSION:
             # 한 번만 하면 되는 변환(예전에는 켤 때마다 전체 표를 훑었음)

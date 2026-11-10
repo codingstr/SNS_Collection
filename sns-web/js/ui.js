@@ -26,7 +26,7 @@ document.addEventListener("wheel", (ev) => {
   const dy = ev.deltaMode === 1 ? ev.deltaY * 40 : ev.deltaY;
   // 스크롤바 칸 위에서는 휠이 글 영역(또는 설정·추적 화면)을 세로로 움직입니다
   if (ev.target.closest("#vbar")) {
-    const el = ["setPanel", "trackPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
+    const el = ["setPanel", "trackPanel", "adminPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
     if (el) {
       ev.preventDefault();
       // 휠 한 칸이 막대를 같은 거리만큼 움직이도록, 내용이 길수록 한 번에 더 많이 이동
@@ -358,6 +358,7 @@ $("themeSwitch").addEventListener("click", () => { $("themeBtn").click(); const 
 $("brand").addEventListener("click", () => $("navHome").click());
 $("navFav").addEventListener("click", () => { page = "fav"; activeTab = "people"; personFocus = ""; personPlat = ""; applyPage(); renderList(); window.scrollTo(0, 0); });
 $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); window.scrollTo(0, 0); });
+$("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); window.scrollTo(0, 0); });
 
 /* ---------- 벤토 디자인: 계정 메뉴 항목을 '설정' 화면(별도 탭)으로 ---------- */
 (function () {
@@ -383,7 +384,7 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   $("setBack").addEventListener("click", () => setModal(false));
   $("setClose").addEventListener("click", () => setModal(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("setPanel").hidden) setModal(false); });
-  ["navHome", "navFav", "navManage"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));
+  ["navHome", "navFav", "navManage", "navAdmin"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));
   place();
 })();
 
@@ -396,7 +397,7 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   let drag = null;
   const THUMB = 120;
   const PAD = 6; // 손잡이가 바탕 박스 끝 밖으로 튀어나오지 않게 안쪽 여백
-  const target = () => ["setPanel", "trackPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
+  const target = () => ["setPanel", "trackPanel", "adminPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
   function update() {
     const el = target();
     if (!el || window.innerWidth < 861) { bar.hidden = true; return; }
@@ -428,7 +429,7 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   bar.addEventListener("pointerdown", (e) => { if (e.target === bar) scrollTo(e.clientY - bar.getBoundingClientRect().top - thumb.offsetHeight / 2); });
   let upRaf = 0;
   const updateSoon = () => { if (!upRaf) upRaf = requestAnimationFrame(() => { upRaf = 0; update(); }); }; // 한 프레임에 한 번만
-  ["grid", "setPanel", "trackPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", updateSoon, { passive: true }); });
+  ["grid", "setPanel", "trackPanel", "adminPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", updateSoon, { passive: true }); });
   window.addEventListener("resize", updateSoon);
   new MutationObserver(updateSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class"] });
   setInterval(update, 800);
@@ -471,7 +472,7 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   const place = () => {
     raf = 0;
     // 추적 계정 관리 화면(넓은 화면): 오른쪽 열이 없으므로 버튼 줄을 숨깁니다(bento.css의 .toolbar.inpanel).
-    const tp = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden])") : null;
+    const tp = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden]), #adminPanel:not([hidden])") : null;
     const inPanel = !!(tp && tp.offsetParent !== null);
     tb.classList.toggle("inpanel", inPanel);
     if (inPanel) { tb.style.removeProperty("top"); tb.style.removeProperty("left"); tb.style.removeProperty("right"); return; }
@@ -488,7 +489,7 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
     setTimeout(() => { if (raf) { cancelAnimationFrame(raf); place(); } }, 200);
   };
   window.addEventListener("resize", q);
-  if (window.ResizeObserver) { const ro = new ResizeObserver(q); ro.observe(wc); ro.observe(lay); ro.observe(tb); const tp = document.getElementById("trackPanel"); if (tp) ro.observe(tp); }
+  if (window.ResizeObserver) { const ro = new ResizeObserver(q); ro.observe(wc); ro.observe(lay); ro.observe(tb); ["trackPanel", "adminPanel"].forEach((i) => { const tp = document.getElementById(i); if (tp) ro.observe(tp); }); }
   new MutationObserver(q).observe(document.body, { attributes: true, subtree: true, attributeFilter: ["hidden"] });
   q();
 })();

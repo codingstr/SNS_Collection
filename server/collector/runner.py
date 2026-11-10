@@ -442,11 +442,31 @@ def cover_update(url: str, res: dict, stop_known: bool, cov, since_ms: int, star
     cov_set(url, new)
 
 
+def log_page(url: str, mode: str, res, err: str = ""):
+    """페이지 한 곳의 수집 결과를 page_log에 남깁니다(관리 탭의 SNS 계정 상태). 멈추기를 누른 것은 남기지 않습니다."""
+    try:
+        if isinstance(res, dict) and res.get("cancelled"):
+            return
+        d = (res.get("done") or {}) if isinstance(res, dict) else {}
+        if not err and isinstance(res, dict) and not d:
+            err = "응답 없음(시간 초과)"
+        now = now_ms()
+        with get_db() as db:
+            prev = db.execute("SELECT ok_at FROM page_log WHERE url = ?", (url,)).fetchone()
+            db.execute("""INSERT OR REPLACE INTO page_log(url, at, mode, why, found, added, error, ok_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (url, now, mode, _s(d.get("why"), 120), int(d.get("found") or 0),
+                        int(res.get("added") or 0) if isinstance(res, dict) else 0, _s(err, 200),
+                        (prev["ok_at"] if prev else 0) if err else now))
+    except Exception:
+        log.exception("수집 결과 기록 오류: %s", url)
+
+
 def prune_items():
     with get_db() as db:
         db.execute("""DELETE FROM items WHERE id IN
                       (SELECT id FROM items ORDER BY MAX(collected_at, seen_at) DESC LIMIT -1 OFFSET ?)""", (MAX_ITEMS,))
         db.execute("DELETE FROM coverage WHERE at < ?", (now_ms() - COVER_KEEP_MS,))
+        db.execute("DELETE FROM page_log WHERE at < ?", (now_ms() - COVER_KEEP_MS,))
 
 
 # ---------- 서버 전체 상태(테스트 계정 로그인 상태) ----------
@@ -639,6 +659,20 @@ class Collector:
             if uid in self.queued_users:
                 self.cancel_users.add(uid)
                 self.pending.pop(uid, None)
+
+    def active_urls(self) -> set:
+        """지금 수집 창에서 모으는 중인 페이지 주소(관리 탭의 '수집 중' 표시). 다른 스레드에서 읽으므로 실패하면 빈 값."""
+        try:
+            return {c.get("url") for c in list(self.curs.values()) if c.get("url") and c.get("done") is None}
+        except Exception:
+            return set()
+
+    def queue_info(self) -> dict:
+        """관리 탭의 서버 상태: 기다리는 일 수, 수집 대기·진행 중인 사용자."""
+        with self.lock:
+            users = sorted(self.queued_users)
+        return {"queued": self.q.qsize(), "users": users, "busy": sorted(self.busy), "nextAuto": int(self.next_auto * 1000),
+                "thread": bool(self.thread and self.thread.is_alive())}
 
     def request_login_check(self, platforms):
         if self.login_busy:
@@ -1159,7 +1193,7 @@ class Collector:
         for attempt in (0, 1):
             page = self._page(key)
             visit = next(self.visit_seq)
-            cur = {"platform": platform, "acct": platform, "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit}
+            cur = {"platform": platform, "acct": platform, "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit, "url": url}
             self.curs[page] = cur
             self.busy.add(key)
             try:
@@ -1470,6 +1504,7 @@ class Collector:
         def on_done(t, res, t0):
             if by_url.get(t["url"]) is t:
                 del by_url[t["url"]]
+            log_page(t["url"], t["cfg"]["mode"], res, self._friendly(res) if isinstance(res, Exception) else "")
             if not isinstance(res, Exception):
                 cover_update(t["url"], res, t["stop"], t["cov"], t["since"], t0)
                 if not res.get("cancelled"):
@@ -1631,6 +1666,7 @@ class Collector:
         done = {"n": 0}
 
         def on_done(t, res, t0):
+            log_page(t["url"], "shallow", res, self._friendly(res) if isinstance(res, Exception) else "")
             if isinstance(res, Exception):
                 return
             cover_update(t["url"], res, t["stop"], t["cov"], t["since"], t0)

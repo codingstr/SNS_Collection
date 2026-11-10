@@ -8,8 +8,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=383">
-<link rel="stylesheet" href="bento.css?v=383">
+<link rel="stylesheet" href="style.css?v=384">
+<link rel="stylesheet" href="bento.css?v=384">
 
 <header>
   <div id="infoCard2" class="infocard info2"></div>
@@ -35,6 +35,7 @@
     <button id="navHome" class="navbtn on" type="button">홈</button>
     <button id="navFav" class="navbtn" type="button" title="즐겨찾기한 사람만 보기">즐겨찾기</button>
     <button id="navManage" class="navbtn" type="button" hidden>추적 계정 관리</button>
+    <button id="navAdmin" class="navbtn" type="button" title="관리(관리자 전용)" aria-label="관리" hidden>관리</button>
     <button id="navHelp" class="navbtn" type="button" title="사용 설명 다시 보기" aria-label="사용 설명">?</button>
   </nav>
   <div class="acctwrap">
@@ -187,6 +188,33 @@
       </div>
     </section>
 
+    <section class="panel" id="adminPanel" hidden>
+      <div class="mg-head"><h2>관리</h2><span id="adCount" class="mg-count"></span>
+        <div class="ad-tabs" role="tablist" aria-label="관리 화면">
+          <button id="adTabUsers" class="ad-tab on" type="button" role="tab" aria-selected="true">사용자</button>
+          <button id="adTabAccts" class="ad-tab" type="button" role="tab" aria-selected="false">SNS 계정 상태</button>
+          <button id="adTabServer" class="ad-tab" type="button" role="tab" aria-selected="false">서버</button>
+        </div>
+      </div>
+      <div id="adUsers" class="ad-view ad-users">
+        <div class="ad-side">
+          <input id="adFind" type="search" placeholder="아이디 찾기" aria-label="사용자 아이디 찾기" autocomplete="off">
+          <div id="adUserList" class="ad-userlist" role="listbox" aria-label="사용자"></div>
+        </div>
+        <div id="adDetail" class="ad-detail" aria-live="polite"><p class="hint">왼쪽에서 사용자를 고르세요.</p></div>
+      </div>
+      <div id="adAccts" class="ad-view" hidden>
+        <div class="ad-filters">
+          <select id="adAcctState" aria-label="상태로 거르기"><option value="">모든 상태</option></select>
+          <select id="adAcctPlat" aria-label="매체로 거르기"><option value="">모든 매체</option><option value="youtube">유튜브</option><option value="x">X</option><option value="instagram">인스타</option></select>
+          <input id="adAcctFind" type="search" placeholder="계정·사용자 찾기" aria-label="계정·사용자 찾기" autocomplete="off">
+          <span id="adAcctSum" class="hint"></span>
+        </div>
+        <div id="adAcctList" class="ad-accts"></div>
+      </div>
+      <div id="adServer" class="ad-view" hidden></div>
+    </section>
+
   </aside>
 
   <main>
@@ -200,13 +228,14 @@
   </main>
 </div>
 
-<script src="js/core.js?v=383"></script>
-<script src="js/bridge.js?v=383"></script>
-<script src="js/store.js?v=383"></script>
-<script src="js/list.js?v=383"></script>
-<script src="js/stories.js?v=383"></script>
-<script src="js/tracking.js?v=383"></script>
-<script src="js/manage.js?v=383"></script>
-<script src="js/account.js?v=383"></script>
-<script src="js/ui.js?v=383"></script>
+<script src="js/core.js?v=384"></script>
+<script src="js/bridge.js?v=384"></script>
+<script src="js/store.js?v=384"></script>
+<script src="js/list.js?v=384"></script>
+<script src="js/stories.js?v=384"></script>
+<script src="js/tracking.js?v=384"></script>
+<script src="js/manage.js?v=384"></script>
+<script src="js/admin.js?v=384"></script>
+<script src="js/account.js?v=384"></script>
+<script src="js/ui.js?v=384"></script>
 

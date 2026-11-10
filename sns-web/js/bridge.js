@@ -31,17 +31,23 @@ function sessionLost(used) {
   return er;
 }
 
-// 화면 전환: 홈(글 모아보기) ↔ 추적 계정 관리(따로 분리된 화면)
+// 화면 전환: 홈(글 모아보기) ↔ 추적 계정 관리 ↔ 관리(관리자만) — 관리 화면들은 따로 분리된 화면
 let page = "home";
 function applyPage() {
   if (!connected && page === "manage") page = "home";
-  const manage = connected && page === "manage";
+  if ((!connected || !isAdmin) && page === "admin") page = "home";
+  const manage = connected && page === "manage", adminOn = page === "admin";
+  const wasAdmin = !$("adminPanel").hidden;
   $("trackPanel").hidden = !manage;
-  document.querySelector(".layout main").hidden = manage;
+  $("adminPanel").hidden = !adminOn;
+  document.querySelector(".layout main").hidden = manage || adminOn;
   $("navManage").hidden = !connected;
-  $("navHome").classList.toggle("on", !manage && page !== "fav");
+  $("navAdmin").hidden = !(connected && isAdmin);
+  $("navHome").classList.toggle("on", !manage && !adminOn && page !== "fav");
   $("navFav").classList.toggle("on", page === "fav");
   $("navManage").classList.toggle("on", manage);
+  $("navAdmin").classList.toggle("on", adminOn);
+  if (adminOn !== wasAdmin && typeof adminShown === "function") adminShown(adminOn);
 }
 function setConn(ok) {
   connected = ok;
