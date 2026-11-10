@@ -4,15 +4,20 @@ const API_BASE = "";
    서버가 크롬으로 직접 일하는 요청(계정 검색·게시물 읽기)은 부르는 쪽에서 더 길게 줍니다. */
 const API_WAIT = 10000;
 const LONG_WAIT = 75000; // 계정 검색·게시물 읽기: 서버가 최대 60초 + 사진 받기까지 기다립니다
+// opts.signal: 부르는 쪽이 요청을 끊을 때(검색 취소 등). 끊으면 er.aborted가 붙은 오류를 던집니다.
 async function apiPost(path, obj, ms, opts) {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms || API_WAIT);
+  const outer = opts && opts.signal;
+  const onOuter = () => ctl.abort();
+  if (outer) { if (outer.aborted) ctl.abort(); else outer.addEventListener("abort", onOuter); }
   try {
     return await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" }, body: JSON.stringify(obj), signal: ctl.signal, keepalive: !!(opts && opts.keepalive) });
   } catch (e) {
+    if (outer && outer.aborted) { const er = new Error("요청을 취소했습니다."); er.aborted = true; throw er; }
     const late = ctl.signal.aborted;
     const er = new Error(late ? "서버 응답이 너무 늦습니다. 잠시 뒤 다시 시도하세요." : "서버에 연결할 수 없습니다.");
     er.offline = true; er.timeout = late; throw er;
-  } finally { clearTimeout(t); }
+  } finally { clearTimeout(t); if (outer) outer.removeEventListener("abort", onOuter); }
 }
 
 /* 화면 아래쪽 알림(오류·안내). 어느 화면에 있든 보입니다.
@@ -47,7 +52,7 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v378";
+const WEB_VERSION = "v383";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };

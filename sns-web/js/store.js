@@ -53,7 +53,8 @@ async function refreshOnce() {
   if (!loginAsked) {
     loginAsked = true;
     // 확인이 필요한(처음이거나 오래된) 매체만 확인합니다. 로그인이 안 된 것으로 확인된 매체는 2시간에 한 번만 다시 봅니다.
-    const stale = ["x", "instagram"].filter((p) => !loginState[p] || Date.now() - (loginState[p].at || 0) > (loginState[p].loggedIn === false ? 120 : 30) * 60000);
+    // 검색용 계정(x-search, instagram-search)도 함께 봅니다. 서버는 검색용 프로필을 아직 만들지 않았으면 창을 열지 않고 '안 됨'으로 둡니다.
+    const stale = ["x", "instagram", "x-search", "instagram-search"].filter((p) => !loginState[p] || Date.now() - (loginState[p].at || 0) > (loginState[p].loggedIn === false ? 120 : 30) * 60000);
     if (stale.length) call("checkLogin", { platforms: stale }).catch(() => {});
   }
   // 바뀐 부분만 다시 그려서 화면이 깜빡이지 않게 합니다.

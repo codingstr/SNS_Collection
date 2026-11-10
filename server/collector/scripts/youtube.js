@@ -287,21 +287,81 @@
     };
   }
 
-  // 채널 '동영상'·'게시물' 탭: 화면을 그리거나 스크롤하지 않고 유튜브가 화면용으로 쓰는 데이터 요청(youtubei browse)으로 목록을 이어서 받습니다.
-  // 수집 창이 다른 창에 가려져 유튜브가 목록을 더 그리지 않아도 동작합니다. 실패하면 null → 기존 스크롤 방식으로 넘어갑니다.
-  async function collectApi({ maxPages, emit, timeUp }) {
-    const pm = /^\/(@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(videos|posts|community)\/?$/.exec(location.pathname);
+  // 채널 '동영상'·'쇼츠'·'게시물' 탭: 화면을 그리거나 스크롤하지 않고 유튜브가 화면용으로 쓰는 데이터 요청(youtubei browse)으로 목록을 이어서 받습니다.
+  // 수집 창이 다른 창에 가려져 유튜브가 목록을 더 그리지 않아도 동작합니다. 실패하면 null → 기존 스크롤 방식으로 넘어갑니다(쇼츠는 제외).
+  //
+  // 쇼츠 탭 목록에는 게시 날짜가 없습니다. 날짜는 유튜브가 공개로 주는 채널 RSS(/feeds/videos.xml, 최근 업로드 15개·영상과 쇼츠 섞임)에서
+  // 정확한 게시 시각을 받습니다(요청 1번). RSS에 없는 쇼츠는 RSS의 가장 오래된 글보다 더 오래된 것이므로:
+  //   - 그 시각이 가져올 기간보다 오래됐으면 → 기간 밖이라 거기서 멈춤
+  //   - 아니면 날짜를 알 수 없음 → 거기서 멈추고 저장하지 않음(날짜 없이 저장하면 최신 글로 잘못 정렬되기 때문)
+  // 이미 모은 쇼츠(DB에 날짜가 있음)는 날짜 없이 보내도 서버가 예전 날짜를 그대로 둡니다.
+  async function shortsDates(channelId) {
+    const out = { ok: false, dates: {}, oldest: 0 };
+    if (!/^UC[\w-]{22}$/.test(channelId || "")) return out;
+    try {
+      const res = await fetch("/feeds/videos.xml?channel_id=" + channelId, { credentials: "omit" });
+      if (!res.ok) return out;
+      const doc = new DOMParser().parseFromString(await res.text(), "application/xml");
+      const entries = Array.from(doc.getElementsByTagName("entry"));
+      for (const e of entries) {
+        const idEl = e.getElementsByTagNameNS("http://www.youtube.com/xml/schemas/2015", "videoId")[0] || e.getElementsByTagName("yt:videoId")[0];
+        const pubEl = e.getElementsByTagName("published")[0];
+        const id = idEl && idEl.textContent.trim(), t = pubEl ? Date.parse(pubEl.textContent.trim()) : NaN;
+        if (!/^[\w-]{11}$/.test(id || "") || Number.isNaN(t)) continue;
+        out.dates[id] = new Date(t).toISOString();
+        if (!out.oldest || t < out.oldest) out.oldest = t;
+      }
+      out.ok = entries.length > 0;
+    } catch (e) { /* 날짜 없이 진행(새 쇼츠는 저장하지 않음) */ }
+    return out;
+  }
+
+  async function collectApi({ maxPages, emit, timeUp, since, isKnown }) {
+    const pm = /^\/(@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(videos|shorts|posts|community)\/?$/.exec(location.pathname);
     if (!pm) return null;
-    const isPosts = pm[2] !== "videos";
+    const isShorts = pm[2] === "shorts", isPosts = pm[2] === "posts" || pm[2] === "community";
+    // 쇼츠는 실패해도 화면 스크롤 방식으로 넘어가지 않습니다(그 방식은 날짜를 몰라 잘못 정렬된 글을 모음)
+    const fail = (why) => (isShorts ? { pages: 0, total: 0, why: "쇼츠 목록을 읽지 못함(" + why + ", 데이터 요청)" } : null);
     try {
       const html = await (await fetch(location.href, { credentials: "include" })).text();
       const key = (/"INNERTUBE_API_KEY":"([^"]+)"/.exec(html) || [])[1];
       const ver = (/"INNERTUBE_CONTEXT_CLIENT_VERSION":"([^"]+)"/.exec(html) || [])[1];
       const mm = /var ytInitialData\s*=\s*(\{.*?\});<\/script>/s.exec(html);
-      if (!key || !ver || !mm) return null;
+      if (!key || !ver || !mm) return fail("페이지 데이터 없음");
       const data = JSON.parse(mm[1]);
-      const author = clip(((data.metadata || {}).channelMetadataRenderer || {}).title, 80);
+      const chMeta = (data.metadata || {}).channelMetadataRenderer || {};
+      const author = clip(chMeta.title, 80);
       const runsText = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
+      const rss = isShorts ? await shortsDates(chMeta.externalId) : null;
+
+      // 쇼츠 한 개: 새 형식(shortsLockupViewModel)과 예전 형식(reelItemRenderer). 영상과 같이 '유튜브 영상'으로 저장합니다(날짜순으로 섞여 보이게).
+      const toShort = (it) => {
+        const c = it && it.richItemRenderer && it.richItemRenderer.content;
+        if (!c) return null;
+        let id = "", title = "", thumb = "";
+        if (c.shortsLockupViewModel) {
+          const s = c.shortsLockupViewModel;
+          const ep = (((s.onTap || {}).innertubeCommand || {}).reelWatchEndpoint) || {};
+          id = ep.videoId || String(s.entityId || "").replace(/^shorts-shelf-item-/, "");
+          title = (((s.overlayMetadata || {}).primaryText) || {}).content || "";
+          const src = ((((s.thumbnailViewModel || {}).thumbnailViewModel || {}).image || {}).sources) || [];
+          thumb = (src[src.length - 1] || {}).url || "";
+        } else if (c.reelItemRenderer) {
+          const r = c.reelItemRenderer;
+          id = r.videoId;
+          title = runsText(r.headline);
+          const th = ((r.thumbnail || {}).thumbnails) || [];
+          thumb = (th[th.length - 1] || {}).url || "";
+        } else return null;
+        if (!/^[\w-]{11}$/.test(id || "") || !title) return null;
+        return {
+          id: "yt:" + id, source: "youtube-video",
+          url: "https://www.youtube.com/shorts/" + id,
+          title: clip(title, 200), author,
+          thumb: /^https:\/\/i\.ytimg\.com\//.test(thumb) ? thumb : "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg",
+          publishedText: "", publishedAt: (rss && rss.dates[id]) || "",
+        };
+      };
 
       const toVideo = (it) => {
         const v = it && it.richItemRenderer && it.richItemRenderer.content;
@@ -362,7 +422,7 @@
         };
       };
 
-      const conv = isPosts ? toPost : toVideo;
+      const conv = isPosts ? toPost : isShorts ? toShort : toVideo;
       const listOf = (arr) => (arr || []).map(conv).filter(Boolean);
       const nextToken = (arr) => {
         const c = (arr || []).find((x) => x.continuationItemRenderer);
@@ -378,13 +438,23 @@
         for (const k in o) walk(o[k], d + 1);
       };
       walk(data, 0);
-      if (!first) return null;
+      if (!first) return isShorts ? { pages: 0, total: 0, why: "목록 끝(쇼츠 없음, 데이터 요청)" } : null;
 
       let batch = first, pages = 0, total = 0;
       while (batch) {
-        const items = listOf(batch);
+        let items = listOf(batch);
+        // 쇼츠: 날짜를 모르는 새 쇼츠가 나오면 그 앞까지만 보내고 멈춥니다(위 설명)
+        let cut = -1;
+        if (isShorts) {
+          cut = items.findIndex((x) => !x.publishedAt && !(isKnown && isKnown(x.id)));
+          if (cut >= 0) items = items.slice(0, cut);
+        }
         total += items.length;
         if (emit(items)) return { pages, total, why: "기간 밖 글 도달(데이터 요청)" };
+        if (cut >= 0) {
+          const beyond = rss && rss.ok && rss.oldest && rss.oldest < (since || 0);
+          return { pages, total, why: beyond ? "기간 밖 글 도달(데이터 요청 · 쇼츠 날짜는 RSS)" : "날짜 없음(쇼츠, RSS 범위 밖 · 데이터 요청)" };
+        }
         const tok = nextToken(batch);
         if (!tok) return { pages, total, why: "목록 끝(데이터 요청)" };
         if (++pages >= maxPages) return { pages, total, why: "한도(데이터 요청)" };
@@ -393,7 +463,7 @@
           method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: ver, hl: "ko", gl: "KR" } }, continuation: tok }),
         });
-        if (!res.ok) return pages ? { pages, total, why: "요청 오류 " + res.status } : null;
+        if (!res.ok) return pages ? { pages, total, why: "요청 오류 " + res.status } : fail("요청 오류 " + res.status);
         const j = await res.json();
         const act = (j.onResponseReceivedActions || j.onResponseReceivedEndpoints || [])[0];
         batch = act && act.appendContinuationItemsAction ? act.appendContinuationItemsAction.continuationItems : null;
@@ -402,7 +472,7 @@
       }
       return { pages, total, why: "목록 끝(데이터 요청)" };
     } catch (e) {
-      return null;
+      return fail("오류");
     }
   }
 

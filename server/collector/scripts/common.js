@@ -221,6 +221,8 @@
           const api = await collectApi({
             maxPages: deep ? 80 : 4,
             timeUp: () => Date.now() >= deadline,
+            since,
+            isKnown: (id) => known.has(id), // 쇼츠: 날짜를 몰라도 이미 모은 글이면 보내도 됨(서버가 예전 날짜 유지)
             // 앞에서부터 차례로: 기간 안의 글은 모두 보내고, 기간보다 오래된 글을 만나면 true(멈춤)
             emit: (items) => {
               const fresh = [];

@@ -1,10 +1,11 @@
 /* ---------- 서버 연결 : 글 목록·추적 계정·수집 요청을 서버의 /api/call로 보냅니다 ---------- */
 // call(op, payload, waitMs) → 서버가 돌려준 result. op 종류는 server/api_call.py를 보세요.
 // waitMs: 응답을 기다릴 최대 시간(기본 10초). 계정 검색·게시물 읽기는 LONG_WAIT로 길게 줍니다.
+// opts: { signal } 요청을 도중에 끊을 때, { keepalive } 페이지를 떠나는 중에도 보낼 때
 const CHANGING_OPS = ["set", "checkNow", "clearItems", "cancelCheck"];
-async function call(op, payload, waitMs) {
+async function call(op, payload, waitMs, opts) {
   const used = sess;
-  const r = await apiPost("/api/call", { session: used, op, payload: payload || {} }, waitMs);
+  const r = await apiPost("/api/call", { session: used, op, payload: payload || {} }, waitMs, opts);
   if (r.status === 401) throw sessionLost(used);
   let j;
   try { j = await r.json(); } catch (e) { const er = new Error("서버에 연결할 수 없습니다(서버 PC가 꺼져 있을 수 있습니다)."); er.offline = true; throw er; }
@@ -83,7 +84,11 @@ function pIcon(p) {
 let loginState = {}, loginAsked = false;
 // 서버 테스트 계정이 로그인되어 있지 않아 수집할 수 없는 매체. 유튜브 채널은 로그인 없이도 수집됩니다.
 const loggedOut = (p) => p !== "youtube" && !!(loginState[p] && loginState[p].loggedIn === false);
-const LOGIN_HELP = (p) => "서버의 " + PLATFORM[p] + " 테스트 계정이 로그인되어 있지 않아 " + PLATFORM[p] + " 글을 모을 수 없습니다. 관리자가 서버 PC에서 login_setup.bat으로 로그인해야 합니다.";
+const LOGIN_HELP = (p) => "서버의 " + PLATFORM[p] + " 수집용 테스트 계정이 로그인되어 있지 않아 " + PLATFORM[p] + " 글을 모을 수 없습니다. 관리자가 서버 PC에서 login_setup.bat " + p + " 로 로그인해야 합니다.";
+// X·인스타의 '계정 찾기'는 수집용과 다른 검색용 계정(x-search, instagram-search)으로 합니다.
+const SEARCH_ACCT = { x: "x-search", instagram: "instagram-search" };
+const searchLoggedOut = (p) => !!SEARCH_ACCT[p] && !!(loginState[SEARCH_ACCT[p]] && loginState[SEARCH_ACCT[p]].loggedIn === false);
+const SEARCH_LOGIN_HELP = (p) => "서버의 " + PLATFORM[p] + " 검색용 테스트 계정이 로그인되어 있지 않아 이름으로 찾을 수 없습니다(@아이디·프로필 주소로는 바로 추가할 수 있습니다). 관리자가 서버 PC에서 login_setup.bat " + SEARCH_ACCT[p] + " 로 로그인해야 합니다.";
 let loginRecheckAt = {};
 function renderLogin() {
   const bar = $("loginBar");

@@ -135,6 +135,7 @@ function storyBar(d) {
 
 // 글 목록은 그대로 두고 묶음 줄만 새로 그립니다(본 글·새 글이 바뀌었을 때). 바뀐 게 없으면 아무것도 하지 않습니다.
 function renderStories() {
+  refreshSideUnread();
   const cur = document.getElementById("storyBar");
   if (!cur || !cur.isConnected) return;
   const d = storyData();
@@ -149,6 +150,16 @@ function renderStories() {
     const b = Array.from(nb.children).find((x) => (hadFocus ? x.dataset.name === hadFocus : !x.dataset.name));
     if (b) b.focus({ preventScroll: true });
   }
+}
+
+// 오른쪽 묶음 목록의 '안 읽은 글' 빨간 점만 다시 맞춥니다(글 목록을 새로 그리지 않고).
+function refreshSideUnread() {
+  document.querySelectorAll("#sidePeople .pbar button").forEach((b) => {
+    if (!b._ids) return;
+    const unread = b._ids.some((id) => !seen.has(id));
+    b.classList.toggle("new", unread);
+    b.setAttribute("aria-label", b._label + " " + b._n + "건" + (unread ? ", 안 읽은 글 있음" : "") + (b._jump ? " · 눌러서 그 줄로 이동" : ""));
+  });
 }
 
 // 확인 창(취소/확인). 확인을 누르면 true.

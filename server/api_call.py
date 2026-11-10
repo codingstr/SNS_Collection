@@ -20,8 +20,8 @@ from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from auth import user_by_session
-from collector import collector, get_login_state
-from collector.runner import AUTO_EVERY_MS
+from collector import SearchCancelled, collector, get_login_state
+from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS
 from db import get_db
 
 router = APIRouter()
@@ -35,7 +35,8 @@ HANDLE_OK = re.compile(r"^[^\s/?#@]{1,60}$")
 CHANNEL_OK = re.compile(r"^UC[\w-]{22}$")
 RESOLVE_OK = re.compile(r"^https://www\.youtube\.com/(c|user)/[^/?#]+$")
 
-COLLECTOR_OPS = ("checkNow", "checkLogin", "cancelCheck", "searchAccount", "fetchPost")
+COLLECTOR_OPS = ("checkNow", "checkLogin", "cancelCheck", "searchAccount", "cancelSearch", "fetchPost")
+SID_OK = re.compile(r"^[A-Za-z0-9_-]{8,40}$")   # 화면이 검색마다 붙이는 검색 번호
 AVATAR_MAX = 80000                 # 계정 사진 캐시에 넣는 데이터 주소 최대 길이(글자)
 
 
@@ -222,7 +223,7 @@ def handle_collector(uid: str, op: str, p: dict):
         return True
     if op == "checkLogin":
         plats = p.get("platforms") if isinstance(p.get("platforms"), list) else []
-        collector.request_login_check([x for x in plats if x in PLATFORMS])
+        collector.request_login_check([x for x in plats if x in LOGIN_ACCTS])   # 수집용(x)·검색용(x-search) 계정
         return True
     if op == "cancelCheck":
         collector.cancel(uid)
@@ -231,14 +232,26 @@ def handle_collector(uid: str, op: str, p: dict):
         q = p.get("q").strip()[:60] if isinstance(p.get("q"), str) else ""
         if not q or p.get("platform") not in PLATFORMS:
             raise OpError("검색어나 매체가 올바르지 않습니다.")
+        sid = p.get("sid") if isinstance(p.get("sid"), str) and SID_OK.match(p.get("sid")) else ""
+        key = (uid, sid) if sid else None   # 검색 번호가 없으면(예전 화면) 취소할 수 없는 검색
         try:
-            results = collector.run_blocking({"kind": "search", "platform": p["platform"], "q": q}, 60)
+            results = collector.run_blocking({"kind": "search", "platform": p["platform"], "q": q}, 60, key)
+        except SearchCancelled:
+            raise OpError("검색을 취소했습니다.")
         except Exception as e:
             raise OpError(str(e))
+        if collector.is_search_cancelled(key):
+            raise OpError("검색을 취소했습니다.")   # 결과는 나왔지만 그사이 취소함: 사진 받기도 하지 않음
         with ThreadPoolExecutor(8) as ex:
             pics = list(ex.map(inline_image, [r["avatar"] for r in results]))
         save_avatars(p["platform"], results, pics)
         return [{**r, "avatarUrl": r["avatar"], "avatar": pic or r["avatar"]} for r, pic in zip(results, pics)]
+    if op == "cancelSearch":
+        sid = p.get("sid") if isinstance(p.get("sid"), str) else ""
+        if not SID_OK.match(sid):
+            raise OpError("검색 번호가 올바르지 않습니다.")
+        collector.cancel_search(uid, sid)   # 자기 검색만 취소할 수 있습니다(사용자 ID가 열쇠에 들어감)
+        return True
     if op == "fetchPost":
         url = p.get("url") if isinstance(p.get("url"), str) else ""
         if not re.match(r"^https://www\.youtube\.com/post/[\w-]{10,60}$", url):

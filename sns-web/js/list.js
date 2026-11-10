@@ -140,6 +140,8 @@ function embedFor(it) {
   const u = it.url || "";
   let m;
   if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "16 / 9" };
+  // 쇼츠는 세로 화면(9:16)으로 보여 줍니다
+  if (it.source === "youtube-video" && (m = /youtube\.com\/shorts\/([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "9 / 16" };
   if (it.source === "x" && (m = /\/status\/(\d+)/.exec(u))) return { src: "https://platform.twitter.com/embed/Tweet.html?id=" + m[1] + "&dnt=true&lang=ko&theme=" + (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"), h: 420, tweet: m[1] };
   if (it.source === "instagram" && (m = /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(u))) return { src: "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed", h: 700 };
   return null;
@@ -259,6 +261,7 @@ function openItem(it) {
   const frame = () => {
     const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
     if (e.ratio) f.style.aspectRatio = e.ratio; else f.style.height = e.h + "px";
+    if (e.ratio === "9 / 16") { f.style.width = "min(100%, calc(78vh * 9 / 16))"; f.style.margin = "0 auto"; f.style.borderRadius = "12px"; } // 세로 쇼츠가 화면보다 길어지지 않게
     return f;
   };
   if (it.source === "x" && e.tweet) {
@@ -667,6 +670,8 @@ function renderList() {
         const unread = r.list.some((it) => !seen.has(it.id));
         const b = el("button", { type: "button", class: (focusName === r.name ? "active" : "") + (unread ? " new" : ""), "aria-label": label + " " + r.list.length + "건" + (unread ? ", 안 읽은 글 있음" : "") + (focusName ? "" : " · 눌러서 그 줄로 이동") },
           [picFace(chosen, label.replace(/^@/, ""), "pface"), el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(r.list.length) })]);
+        b._ids = r.list.map((it) => it.id);   // 읽음이 바뀌면 refreshSideUnread가 빨간 점을 다시 맞춥니다
+        b._label = label; b._n = r.list.length; b._jump = !focusName;
         if (!focusName) b.addEventListener("click", () => jumpToPerson(r.name));
         bar.appendChild(b);
       });

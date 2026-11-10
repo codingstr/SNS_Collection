@@ -234,7 +234,16 @@ renderAll();
 /* ---------- 통합 검색: 입력 + Enter(또는 돋보기)로 선택한 매체 전부에서 계정 검색 ---------- */
 (function () {
   const q = $("q"), go = $("sGo"), box = $("sResults");
-  let busy = false;
+  // 지금 진행 중인 검색: { seq: 검색 순번, sid: 서버에 보내는 검색 번호, ctl: 요청을 끊는 AbortController }
+  // 검색창을 닫거나 새로 검색하면 이 검색을 취소합니다(브라우저 요청을 끊고 서버에도 cancelSearch를 보냄).
+  let cur = null, searchSeq = 0;
+  const newSid = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
+  const cancelCur = (leaving) => {
+    if (!cur) return;
+    const c = cur; cur = null;
+    c.ctl.abort();
+    call("cancelSearch", { sid: c.sid }, 0, leaving ? { keepalive: true } : undefined).catch(() => {});
+  };
   // 좁은 화면(칸이 위아래로 쌓일 때)에서는 결과 상자 안이 아니라 바깥 오른쪽에 둥근 스크롤 막대를 둡니다(보이는 건 CSS가 결정).
   const rail = document.createElement("div"), thumb = document.createElement("i");
   rail.className = "sr-rail"; rail.hidden = true; rail.appendChild(thumb); box.parentNode.appendChild(rail);
@@ -267,7 +276,19 @@ renderAll();
     const r = rail.getBoundingClientRect(), frac = (ev.clientY - r.top - PAD) / Math.max(1, r.height - PAD * 2);
     box.scrollTop = frac * (box.scrollHeight - box.clientHeight);
   });
-  const close = () => { box.hidden = true; };
+  const close = () => { cancelCur(); box.hidden = true; };
+  // 페이지를 떠나면 서버의 검색도 멈춥니다. 뒤로 가기로 이 화면이 그대로 돌아오면(브라우저가 보관해 둔 화면)
+  // '찾는 중…'으로 멈춰 있는 매체를 '중단됨'으로 바꿔, 계속 기다리는 것처럼 보이지 않게 합니다.
+  let leftMidSearch = false;
+  window.addEventListener("pagehide", () => { if (cur) { leftMidSearch = true; cancelCur(true); } });
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted || !leftMidSearch) return;
+    leftMidSearch = false;
+    box.querySelectorAll(".sr-wait").forEach((n) => {
+      n.classList.remove("sr-wait"); n.textContent = "";
+      n.appendChild(el("p", { class: "hint", text: "페이지를 떠나 있는 동안 검색이 중단되었습니다. 다시 찾으려면 Enter를 누르세요." }));
+    });
+  });
   go.hidden = false; // (예전에는 1초마다 다시 켰지만 숨기는 곳이 없어 한 번이면 됩니다)
   const section = (p) => {
     const sec = el("div", { class: "sr-sec" });
@@ -279,7 +300,9 @@ renderAll();
   const run = async () => {
     const name = q.value.trim();
     if (!name) return;
-    if (busy) { toast("계정을 찾는 중입니다. 끝난 뒤 다시 검색하세요."); return; }
+    cancelCur(); // 진행 중인 검색이 있으면 취소하고 새로 시작합니다
+    const my = { seq: ++searchSeq, sid: newSid(), ctl: new AbortController() };
+    const live = () => cur === my; // 이 검색이 아직 화면에 보이는 검색인지(아니면 늦게 온 결과는 버림)
     box.hidden = false; box.textContent = "";
     if (!connected) { box.appendChild(el("p", { class: "hint", text: "로그인해야 계정을 찾을 수 있습니다." })); return; }
     const head = el("div", { class: "sr-head" }, [el("b", { text: "“" + name + "” 계정 찾기" })]);
@@ -293,30 +316,39 @@ renderAll();
       fillResults(section(r.account.platform), r.account.platform, [{ acc: r.account, desc: "프로필 주소로 바로 추가" }]);
       return;
     }
-    busy = true; go.disabled = true;
-    try {
-      for (const p of ["instagram", "x", "youtube"].filter((p) => searchPlats.includes(p))) {
-        const body = section(p);
-        // @아이디: 검색 결과와 함께 '바로 추가' 항목을 맨 위에 둡니다(검색이 막힌 매체도 추가할 수 있게).
-        const direct = name.startsWith("@") ? parseAccount(p, name) : null;
-        if (direct && direct.account) fillResults(body, p, [{ acc: direct.account, desc: "검색 없이 바로 추가" }]);
-        const res = el("div");
-        res.appendChild(el("p", { class: "hint", text: "서버에서 " + PLATFORM[p] + " 계정을 찾는 중… (10~30초)" }));
-        body.appendChild(res);
-        try {
-          let list = await call("searchAccount", { platform: p, q: name }, LONG_WAIT);
-          if (direct && direct.account) list = list.filter((r) => p + ":" + (r.handle || r.channelId).toLowerCase() !== direct.account.id);
-          res.textContent = "";
-          if (direct && direct.account && !list.length) continue;
-          fillResults(res, p, list);
-        } catch (e) { res.textContent = ""; res.appendChild(el("p", { class: "hint", text: "검색하지 못했습니다: " + ((e && e.message) || "오류") })); }
+    cur = my;
+    // 매체(인스타·X·유튜브)마다 요청을 한꺼번에 보냅니다. 서버는 매체별 크롬에서 동시에 찾고, 끝난 매체부터 결과가 옵니다.
+    // 칸은 처음에 정해진 순서로 모두 만들어 두므로, 결과가 오는 순서와 관계없이 자리가 바뀌지 않습니다.
+    const one = async (p) => {
+      const body = section(p);
+      // @아이디: 검색 결과와 함께 '바로 추가' 항목을 맨 위에 둡니다(검색이 막힌 매체도 추가할 수 있게).
+      const direct = name.startsWith("@") ? parseAccount(p, name) : null;
+      if (direct && direct.account) fillResults(body, p, [{ acc: direct.account, desc: "검색 없이 바로 추가" }]);
+      const res = el("div", { class: "sr-wait" });
+      res.appendChild(el("p", { class: "hint", text: "서버에서 " + PLATFORM[p] + " 계정을 찾는 중… (10~30초)" }));
+      body.appendChild(res);
+      try {
+        let list = await call("searchAccount", { platform: p, q: name, sid: my.sid }, LONG_WAIT, { signal: my.ctl.signal });
+        if (!live()) return; // 그사이 닫았거나 새로 검색함: 이 결과는 쓰지 않습니다
+        if (direct && direct.account) list = list.filter((r) => p + ":" + (r.handle || r.channelId).toLowerCase() !== direct.account.id);
+        res.classList.remove("sr-wait"); res.textContent = "";
+        if (direct && direct.account && !list.length) return;
+        fillResults(res, p, list);
+      } catch (e) {
+        if (!live()) return;
+        res.classList.remove("sr-wait"); res.textContent = "";
+        res.appendChild(el("p", { class: "hint", text: "검색하지 못했습니다: " + ((e && e.message) || "오류") }));
       }
-    } finally { busy = false; go.disabled = false; }
+    };
+    try {
+      await Promise.all(["instagram", "x", "youtube"].filter((p) => searchPlats.includes(p)).map(one));
+    } finally { if (cur === my) cur = null; }
   };
   go.addEventListener("click", run);
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
-  document.addEventListener("click", (e) => { if (!busy && !e.composedPath().some((n) => n.classList && (n.classList.contains("sbox") || n.classList.contains("modal-back")))) close(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !busy && !document.querySelector(".modal-back:not([hidden])")) close(); });
+  // 바깥 클릭: 검색 중에는 닫지 않습니다(잘못 눌러 30초 넘게 걸린 검색이 취소되지 않게). 닫기(×)·Esc는 검색 중에도 닫고 취소합니다.
+  document.addEventListener("click", (e) => { if (!cur && !e.composedPath().some((n) => n.classList && (n.classList.contains("sbox") || n.classList.contains("modal-back")))) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !box.hidden && !document.querySelector(".modal-back:not([hidden])")) close(); });
 })();
 
 /* ---------- 상단 홈 / 추적 계정 관리 버튼 ---------- */
@@ -438,19 +470,11 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   };
   const place = () => {
     raf = 0;
-    // 추적 계정 관리 화면(넓은 화면): 오른쪽 열이 없으므로, 관리 칸 제목 줄 오른쪽 끝의 빈 자리(.mg-tools)에 버튼 줄을 넣습니다.
-    const slot = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden]) .mg-tools") : null;
-    const inPanel = !!(slot && slot.offsetParent !== null);
+    // 추적 계정 관리 화면(넓은 화면): 오른쪽 열이 없으므로 버튼 줄을 숨깁니다(bento.css의 .toolbar.inpanel).
+    const tp = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden])") : null;
+    const inPanel = !!(tp && tp.offsetParent !== null);
     tb.classList.toggle("inpanel", inPanel);
-    if (inPanel) {
-      slot.style.width = tb.offsetWidth + "px";
-      slot.style.height = tb.offsetHeight + "px";
-      const o = originOf(), s = slot.getBoundingClientRect();
-      tb.style.setProperty("top", Math.round(s.top - o.top) + "px", "important");
-      tb.style.setProperty("left", Math.round(s.left - o.left) + "px", "important");
-      tb.style.setProperty("right", "auto", "important");
-      return;
-    }
+    if (inPanel) { tb.style.removeProperty("top"); tb.style.removeProperty("left"); tb.style.removeProperty("right"); return; }
     tb.style.removeProperty("left"); tb.style.removeProperty("right");
     const on = window.innerWidth >= 861 && !wc.hidden && wc.offsetParent !== null;
     if (!on) { tb.style.removeProperty("top"); return; }

@@ -9,6 +9,7 @@
   크롬 로그인 정보는 만든 컴퓨터에서만 풀리므로, 외장 SSD를 여러 컴퓨터에서 써도 되게 컴퓨터마다 따로 둡니다.
 """
 import asyncio
+import heapq
 import itertools
 import json
 import logging
@@ -41,7 +42,13 @@ MAX_ITEMS = 20000                 # DB에 남길 글 수(넘으면 오래 전에
 
 DEEP_WAIT, SHALLOW_WAIT = 510, 40   # 페이지 하나당 최대 대기(초): 지금 최신화 / 자동 확인
 SEARCH_WAIT, POST_WAIT, LOGIN_WAIT = 30, 30, 15
-IDLE_CLOSE = 120                  # 할 일이 없으면 2분 뒤 크롬 창을 닫습니다
+SEARCH_CANCEL_KEEP = 180          # 취소한 검색 번호를 기억하는 시간(초): 취소가 검색 요청보다 먼저 도착해도 그 검색을 막음
+SEARCH_CANCEL_PER_USER = 20       # 사용자 한 명이 남길 수 있는 취소 기록 수(넘으면 그 사용자의 오래된 것부터 지움)
+SEARCH_CANCEL_MAX = 2000          # 전체 취소 기록 수 상한(넘으면 가장 오래된 것부터 지움)
+SEARCH_BATCH_TAKE = 40            # 동시 검색 묶음이 새 검색을 받아들이는 시간(초). 검색이 끝없이 이어져도 게시물 읽기 등이 밀리지 않게
+# 같은 매체의 검색 페이지를 다시 열기 전 최소 간격(초). 검색을 연달아 다시 하거나(취소 후 새 검색) 여러 사람이 잇달아 찾아도
+# X·인스타 테스트 계정으로 요청이 몰리지 않게 합니다(봇 탐지 방지). 유튜브는 로그인 없이 찾으므로 기다리지 않습니다.
+SEARCH_MIN_GAP = {"youtube": 0.0, "x": 2.0, "instagram": 2.0}
 AUTO_EVERY_MS = 30 * 60000        # 자동 수집 주기(30분): 서버가 켜져 있으면 모든 사용자의 추적 계정을 모읍니다
 AUTO_LABEL = "30분마다"           # 화면에 보이는 자동 수집 주기 문구
 AUTO_FIRST_DELAY = 60             # 서버를 켠 뒤 첫 자동 수집까지 최소 대기(초)
@@ -61,6 +68,73 @@ IG_DATES_MAX = 6000               # 인스타 게시물 날짜(응답에서 읽�
 ALL = "*"                         # 수집 대상: 추적 계정 전체
 
 LOGIN_URLS = {"youtube": "https://www.youtube.com/", "x": "https://x.com/home", "instagram": "https://www.instagram.com/"}
+# 테스트 계정: X·인스타는 수집용과 계정 검색용을 따로 둡니다. 검색(짧은 간격의 검색 요청)은 봇처럼 보이기 쉬워서,
+# 검색 계정이 막혀도 수집 계정은 살아 있게 하려고 나눕니다. 유튜브는 로그인 없이 쓰므로 계정이 없습니다.
+#   계정 이름: x, instagram(수집용) / x-search, instagram-search(검색용) — 로그인 상태도 이 이름으로 따로 기록
+SEARCH_ACCTS = {"x": "x-search", "instagram": "instagram-search"}
+LOGIN_ACCTS = ("youtube", "x", "instagram", *SEARCH_ACCTS.values())
+# 크롬 프로필은 둘(server/profiles/<컴퓨터 이름>/<프로필>). 한 프로필에 X·인스타를 함께 로그인해 둡니다(사이트마다 쿠키가 따로).
+# 프로필마다 하는 일별로 창을 하나씩 고정해 둡니다(탭이 아니라 창: 뒤에 깔린 탭은 화면을 그리지 않아 스크롤 수집이 멈춤).
+#   collect(수집용 X·인스타 계정): 유튜브 영상 / 유튜브 쇼츠 / 유튜브 게시물(수집 + 웹에서 게시물을 열 때 읽기) / X / 인스타
+#   search (검색용 X·인스타 계정): 유튜브 검색 / X 검색 / 인스타 검색
+# 그래서 크롬 창은 8개이고, 같은 창을 두 일이 동시에 쓰려 하면 새 창을 더 열지 않고 뒤의 일을 잠깐 기다리게 합니다(_conflicts).
+# 일이 없어도 창은 닫지 않습니다. 누가 닫았거나 크롬이 꺼졌으면 다음에 쓸 때 다시 엽니다.
+PROFILE_COLLECT, PROFILE_SEARCH = "collect", "search"
+SETUP_MARK = "sns_login_setup.json"   # login_setup이 프로필 안에 남기는 표시: 그 프로필에서 로그인 창을 연 매체들
+YT_TABS = ("videos", "shorts", "posts")   # 유튜브 채널에서 모으는 탭(탭마다 수집 창이 따로)
+YT_READ = "youtube.posts"              # 유튜브 게시물 읽기도 게시물 수집 창에서(게시물 탭을 모으는 중이면 그 페이지가 끝난 뒤에 읽음)
+# 서버 PC 화면 8분할에서 창마다 놓는 칸(왼쪽 위부터 가로로 0~3, 아랫줄 4~7. winpos.grid)
+#   윗줄: 수집 유튜브 영상 · 수집 유튜브 쇼츠 · 수집 유튜브 게시물 · 검색 유튜브
+#   아랫줄: 수집 X · 수집 인스타 · 검색 X · 검색 인스타
+SLOTS = {"collect:youtube.videos": 0, "collect:youtube.shorts": 1, "collect:youtube.posts": 2, "search:youtube": 3,
+         "collect:x": 4, "collect:instagram": 5, "search:x": 6, "search:instagram": 7}
+
+
+def page_key(profile: str, window: str) -> str:
+    """창 하나를 가리키는 이름: '프로필:창' (예: search:x, collect:youtube.shorts)"""
+    return f"{profile}:{window}"
+
+
+def key_profile(key: str) -> str:
+    return key.split(":", 1)[0]
+
+
+def key_platform(key: str) -> str:
+    """창 → 매체 (collect:youtube.shorts → youtube)"""
+    return key.split(":", 1)[1].split(".", 1)[0]
+
+
+def lane_of(platform: str, url: str) -> str:
+    """수집할 페이지 → 그 페이지를 여는 수집 창(= 수집 줄). 유튜브는 탭마다(영상·쇼츠·게시물) 따로, 나머지는 매체마다 하나."""
+    if platform == "youtube":
+        tab = url.rstrip("/").rsplit("/", 1)[-1]
+        return "youtube." + (tab if tab in YT_TABS else "videos")
+    return platform
+
+
+def key_acct(key: str) -> str:
+    """창이 쓰는 계정 이름(로그인 상태 기록용). search:x → x-search, collect:x → x, search:youtube → youtube"""
+    p = key_platform(key)
+    return SEARCH_ACCTS.get(p, p) if key_profile(key) == PROFILE_SEARCH else p
+
+
+def acct_key(acct: str) -> str:
+    """계정 → 그 계정의 창 (x-search → search:x)"""
+    return page_key(PROFILE_SEARCH if acct.endswith("-search") else PROFILE_COLLECT, acct_platform(acct))
+
+
+def acct_platform(acct: str) -> str:
+    """계정 이름 → 매체 (x-search → x)"""
+    return acct.split("-", 1)[0]
+
+
+def acct_ko(acct: str) -> str:
+    return PLATFORM_KO.get(acct_platform(acct), acct) + (" 검색용" if acct.endswith("-search") else "")
+
+
+def search_acct(platform: str) -> str:
+    """계정 검색에 쓰는 계정(프로필)"""
+    return SEARCH_ACCTS.get(platform, platform)
 
 SOURCES = {"youtube-video", "youtube-post", "x", "instagram"}
 URL_OK = re.compile(r"^https://(www\.youtube\.com|x\.com|twitter\.com|www\.instagram\.com)/")
@@ -432,7 +506,7 @@ def reset_running():
 
 # ---------- 방문할 주소 ----------
 def page_urls(t: dict) -> list:
-    """방문할 주소(확장의 pageUrls와 같음). 유튜브 채널은 영상 탭과 게시물 탭 두 곳입니다."""
+    """방문할 주소. 유튜브 채널은 영상·쇼츠·게시물 탭 세 곳입니다(쇼츠는 영상 탭에 나오지 않아 따로 모음)."""
     p = t.get("platform")
     if t.get("kind") == "feed":
         return []  # "내 피드"는 지원하지 않습니다(서버 테스트 계정의 피드가 되기 때문)
@@ -443,7 +517,7 @@ def page_urls(t: dict) -> list:
     h = quote(handle, safe="")
     if p == "youtube":
         base = ("https://www.youtube.com/@" + h) if handle else ("https://www.youtube.com/channel/" + cid) if CHANNEL_OK.match(cid) else legacy
-        return [base + "/videos", base + "/posts"] if base else []
+        return [base + "/videos", base + "/shorts", base + "/posts"] if base else []
     if p == "x":
         return ["https://x.com/" + h]
     if p == "instagram":
@@ -488,21 +562,30 @@ def clean_post(p):
     }
 
 
+class SearchCancelled(Exception):
+    """사용자가 검색을 취소함(검색창을 닫았거나 새로 검색함)."""
+
+
 # ---------- 작업 스레드 ----------
 class Collector:
     def __init__(self):
         self.q = queue.PriorityQueue()   # (우선순위, 순번, 작업)  0 = 검색 등 급한 일, 1 = 수집, 2 = 자동 수집
         self.seq = itertools.count()
         self.pw = None
-        self.ctxs, self.pages = {}, {}
+        self.ctxs = {}                   # 프로필(collect/search) → 크롬(Playwright 컨텍스트)
+        self.pages = {}                  # 창 이름('프로필:매체') → 그 매체의 기본 창
         self.last_used = 0.0
         self.curs = {}                   # 페이지 → 그 페이지의 수집 상태(스크립트가 보낸 메시지를 받음)
-        self.busy = set()                # 지금 수집에 쓰이고 있는 매체(그 매체의 기본 창)
+        self.busy = set()                # 지금 쓰이고 있는 기본 창('프로필:매체')
         self.depth = 0                   # 페이지 방문이 겹친 깊이(바깥 방문 중에만 급한 일을 끼워 처리)
         self.lock = threading.Lock()
         self.queued_users = set()        # 수집 대기/진행 중인 사용자
         self.pending = {}                # 사용자 → 모을 계정(ALL 또는 계정 ID 집합). 수집 중에 들어온 요청은 여기 모았다가 이어서 처리
         self.cancel_users = set()
+        self.searches = {}               # (사용자, 검색 번호) → 대기/진행 중인 검색 작업들
+        self.cancelled_searches = OrderedDict()   # (사용자, 검색 번호) → 취소한 시각(초). 오래된 것이 앞
+        self.grid = None                 # 8분할 배치(winpos.grid). 크롬을 처음 띄울 때 정함
+        self.last_open = {}            # 매체 → 마지막으로 그 매체 페이지를 연 시각(초, 수집·검색 계정 합쳐서). SEARCH_MIN_GAP에 씀
         self.recent = {}                 # 페이지 주소 → (마지막 수집 시각, mode, 가져온 기간(일))
         self.login_busy = False
         self.bundles = {}
@@ -521,7 +604,17 @@ class Collector:
         self.next_auto = max(last + AUTO_EVERY_MS / 1000, time.time() + AUTO_FIRST_DELAY)
         # 관리자가 login_setup으로 로그인한 뒤 서버를 다시 켰을 수 있으니, 로그인 안 됨/모름으로 남은 매체는 켜자마자 다시 확인합니다.
         st = get_login_state()
-        recheck = [p for p in ("x", "instagram") if p in st and st[p].get("loggedIn") is not True]
+        recheck = []
+        # X·인스타 수집용·검색용 계정: login_setup으로 로그인 창을 연 적이 없으면 창을 열지 않고 '로그인 안 됨'으로,
+        # 열었는데 로그인됨으로 확인되지 않았으면 켜자마자 확인합니다.
+        # 마지막 확인 뒤에 login_setup을 다시 했으면(로그인을 새로 했거나 계정을 바꿨을 수 있음) '로그인됨'이어도 다시 확인합니다.
+        for a in ("x", "instagram", *SEARCH_ACCTS.values()):
+            s = st.get(a) or {}
+            if not self._profile_ready(a):
+                if s.get("loggedIn") is not False:
+                    set_login(a, False)
+            elif s.get("loggedIn") is not True or self._setup_time(a) * 1000 > (s.get("at") or 0):
+                recheck.append(a)
         if recheck:
             self.request_login_check(recheck)
         self.thread = threading.Thread(target=self._loop, name="collector", daemon=True)
@@ -551,18 +644,82 @@ class Collector:
         if self.login_busy:
             return
         self.login_busy = True
-        self.q.put((0, next(self.seq), {"kind": "login", "platforms": [p for p in platforms if p in PLATFORMS] or list(PLATFORMS)}))
+        self.q.put((0, next(self.seq), {"kind": "login", "platforms": [p for p in platforms if p in LOGIN_ACCTS] or list(PLATFORMS)}))
 
-    def run_blocking(self, job: dict, timeout: float):
-        """검색·게시물 읽기처럼 결과가 필요한 작업: 큐 맨 앞에 넣고 끝날 때까지 기다립니다."""
+    @staticmethod
+    def _profile_ready(acct: str) -> bool:
+        """login_setup으로 이 계정에 로그인 창을 연 적이 있는지(없으면 로그인이 안 된 것이 확실). 유튜브는 로그인이 필요 없음.
+        프로필 폴더가 있는지로는 알 수 없습니다(유튜브 검색만 해도 검색용 프로필 폴더가 생김). login_setup이 남기는 표시를 봅니다."""
+        return acct_platform(acct) == "youtube" or Collector._setup_time(acct) > 0
+
+    @staticmethod
+    def _setup_time(acct: str) -> float:
+        """login_setup으로 이 계정 로그인 창을 마지막으로 연 시각(초). 없으면 0."""
+        try:
+            done = json.loads((PROFILES / key_profile(acct_key(acct)) / SETUP_MARK).read_text(encoding="utf-8"))
+            return float(done.get(acct_platform(acct)) or 0) if isinstance(done, dict) else 0.0
+        except Exception:
+            return 0.0
+
+    def run_blocking(self, job: dict, timeout: float, key=None):
+        """검색·게시물 읽기처럼 결과가 필요한 작업: 큐 맨 앞에 넣고 끝날 때까지 기다립니다.
+        key=(사용자, 검색 번호)를 주면 cancel_search로 취소할 수 있습니다(취소되면 SearchCancelled)."""
         job["event"] = threading.Event()
-        self.q.put((0, next(self.seq), job))
-        if not job["event"].wait(timeout):
-            job["abandoned"] = True  # 아직 시작 전이면 건너뜁니다(기다리던 화면은 이미 오류를 받음)
-            raise TimeoutError("서버 수집기가 바빠서 시간 안에 끝내지 못했습니다. 잠시 뒤 다시 시도하세요.")
+        if key:
+            with self.lock:
+                self._prune_cancelled()
+                if key in self.cancelled_searches:
+                    raise SearchCancelled()   # 취소가 먼저 도착함: 큐에 넣지도 않습니다
+                self.searches.setdefault(key, []).append(job)
+        try:
+            self.q.put((0, next(self.seq), job))
+            if not job["event"].wait(timeout):
+                job["abandoned"] = True  # 아직 시작 전이면 건너뛰고, 진행 중이면 멈춥니다(기다리던 화면은 이미 오류를 받음)
+                raise TimeoutError("서버 수집기가 바빠서 시간 안에 끝내지 못했습니다. 잠시 뒤 다시 시도하세요.")
+        finally:
+            if key:
+                with self.lock:
+                    jobs = self.searches.get(key)
+                    if jobs and job in jobs:
+                        jobs.remove(job)
+                        if not jobs:
+                            self.searches.pop(key, None)
+        if job.get("cancelled"):
+            raise SearchCancelled()
         if job.get("error"):
             raise RuntimeError(job["error"])
         return job.get("result")
+
+    def cancel_search(self, uid: str, sid: str):
+        """검색 취소: 아직 시작 전인 검색은 건너뛰고, 진행 중인 검색은 다음 확인(0.25초 간격) 때 멈춥니다.
+        기다리던 웹 요청은 바로 풀어 줍니다. 같은 번호로 뒤늦게 들어오는 검색도 막습니다."""
+        key = (uid, sid)
+        with self.lock:
+            self._prune_cancelled()
+            self.cancelled_searches.pop(key, None)
+            self.cancelled_searches[key] = time.time()   # 맨 뒤(가장 최근)로
+            # 아무 번호로 취소를 잔뜩 보내도 기록이 끝없이 늘지 않게: 사용자별·전체 상한
+            mine = [k for k in self.cancelled_searches if k[0] == uid]
+            for k in mine[:-SEARCH_CANCEL_PER_USER]:
+                del self.cancelled_searches[k]
+            while len(self.cancelled_searches) > SEARCH_CANCEL_MAX:
+                self.cancelled_searches.popitem(last=False)
+            jobs = list(self.searches.get(key, ()))
+        for job in jobs:
+            job["cancelled"] = True
+            job["abandoned"] = True
+            job["event"].set()
+        return len(jobs)
+
+    def is_search_cancelled(self, key) -> bool:
+        with self.lock:
+            return bool(key) and key in self.cancelled_searches
+
+    def _prune_cancelled(self):
+        """오래된 취소 기록을 지웁니다(self.lock을 잡은 채로 부름)."""
+        old = time.time() - SEARCH_CANCEL_KEEP
+        while self.cancelled_searches and next(iter(self.cancelled_searches.values())) < old:
+            self.cancelled_searches.popitem(last=False)
 
     # ----- 작업 스레드 -----
     @staticmethod
@@ -589,9 +746,7 @@ class Collector:
             try:
                 _, _, job = self.q.get(timeout=5)
             except queue.Empty:
-                if self.pw and time.time() - self.last_used > IDLE_CLOSE:
-                    self._close_all()
-                continue
+                continue   # 할 일이 없어도 크롬 창은 닫지 않습니다(닫혀 있으면 다음에 쓸 때 다시 엶)
             self._exec(job)
 
     def _exec(self, job):
@@ -605,7 +760,7 @@ class Collector:
             elif kind == "auto":
                 self._auto()
             elif kind == "search":
-                job["result"] = self._search(job["platform"], job["q"])
+                self._search_batch(job)   # 다른 매체의 검색도 큐에서 함께 가져와 동시에 진행
             elif kind == "post":
                 job["result"] = self._post(job["url"])
             elif kind == "login":
@@ -623,20 +778,33 @@ class Collector:
             if job.get("event"):
                 job["event"].set()
 
-    def _run_urgent(self, upto: int = 0):
-        """수집 중간에 들어온 급한 일을 먼저 처리합니다. upto=0: 검색 등만, upto=1: 사용자 수집 요청까지."""
-        held = []
+    def _conflicts(self, job) -> bool:
+        """이 일이 써야 하는 창이 지금 바깥에서 하던 일에 쓰이는 중인지. 그러면 새 창을 더 열지 않고, 그 일이 끝난 뒤로 미룹니다
+        (창 수를 8개로 고정). 예: 검색용 계정 로그인 확인 중에 같은 매체 검색, 게시물 탭을 모으거나 다른 게시물을 읽는 중에 게시물 읽기."""
+        k = job.get("kind")
+        if k == "search":
+            return page_key(PROFILE_SEARCH, job.get("platform") or "") in self.busy
+        if k == "post":
+            return page_key(PROFILE_COLLECT, YT_READ) in self.busy
+        return False
+
+    def _run_urgent(self, upto: int = 0) -> int:
+        """수집 중간에 들어온 급한 일을 먼저 처리합니다. upto=0: 검색 등만, upto=1: 사용자 수집 요청까지.
+        쓸 창이 지금 쓰이는 일은 미뤄 둡니다(_conflicts). 처리한 일의 수를 돌려줍니다."""
+        held, done = [], 0
         while True:
             try:
                 item = self.q.get_nowait()
             except queue.Empty:
                 break
-            if item[0] <= upto:
+            if item[0] <= upto and not self._conflicts(item[2]):
                 self._exec(item[2])
+                done += 1
             else:
                 held.append(item)
         for item in held:
             self.q.put(item)
+        return done
 
     def _has_urgent(self) -> bool:
         with self.q.mutex:
@@ -665,11 +833,21 @@ class Collector:
             self.bundles[platform] = SHIM.replace("__CODE__", code)
         return self.bundles[platform]
 
-    def _launch(self, platform: str):
-        """매체별 크롬 프로필로 크롬을 띄웁니다. (테스트에서는 이 함수를 바꿔 씁니다)"""
-        d = PROFILES / platform
+    def _launch(self, profile: str):
+        """크롬 프로필(collect/search)로 크롬을 띄웁니다. (테스트에서는 이 함수를 바꿔 씁니다)"""
+        d = PROFILES / profile
         d.mkdir(parents=True, exist_ok=True)
-        kw = dict(user_data_dir=str(d), headless=False, no_viewport=True, args=CHROME_ARGS + winpos.corner_args(WIN_W, WIN_H),
+        if not self.ctxs:
+            # 두 크롬이 같은 배율이어야 칸이 맞으므로, 떠 있는 크롬이 없을 때만 화면을 다시 잽니다(해상도를 바꿨을 때 등).
+            self.grid = winpos.grid()
+        if self.grid:
+            # 8분할: 칸 크기 창 + 페이지가 1000×800을 보도록 낮춘 화면 배율. 처음 뜨는 창은 그 프로필의 첫 칸에.
+            x, y, w, h = self.grid["cells"][min(SLOTS.values()) if profile == PROFILE_COLLECT else SLOTS[page_key(profile, "youtube")]]
+            args = [a for a in CHROME_ARGS if not a.startswith("--window-size=")] + [
+                f"--force-device-scale-factor={self.grid['scale']}", f"--window-size={w},{h}", f"--window-position={x},{y}"]
+        else:
+            args = CHROME_ARGS + winpos.corner_args(WIN_W, WIN_H)
+        kw = dict(user_data_dir=str(d), headless=False, no_viewport=True, args=args,
                   ignore_default_args=["--enable-automation"])
         snap = winpos.snapshot()
         try:
@@ -679,24 +857,83 @@ class Collector:
                 raise
             log.warning("설치된 크롬으로 띄우지 못해 Playwright 기본 브라우저로 시도합니다: %s", str(e).splitlines()[0])
             ctx = self.pw.chromium.launch_persistent_context(**kw)
-        winpos.tuck(snap)   # 서버 PC에서 하던 작업을 가리지 않게 구석·맨 뒤로
+        winpos.tuck(snap, move=not self.grid)   # 서버 PC에서 하던 작업을 가리지 않게 맨 뒤로(8분할이 아니면 구석으로도)
         return ctx
 
-    def _context(self, platform: str):
+    def _context(self, profile: str):
         if not self.pw:
             from playwright.sync_api import sync_playwright
             self.pw = sync_playwright().start()
-        ctx = self.ctxs.get(platform)
+        ctx = self.ctxs.get(profile)
         if ctx is None:
-            ctx = self._launch(platform)
-            # 수집 스크립트의 메시지는 어느 페이지에서 왔는지와 함께 받습니다(수집 창과 검색 창이 동시에 열릴 수 있음).
+            ctx = self._launch(profile)
+            # 수집 스크립트의 메시지는 어느 페이지에서 왔는지와 함께 받습니다(한 프로필에 매체별 창이 여러 개).
             ctx.expose_binding("__snsBridge", lambda source, raw: self._on_msg(source.get("page"), raw))
             ctx.add_init_script(VISIBLE_JS)
-            ctx.on("close", lambda *_: (self.ctxs.pop(platform, None), self.pages.pop(platform, None)))
-            if platform == "instagram":
-                ctx.on("response", self._ig_on_response)
-            self.ctxs[platform] = ctx
+            ctx.on("close", lambda *_: self._forget_profile(profile, ctx))
+            if profile == PROFILE_COLLECT:
+                ctx.on("response", self._ig_on_response)   # 인스타 게시 날짜(수집 창만. 주소로 인스타 응답만 골라 둠)
+            self.ctxs[profile] = ctx
         return ctx
+
+    def _forget_profile(self, profile: str, ctx=None):
+        """프로필의 크롬이 닫혔을 때: 그 크롬과 그 안의 창 기록을 지웁니다(다시 쓸 때 새로 띄움)."""
+        if ctx is None or self.ctxs.get(profile) is ctx:
+            self.ctxs.pop(profile, None)
+        for k in [k for k in self.pages if key_profile(k) == profile]:
+            self.pages.pop(k, None)
+
+    @staticmethod
+    def _ctx_alive(ctx) -> bool:
+        """크롬이 아직 살아 있는지(창 하나만 닫힌 것과, 크롬 자체가 꺼진 것을 구별)."""
+        try:
+            ctx.cookies("https://www.youtube.com")
+            return True
+        except Exception:
+            return False
+
+    def _new_window(self, ctx):
+        """프로필 안에 새 창을 엽니다. 탭이 아니라 창으로 열어, 다른 매체의 창이 뒤로 숨어 화면 그리기(스크롤 불러오기)가 멈추지 않게 합니다."""
+        snap = winpos.snapshot()
+        base = next((pg for pg in ctx.pages if not pg.is_closed()), None)
+        if base is not None:
+            try:
+                cdp = ctx.new_cdp_session(base)
+                try:
+                    with ctx.expect_page(timeout=10000) as info:
+                        cdp.send("Target.createTarget", {"url": "about:blank", "newWindow": True, "background": True})
+                    winpos.tuck(snap, move=not self.grid)
+                    return info.value
+                finally:
+                    try:
+                        cdp.detach()
+                    except Exception:
+                        pass
+            except Exception as e:
+                log.info("새 창을 열지 못해 새 탭으로 엽니다: %s", str(e).splitlines()[0][:120])
+        page = ctx.new_page()   # 창이 하나도 없으면 새 창으로 열림
+        winpos.tuck(snap, move=not self.grid)
+        return page
+
+    def _place(self, key: str, page):
+        """8분할이면 그 창을 정해 둔 칸(SLOTS)에 놓습니다. 크롬에 직접 시키므로(창 위치 바꾸기) 페이지는 아무것도 모릅니다."""
+        slot = SLOTS.get(key)
+        if not self.grid or slot is None or slot >= len(self.grid["cells"]):
+            return
+        x, y, w, h = self.grid["cells"][slot]
+        try:
+            cdp = page.context.new_cdp_session(page)
+            try:
+                wid = cdp.send("Browser.getWindowForTarget")["windowId"]
+                cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}})   # 최대화·최소화돼 있으면 풀어야 옮겨짐
+                cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"left": x, "top": y, "width": w, "height": h}})
+            finally:
+                try:
+                    cdp.detach()
+                except Exception:
+                    pass
+        except Exception as e:
+            log.debug("%s 창을 칸에 놓지 못했습니다: %s", key, str(e).splitlines()[0][:120] if str(e) else e)
 
     # ----- 인스타 게시 날짜(응답 읽기) -----
     def _ig_on_response(self, r):
@@ -732,7 +969,7 @@ class Collector:
         if not new:
             return
         for page, cur in list(self.curs.items()):
-            if cur["platform"] == "instagram":
+            if (cur.get("acct") or cur["platform"]) == "instagram":   # 수집 창만(검색 창은 게시물 날짜가 필요 없음)
                 try:
                     if not page.is_closed():
                         page.evaluate(IG_DATES_JS, new)
@@ -764,10 +1001,10 @@ class Collector:
             h["miss"] = 0
         if alive:
             return ""
-        p, url = h["platform"], page.url
-        if p in ("x", "instagram") and LOGIN_WALL.match(url):
-            set_login(p, False)
-            return f"서버의 {PLATFORM_KO[p]} 테스트 계정 로그인이 풀려 로그인 화면으로 이동했습니다(관리자 확인 필요)"
+        acct, url = h.get("acct") or h["platform"], page.url
+        if acct_platform(acct) in ("x", "instagram") and LOGIN_WALL.match(url):
+            set_login(acct, False)
+            return f"서버의 {acct_ko(acct)} 테스트 계정 로그인이 풀려 로그인 화면으로 이동했습니다(관리자가 login_setup.bat {acct} 로 다시 로그인 필요)"
         return "페이지가 다른 주소로 이동해 수집이 끊겼습니다: " + url[:120]
 
     @staticmethod
@@ -779,75 +1016,48 @@ class Collector:
         except Exception:
             pass
 
-    def _page(self, platform: str, retry: bool = True):
-        ctx = self._context(platform)
+    def _page(self, key: str, retry: bool = True):
+        """그 매체의 기본 창('프로필:매체'). 없거나 닫혔으면, 프로필 안에서 아무 매체도 쓰지 않는 창(크롬을 켤 때 뜬 첫 창 등)을
+        쓰고, 그것도 없으면 새 창을 엽니다."""
+        ctx = self._context(key_profile(key))
         try:
-            page = self.pages.get(platform)
+            page = self.pages.get(key)
             if page is None or page.is_closed():
-                if ctx.pages:
-                    page = ctx.pages[0]
-                else:
-                    snap = winpos.snapshot()
-                    page = ctx.new_page()
-                    winpos.tuck(snap)
-                self.pages[platform] = page
+                used = set(self.pages.values()) | set(self.curs)   # 다른 매체의 기본 창, 잠깐 쓰는 창
+                page = next((pg for pg in ctx.pages if not pg.is_closed() and pg not in used), None) or self._new_window(ctx)
+                self.pages[key] = page
+                self._place(key, page)
             return page
         except Exception as e:
-            # 서버 PC에서 누가 크롬 창을 직접 닫으면, 수집기는 다음에 쓸 때야 알게 됩니다. 버리고 새로 띄웁니다.
+            # 서버 PC에서 누가 크롬을 직접 닫으면, 수집기는 다음에 쓸 때야 알게 됩니다. 버리고 새로 띄웁니다.
             if retry and is_closed_error(e):
-                log.info("%s 크롬 창이 닫혀 있어 다시 엽니다.", platform)
-                self._drop(platform)
-                return self._page(platform, retry=False)
+                log.info("%s 크롬 창이 닫혀 있어 다시 엽니다.", key)
+                self._drop(key)
+                return self._page(key, retry=False)
             raise
 
-    def _side_page(self, platform: str):
-        """같은 매체의 기본 창이 수집에 쓰이는 중일 때 잠깐 쓸 새 창. 탭이 아니라 창으로 열어,
-        수집 중인 창이 뒤로 숨어 화면 그리기(스크롤 불러오기)가 멈추지 않게 합니다."""
-        ctx = self._context(platform)
-        main = self.pages.get(platform)
-        snap = winpos.snapshot()
-        if main is not None and not main.is_closed():
-            try:
-                cdp = ctx.new_cdp_session(main)
-                try:
-                    with ctx.expect_page(timeout=10000) as info:
-                        cdp.send("Target.createTarget", {"url": "about:blank", "newWindow": True, "background": True})
-                    winpos.tuck(snap)
-                    return info.value
-                finally:
-                    try:
-                        cdp.detach()
-                    except Exception:
-                        pass
-            except Exception as e:
-                log.info("%s 새 창을 열지 못해 새 탭으로 엽니다: %s", platform, str(e).splitlines()[0][:120])
-        page = ctx.new_page()
-        winpos.tuck(snap)
-        return page
+    def _side_page(self, key: str):
+        """그 매체의 기본 창이 쓰이는 중일 때 잠깐 쓸 새 창(쓰고 나면 닫음)."""
+        return self._new_window(self._context(key_profile(key)))
 
-    def _drop(self, platform: str):
-        ctx = self.ctxs.pop(platform, None)
-        self.pages.pop(platform, None)
-        if ctx is not None:
+    def _drop(self, key: str):
+        """그 매체의 기본 창을 버립니다. 크롬 자체가 꺼졌으면 프로필의 크롬도 버립니다(같은 프로필의 다른 매체 창은,
+        크롬이 살아 있으면 건드리지 않음: 서버 PC에서 창 하나만 닫아도 다른 매체 수집이 끊기지 않게)."""
+        page = self.pages.pop(key, None)
+        if page is not None:
+            try:
+                page.close()
+            except Exception:
+                pass
+        profile = key_profile(key)
+        ctx = self.ctxs.get(profile)
+        if ctx is not None and not self._ctx_alive(ctx):
+            self._forget_profile(profile, ctx)
             try:
                 ctx.close()
             except Exception:
                 pass
 
-    def _close_all(self):
-        for ctx in list(self.ctxs.values()):
-            try:
-                ctx.close()
-            except Exception:
-                pass
-        self.ctxs.clear()
-        self.pages.clear()
-        try:
-            self.pw.stop()
-        except Exception:
-            pass
-        self.pw = None
-        log.info("할 일이 없어 크롬 창을 닫았습니다.")
 
     def _on_msg(self, page, raw: str):
         """수집 스크립트가 보낸 메시지(확장 시절 background로 가던 것)."""
@@ -866,34 +1076,38 @@ class Collector:
         elif t == "autoDone":
             cur["done"] = m
         elif t == "login" and isinstance(m.get("loggedIn"), bool):
-            set_login(cur["platform"], m["loggedIn"])
+            set_login(cur.get("acct") or cur["platform"], m["loggedIn"])   # 수집용·검색용 계정을 따로 기록
             cur["login"] = m["loggedIn"]
 
-    def _visit(self, platform, url, cfg, via="", limit=30, save=False, cancel=None, until_login=False, retry=True):
+    def _visit(self, platform, url, cfg, via="", limit=30, save=False, cancel=None, until_login=False, retry=True, key=None):
         """페이지를 열고 수집 스크립트를 넣은 뒤, 스크립트가 '끝'을 알릴 때까지 기다립니다.
         도중에 크롬 창이 닫히면 한 번만 새 창으로 다시 시도합니다.
-        같은 매체의 기본 창이 다른 수집에 쓰이는 중이면(수집 도중 끼워 넣은 검색 등) 새 창에서 하고 닫습니다."""
-        side = platform in self.busy
+        그 매체의 기본 창이 다른 일에 쓰이는 중이면(수집 도중 끼워 넣은 로그인 확인 등) 새 창에서 하고 닫습니다.
+        key: 쓸 창('프로필:매체'). 비우면 수집용 프로필의 그 매체 창."""
+        key = key or page_key(PROFILE_COLLECT, platform)
+        side = key in self.busy
         try:
-            return self._visit_once(platform, url, cfg, via, limit, save, cancel, until_login, side)
+            return self._visit_once(platform, url, cfg, via, limit, save, cancel, until_login, side, key)
         except Exception as e:
             if side or not (retry and is_closed_error(e)):
                 raise
-            log.info("%s 크롬 창이 도중에 닫혀 다시 시도합니다.", platform)
-            self._drop(platform)
-            return self._visit_once(platform, url, cfg, via, limit, save, cancel, until_login, False)
+            log.info("%s 크롬 창이 도중에 닫혀 다시 시도합니다.", key)
+            self._drop(key)
+            return self._visit_once(platform, url, cfg, via, limit, save, cancel, until_login, False, key)
 
-    def _visit_once(self, platform, url, cfg, via, limit, save, cancel, until_login, side=False):
-        page = self._side_page(platform) if side else self._page(platform)
+    def _visit_once(self, platform, url, cfg, via, limit, save, cancel, until_login, side=False, key=None):
+        key = key or page_key(PROFILE_COLLECT, platform)
+        page = self._side_page(key) if side else self._page(key)
         visit = next(self.visit_seq)
         cfg = {**cfg, "visit": visit}
-        cur = {"platform": platform, "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit}
+        cur = {"platform": platform, "acct": key_acct(key), "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit}
         self.curs[page] = cur
         if not side:
-            self.busy.add(platform)
+            self.busy.add(key)
         self.depth += 1
-        h = {"page": page, "platform": platform}
+        h = {"page": page, "platform": platform, "acct": key_acct(key)}
         try:
+            self.last_open[platform] = time.time()
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             try:
                 page.wait_for_load_state("load", timeout=10000)
@@ -927,37 +1141,47 @@ class Collector:
                 except Exception:
                     pass
             else:
-                self.busy.discard(platform)
+                self.busy.discard(key)
 
-    # ----- 여러 매체 동시 수집 -----
-    # 매체마다 크롬이 따로 떠 있으므로(프로필도 따로), 유튜브·X·인스타 페이지를 한 매체에 하나씩 동시에 엽니다.
-    # 같은 매체 안에서는 예전처럼 한 페이지씩, 페이지 사이에 쉬는 시간을 둡니다(각 사이트 입장에서는 이전과 같은 속도).
+    # ----- 여러 줄 동시 수집 -----
+    # 수집 창마다(= 줄마다) 페이지를 하나씩 동시에 엽니다: 유튜브 영상·쇼츠·게시물, X, 인스타.
+    # 한 줄 안에서는 한 페이지씩, 페이지 사이에 쉬는 시간을 둡니다. X·인스타는 줄이 하나라 사이트 입장에서는 이전과 같은 속도이고,
+    # 유튜브는 탭 셋이 동시에 돌아 요청이 겹칠 수 있습니다(로그인 없이 화면용 데이터 요청으로 모아 부담이 적음).
     @staticmethod
-    def _gap(platform: str) -> float:
+    def _gap(lane: str) -> float:
+        platform = lane.split(".", 1)[0]
         return random.uniform(1.5, 3.0) if platform == "instagram" else random.uniform(1.0, 2.0) if platform == "x" else random.uniform(0.4, 0.8)
 
     def _begin(self, platform, url, cfg, via, save):
-        """페이지를 열고 수집 스크립트를 넣기만 합니다(끝날 때까지 기다리지 않음). 기다리기는 _run_lanes가 합니다."""
+        """페이지를 열고 수집 스크립트를 넣기만 합니다(끝날 때까지 기다리지 않음). 기다리기는 _run_lanes가 합니다.
+        수집은 수집용 프로필(collect)의 그 페이지 창에서 합니다(유튜브는 영상·쇼츠·게시물 탭마다 창이 따로)."""
+        key = page_key(PROFILE_COLLECT, lane_of(platform, url))
         for attempt in (0, 1):
-            page = self._page(platform)
+            page = self._page(key)
             visit = next(self.visit_seq)
-            cur = {"platform": platform, "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit}
+            cur = {"platform": platform, "acct": platform, "via": via, "save": save, "done": None, "added": 0, "login": None, "visit": visit}
             self.curs[page] = cur
-            self.busy.add(platform)
+            self.busy.add(key)
             try:
+                self.last_open[platform] = time.time()
                 page.goto(url, wait_until="domcontentloaded", timeout=45000)
                 try:
                     page.wait_for_load_state("load", timeout=10000)
                 except Exception:
                     pass
+                h = {"page": page, "cur": cur, "platform": platform, "pk": key, "checked": time.time()}
+                if url.endswith("/shorts") and "/shorts" not in (page.url or ""):
+                    # 쇼츠 탭이 없는 채널: 유튜브가 채널 첫 화면으로 보냄. 그 화면을 쇼츠로 잘못 모으지 않고 바로 끝냅니다.
+                    cur["done"] = {"type": "autoDone", "found": 0, "sent": 0, "why": "목록 끝(쇼츠 탭 없음)"}
+                    return h
                 page.evaluate(self._bundle(platform), {**cfg, "visit": visit})
-                return {"page": page, "cur": cur, "platform": platform, "checked": time.time()}
+                return h
             except Exception as e:
                 self.curs.pop(page, None)
-                self.busy.discard(platform)
+                self.busy.discard(key)
                 if attempt == 0 and is_closed_error(e):
-                    log.info("%s 크롬 창이 닫혀 있어 다시 엽니다.", platform)
-                    self._drop(platform)
+                    log.info("%s 크롬 창이 닫혀 있어 다시 엽니다.", key)
+                    self._drop(key)
                     continue
                 raise
 
@@ -968,14 +1192,15 @@ class Collector:
 
     def _end(self, h):
         self.curs.pop(h["page"], None)
-        self.busy.discard(h["platform"])
+        self.busy.discard(h.get("pk") or page_key(PROFILE_COLLECT, h["platform"]))
 
     def _has_job(self, upto: int) -> bool:
         with self.q.mutex:
             return bool(self.q.queue) and self.q.queue[0][0] <= upto
 
     def _run_lanes(self, tasks, limit, on_done, feed=None, on_drop=None, progress=None, yield_to_users=False):
-        """매체별 줄(lane)을 동시에 돌립니다. 끝난 페이지마다 on_done(task, 결과 dict 또는 예외, 시작 시각)을 부릅니다.
+        """수집 창별 줄(lane: 유튜브 영상·쇼츠·게시물, X, 인스타)을 동시에 돌립니다.
+        끝난 페이지마다 on_done(task, 결과 dict 또는 예외, 시작 시각)을 부릅니다.
         feed(): 도는 중에 새로 끼워 넣을 페이지들(다른 사용자가 누른 수집 등)을 돌려줍니다.
         task["owners"]가 있으면(사용자 수집) 멈추기를 누른 사용자는 on_drop(task, owner)으로 빼고, 남은 사용자가 없으면 그 페이지를 멈춥니다.
         yield_to_users: 사용자가 누른 수집이 들어오면 새 페이지를 열지 않고 그것부터 처리(자동 수집용)."""
@@ -983,8 +1208,15 @@ class Collector:
 
         def add(ts):
             for t in ts or []:
-                lanes.setdefault(t["p"], []).append(t)
-                next_at.setdefault(t["p"], 0.0)
+                lane = lane_of(t["p"], t["url"])
+                lanes.setdefault(lane, []).append(t)
+                next_at.setdefault(lane, 0.0)
+
+        def give_up(platform, err):
+            """이 매체는 더 해도 소용없음(크롬 없음·로그인 풀림): 그 매체의 남은 페이지(유튜브면 모든 탭 줄)를 열지 않고 끝냅니다."""
+            for lane in [ln for ln in lanes if ln.split(".", 1)[0] == platform]:
+                for rest in lanes.pop(lane, []):
+                    on_done(rest, err, now_ms())
 
         def dropped(t) -> bool:
             if "owners" not in t:
@@ -1021,7 +1253,8 @@ class Collector:
                         next_at[p] = time.time() + self._gap(p)
                 hold = yield_to_users and self._has_job(1)
                 if hold and not active:
-                    self._run_urgent(upto=1)   # 사용자가 직접 누른 수집·검색이 먼저입니다
+                    if not self._run_urgent(upto=1):   # 사용자가 직접 누른 수집·검색이 먼저입니다
+                        time.sleep(0.1)                # (미뤄 둔 일만 남았으면 헛돌지 않게)
                     continue
                 now = time.time()
                 for p in list(lanes):
@@ -1036,7 +1269,7 @@ class Collector:
                     if not lanes[p]:
                         del lanes[p]
                     try:
-                        h = self._begin(p, t["url"], t["cfg"], t["via"], True)
+                        h = self._begin(t["p"], t["url"], t["cfg"], t["via"], True)
                         active[p] = (t, h, now_ms(), time.time() + limit)
                     except Exception as e:
                         log.exception("페이지 수집 오류: %s", t["url"])
@@ -1044,8 +1277,7 @@ class Collector:
                         next_at[p] = time.time() + self._gap(p)
                         msg = self._friendly(e)
                         if "프로필" in msg or "크롬을 찾지" in msg:   # 이 매체는 더 해도 소용없음
-                            for rest in lanes.pop(p, []):
-                                on_done(rest, e, now_ms())
+                            give_up(t["p"], e)
                 self._ig_pump()
                 for p, (t, h, t0, deadline) in list(active.items()):
                     cur, closed = h["cur"], h["page"].is_closed()
@@ -1064,8 +1296,7 @@ class Collector:
                         on_done(t, res, t0)
                         next_at[p] = time.time() + self._gap(p)
                         if gone and "로그인이 풀려" in gone:   # 로그인이 풀린 매체는 남은 페이지를 열지 않습니다(로그아웃 상태로 계속 여는 것도 봇처럼 보임)
-                            for rest in lanes.pop(p, []):
-                                on_done(rest, ValueError(gone), now_ms())
+                            give_up(t["p"], ValueError(gone))
                 if progress:
                     now = time.time()
                     progress([a[0] for a in active.values()], [x for ts in lanes.values() for x in ts if self._ready_at(x) > now])
@@ -1180,7 +1411,7 @@ class Collector:
                             ctx["urls"].add(url)
                             ctx["targets"].append((who, url, p, t["id"], days))
                 for i, (who, url, p, via, days) in list(enumerate(ctx["targets"]))[first:]:
-                    kind = " 영상" if url.endswith("/videos") else " 게시물" if url.endswith("/posts") else ""
+                    kind = " 영상" if url.endswith("/videos") else " 쇼츠" if url.endswith("/shorts") else " 게시물" if url.endswith("/posts") else ""
                     owner = {"ctx": ctx, "i": i, "via": via, "label": who + kind, "days": days}
                     last = self.recent.get(url)
                     # 사용자가 직접 누른 수집(deep)은 건너뛰지 않습니다(새 글을 빨리 확인하려고 누르는 경우).
@@ -1423,31 +1654,203 @@ class Collector:
             set_status(uid, lastRun=now_ms(), message=f"서버 자동 수집({AUTO_LABEL}) · 페이지 {visited}곳 확인 · 새 글 {added}건")
         log.info("자동 수집 끝: 페이지 %d곳 확인", visited)
 
-    def _search(self, platform: str, q: str) -> list:
-        url = search_url(platform, q)
+    # ----- 계정 검색(매체별 동시 진행) -----
+    # 매체마다 크롬이 따로 떠 있으므로, 매체가 다른 검색(인스타·X·유튜브)은 페이지를 차례로 연 뒤 동시에 기다립니다.
+    # 화면은 매체마다 따로 요청을 보내므로, 큐에서 기다리는 다른 매체의 검색(다른 사용자 것 포함)을 함께 가져와 돌리고,
+    # 끝난 검색부터 바로 결과를 돌려줍니다. 같은 매체의 검색은 한 번에 하나씩(사이트 입장에서는 이전과 같은 속도).
+    @staticmethod
+    def _search_stopped(job) -> bool:
+        """취소했거나, 기다리던 화면이 시간 초과로 떠난 검색."""
+        return bool(job.get("cancelled") or job.get("abandoned"))
+
+    @staticmethod
+    def _search_finish(job, result=None, error=None):
+        if job.get("finished"):
+            return
+        job["finished"] = True
+        if error:
+            job["error"] = error
+        else:
+            job["result"] = result
+        if job.get("event"):
+            job["event"].set()   # 이 검색을 기다리던 웹 요청에 바로 알림(다른 매체가 끝나기를 기다리지 않음)
+
+    def _take_searches(self, exclude) -> list:
+        """큐에서 기다리는 검색 중, 지금 진행하지 않는 매체의 것을 매체마다 가장 먼저 들어온 것 하나씩 꺼냅니다."""
+        with self.q.mutex:
+            cands = sorted((it for it in self.q.queue if it[0] == 0 and it[2].get("kind") == "search"), key=lambda it: it[:2])
+            # 검색 창이 바깥 일(검색용 계정 로그인 확인 등)에 쓰이는 매체는 가져오지 않습니다(새 창을 열지 않게)
+            busy = {key_platform(k) for k in self.busy if key_profile(k) == PROFILE_SEARCH}
+            taken, plats = [], set(exclude) | busy
+            for it in cands:
+                if it[2].get("platform") not in plats:
+                    plats.add(it[2].get("platform"))
+                    taken.append(it)
+            if taken:
+                drop = {id(it) for it in taken}
+                self.q.queue[:] = [it for it in self.q.queue if id(it) not in drop]
+                heapq.heapify(self.q.queue)
+        return [it[2] for it in taken]
+
+    def _search_begin(self, job) -> dict:
+        """검색 페이지를 열고 스크립트를 넣기만 합니다(끝날 때까지 기다리지 않음)."""
+        p = job["platform"]
+        url = search_url(p, job["q"])
         if not url:
             raise ValueError("매체가 올바르지 않습니다.")
-        if platform != "youtube" and (get_login_state().get(platform) or {}).get("loggedIn") is False:
-            raise ValueError(f"서버의 {PLATFORM_KO[platform]} 테스트 계정이 로그인되어 있지 않아 검색할 수 없습니다. "
-                             "관리자가 서버 PC에서 login_setup.bat으로 로그인해야 합니다.")
-        res = self._visit(platform, url, {"mode": "search", "q": q, "since": 0}, limit=SEARCH_WAIT)
-        return clean_results((res.get("done") or {}).get("results"))
+        # 검색은 검색용 프로필(search)의 그 매체 창에서 합니다: X·인스타는 검색용 계정, 유튜브는 로그인 없이.
+        acct, key = search_acct(p), page_key(PROFILE_SEARCH, p)
+        if not self._profile_ready(acct):
+            raise ValueError(f"서버에 {acct_ko(acct)} 테스트 계정이 아직 준비되지 않아 검색할 수 없습니다. "
+                             f"관리자가 서버 PC에서 login_setup.bat {acct} 로 검색용 계정에 로그인해야 합니다.")
+        if p != "youtube" and (get_login_state().get(acct) or {}).get("loggedIn") is False:
+            raise ValueError(f"서버의 {acct_ko(acct)} 테스트 계정이 로그인되어 있지 않아 검색할 수 없습니다. "
+                             f"관리자가 서버 PC에서 login_setup.bat {acct} 로 로그인해야 합니다.")
+        # 그 창이 쓰이는 중이면(보통은 _conflicts·_take_searches가 미뤄서 생기지 않음) 안전장치로 잠깐 새 창에서 하고 닫습니다
+        side = key in self.busy
+        for attempt in (0, 1):
+            page = self._side_page(key) if side else self._page(key)
+            visit = next(self.visit_seq)
+            cur = {"platform": p, "acct": acct, "via": "", "save": False, "done": None, "added": 0, "login": None, "visit": visit}
+            h = {"page": page, "cur": cur, "platform": p, "acct": acct, "pk": key, "side": side, "job": job, "checked": time.time()}
+            self.curs[page] = cur
+            if not side:
+                self.busy.add(key)
+            try:
+                self.last_open[p] = time.time()   # 실패한 열기도 사이트에는 요청이므로 간격에 넣습니다
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                try:
+                    page.wait_for_load_state("load", timeout=10000)
+                except Exception:
+                    pass
+                page.evaluate(self._bundle(p), {"mode": "search", "q": job["q"], "since": 0, "visit": visit})
+                h["deadline"] = time.time() + SEARCH_WAIT
+                return h
+            except Exception as e:
+                self._search_end(h, halt=False)
+                if not side and attempt == 0 and is_closed_error(e):
+                    log.info("%s 크롬 창이 닫혀 있어 다시 엽니다.", key)
+                    self._drop(key)
+                    continue
+                raise
+
+    def _search_end(self, h, halt=True):
+        page = h["page"]
+        self.curs.pop(page, None)
+        if h["side"]:
+            try:
+                page.close()
+            except Exception:
+                pass
+            return
+        if halt and h["cur"]["done"] is None:
+            self._halt(page)   # 끝나지 않은 스크립트(취소·시간 초과)가 뒤에서 계속 스크롤하지 않게
+        self.busy.discard(h["pk"])
+
+    def _search_ready_at(self, platform: str) -> float:
+        """이 매체의 검색 페이지를 다시 열어도 되는 시각(초): 그 매체의 페이지를 마지막으로 연 뒤 SEARCH_MIN_GAP.
+        수집 계정과 검색 계정이 따로여도 서버 PC의 인터넷 주소(IP)는 같으므로, 두 계정의 페이지 열기를 합쳐서 셉니다."""
+        return self.last_open.get(platform, 0.0) + SEARCH_MIN_GAP.get(platform, 0.0)
+
+    def _search_batch(self, first):
+        active = {}                     # 매체 → 진행 중인 검색
+        waiting = []                    # 최소 간격(SEARCH_MIN_GAP)이 지나기를 기다리는 검색. 다른 매체 검색은 그대로 진행
+        started = time.time()
+        take = lambda ex: self._take_searches(ex) if time.time() - started < SEARCH_BATCH_TAKE else []   # noqa: E731
+        busy_plats = lambda: set(active) | {j["platform"] for j in pending} | {j["platform"] for j in waiting}   # noqa: E731
+        pending = [first]
+        pending += take({first["platform"]})
+        taken = list(pending)           # 이 묶음이 맡은 모든 검색(끝에 빠짐없이 알리기 위해)
+        self.depth += 1   # 이 안에서는 다른 급한 일을 다시 끼워 넣지 않습니다
+        try:
+            while True:
+                while pending:
+                    job = pending.pop(0)
+                    if self._search_stopped(job):
+                        self._search_finish(job, error="검색을 취소했습니다.")
+                    elif time.time() < self._search_ready_at(job["platform"]):
+                        waiting.append(job)   # 방금 같은 매체 검색 페이지를 열었음: 잠깐 뒤에 엽니다
+                    else:
+                        try:
+                            active[job["platform"]] = self._search_begin(job)
+                        except Exception as e:
+                            log.info("search %s: %s", job["platform"], (str(e).splitlines() or [""])[0][:200])
+                            self._search_finish(job, error=str(e) if isinstance(e, ValueError) else self._friendly(e))
+                    # 페이지를 여는 몇 초 사이에 들어온 다른 매체의 검색도 함께 시작합니다
+                    more = take(busy_plats())
+                    taken += more
+                    pending += more
+                if not active and not waiting:
+                    break
+                self._ig_pump()
+                for p, h in list(active.items()):
+                    job, cur, page = h["job"], h["cur"], h["page"]
+                    stop, closed = self._search_stopped(job), page.is_closed()
+                    gone = "" if stop or closed or cur["done"] is not None else self._gone(h)
+                    if not (stop or closed or gone or cur["done"] is not None or time.time() >= h["deadline"]):
+                        continue
+                    del active[p]
+                    self._search_end(h)
+                    if stop:
+                        log.info("search %s: 검색을 취소했습니다.", p)
+                        self._search_finish(job, error="검색을 취소했습니다.")
+                    elif closed and cur["done"] is None:
+                        self._search_finish(job, error=self._friendly(RuntimeError("크롬 창이 도중에 닫혔습니다(target closed)")))
+                    elif gone:
+                        self._search_finish(job, error=gone)
+                    else:   # 끝났거나 시간 한도: 그때까지 찾은 결과
+                        self._search_finish(job, result=clean_results((cur["done"] or {}).get("results")))
+                # 간격이 지났거나 그사이 취소된 대기 검색은 다시 시작 차례로(취소된 것은 위에서 바로 끝냄)
+                for job in list(waiting):
+                    if self._search_stopped(job) or time.time() >= self._search_ready_at(job["platform"]):
+                        waiting.remove(job)
+                        pending.append(job)
+                more = take(busy_plats())   # 끝난 매체로 다음 검색(같은 매체를 기다리던 것)
+                taken += more
+                pending += more
+                if pending:
+                    continue
+                if not active and not waiting:
+                    break
+                pump = next((h["page"] for h in active.values() if not h["page"].is_closed()), None)
+                try:
+                    if pump is None:
+                        raise RuntimeError("no page")
+                    pump.wait_for_timeout(250)   # 이 사이에 모든 창의 검색 스크립트 메시지를 받습니다
+                except Exception:
+                    time.sleep(0.05)
+        finally:
+            self.depth -= 1
+            for h in active.values():
+                self._search_end(h)
+            for job in taken:   # 예상하지 못한 오류로 빠져나와도 기다리는 웹 요청이 60초씩 묶이지 않게
+                self._search_finish(job, error="검색 중 오류가 발생했습니다. 잠시 뒤 다시 시도하세요.")
 
     def _post(self, url: str):
-        res = self._visit("youtube", url, {"mode": "post", "since": 0}, limit=POST_WAIT)
+        # 게시물 읽기는 수집용 프로필의 전용 창(유튜브 게시물 읽기)에서 합니다. 검색 창·수집 창을 기다리지 않게.
+        res = self._visit("youtube", url, {"mode": "post", "since": 0}, limit=POST_WAIT, key=page_key(PROFILE_COLLECT, YT_READ))
         post = clean_post((res.get("done") or {}).get("post"))
         if not post:
             raise ValueError("게시물 내용을 읽지 못했습니다.")
         return post
 
-    def _check_login(self, platforms):
-        for p in platforms:
+    def _check_login(self, accts):
+        """테스트 계정 로그인 확인. accts: 계정 이름(x, x-search …)"""
+        for a in accts:
+            p = acct_platform(a)
+            if not self._profile_ready(a):
+                set_login(a, False)   # login_setup으로 이 계정 로그인 창을 연 적이 없음: 빈 크롬 창을 띄우지 않고 '로그인 안 됨'으로
+                continue
+            if acct_key(a) in self.busy:
+                # 그 계정의 창이 지금 수집·검색에 쓰이는 중: 새 창을 열지 않습니다. 쓰이는 페이지가 로그인 상태를 스스로 알려 줍니다.
+                log.info("로그인 확인 건너뜀(창 사용 중): %s", a)
+                continue
             try:
-                res = self._visit(p, LOGIN_URLS[p], {"mode": "login", "since": 0}, limit=LOGIN_WAIT, until_login=True)
+                res = self._visit(p, LOGIN_URLS[p], {"mode": "login", "since": 0}, limit=LOGIN_WAIT, until_login=True, key=acct_key(a))
                 if res.get("login") is None:
-                    set_login(p, None)  # 알 수 없음(확인한 시각만 남김)
+                    set_login(a, None)  # 알 수 없음(확인한 시각만 남김)
             except Exception:
-                log.exception("로그인 확인 오류: %s", p)
+                log.exception("로그인 확인 오류: %s", a)
 
 
 collector = Collector()

@@ -165,7 +165,7 @@ function pickPeriod() {
 }
 function fillResults(box, platform, list) {
   if (!list.length) {
-    const why = platform === "youtube" ? "" : loggedOut(platform) ? " " + LOGIN_HELP(platform) : " " + PLATFORM[platform] + "이 이름 검색을 막았거나 결과가 없을 수 있습니다. @아이디나 프로필 주소로 검색하면 바로 추가할 수 있습니다.";
+    const why = platform === "youtube" ? "" : searchLoggedOut(platform) ? " " + SEARCH_LOGIN_HELP(platform) : " " + PLATFORM[platform] + "이 이름 검색을 막았거나 결과가 없을 수 있습니다. @아이디나 프로필 주소로 검색하면 바로 추가할 수 있습니다.";
     box.appendChild(el("p", { class: "hint", text: "검색 결과가 없습니다." + why }));
   }
   list.forEach((r) => {
