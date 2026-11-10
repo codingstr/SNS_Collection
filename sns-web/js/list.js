@@ -667,6 +667,7 @@ function renderList() {
         const unread = r.list.some((it) => !seen.has(it.id));
         const b = el("button", { type: "button", class: (focusName === r.name ? "active" : "") + (unread ? " new" : ""), "aria-label": label + " " + r.list.length + "건" + (unread ? ", 안 읽은 글 있음" : "") + (focusName ? "" : " · 눌러서 그 줄로 이동") },
           [picFace(chosen, label.replace(/^@/, ""), "pface"), el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(r.list.length) })]);
+        b._ids = r.list.map((it) => it.id); b._label = label; b._n = r.list.length; b._focus = !!focusName;
         if (!focusName) b.addEventListener("click", () => jumpToPerson(r.name));
         bar.appendChild(b);
       });
@@ -901,4 +902,14 @@ async function refreshPics(max = 3) {
       if (hit && hit.avatar && (await storePic(t.id, hit.avatar))) renderList();
     }
   } finally { picBusy = false; }
+}
+
+// 오른쪽 묶음 목록의 '안 읽은 글' 빨간 점만 다시 맞춥니다(글을 읽거나 '모두 읽음'·되돌리기 뒤). 목록 전체를 다시 그리지 않습니다.
+function refreshSideDots() {
+  document.querySelectorAll("#sidePeople .pbar button").forEach((b) => {
+    if (!b._ids) return;
+    const unread = b._ids.some((id) => !seen.has(id));
+    b.classList.toggle("new", unread);
+    b.setAttribute("aria-label", b._label + " " + b._n + "건" + (unread ? ", 안 읽은 글 있음" : "") + (b._focus ? "" : " · 눌러서 그 줄로 이동"));
+  });
 }

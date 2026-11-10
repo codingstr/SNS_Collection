@@ -36,6 +36,7 @@ function applyPage() {
   if (!connected && page === "manage") page = "home";
   const manage = connected && page === "manage";
   $("trackPanel").hidden = !manage;
+  document.body.classList.toggle("pg-manage", manage); // 관리 화면에서는 상단 버튼 줄을 숨김(bento.css)
   document.querySelector(".layout main").hidden = manage;
   $("navManage").hidden = !connected;
   $("navHome").classList.toggle("on", !manage && page !== "fav");

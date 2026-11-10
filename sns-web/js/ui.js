@@ -438,19 +438,6 @@ $("navManage").addEventListener("click", () => { page = "manage"; applyPage(); w
   };
   const place = () => {
     raf = 0;
-    // 추적 계정 관리 화면(넓은 화면): 오른쪽 열이 없으므로, 관리 칸 제목 줄 오른쪽 끝의 빈 자리(.mg-tools)에 버튼 줄을 넣습니다.
-    const slot = window.innerWidth >= 861 ? document.querySelector("#trackPanel:not([hidden]) .mg-tools") : null;
-    const inPanel = !!(slot && slot.offsetParent !== null);
-    tb.classList.toggle("inpanel", inPanel);
-    if (inPanel) {
-      slot.style.width = tb.offsetWidth + "px";
-      slot.style.height = tb.offsetHeight + "px";
-      const o = originOf(), s = slot.getBoundingClientRect();
-      tb.style.setProperty("top", Math.round(s.top - o.top) + "px", "important");
-      tb.style.setProperty("left", Math.round(s.left - o.left) + "px", "important");
-      tb.style.setProperty("right", "auto", "important");
-      return;
-    }
     tb.style.removeProperty("left"); tb.style.removeProperty("right");
     const on = window.innerWidth >= 861 && !wc.hidden && wc.offsetParent !== null;
     if (!on) { tb.style.removeProperty("top"); return; }
