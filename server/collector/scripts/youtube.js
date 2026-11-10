@@ -301,17 +301,18 @@
     try {
       const res = await fetch("/feeds/videos.xml?channel_id=" + channelId, { credentials: "omit" });
       if (!res.ok) return out;
-      const doc = new DOMParser().parseFromString(await res.text(), "application/xml");
-      const entries = Array.from(doc.getElementsByTagName("entry"));
+      // 글자로 읽습니다. 유튜브 페이지는 Trusted Types 정책이 걸려 있어 DOMParser.parseFromString이 막힙니다(예전에는 여기서 실패해 쇼츠를 하나도 못 모았음).
+      const xml = await res.text();
+      const entries = xml.split(/<entry[\s>]/).slice(1);
       for (const e of entries) {
-        const idEl = e.getElementsByTagNameNS("http://www.youtube.com/xml/schemas/2015", "videoId")[0] || e.getElementsByTagName("yt:videoId")[0];
-        const pubEl = e.getElementsByTagName("published")[0];
-        const id = idEl && idEl.textContent.trim(), t = pubEl ? Date.parse(pubEl.textContent.trim()) : NaN;
-        if (!/^[\w-]{11}$/.test(id || "") || Number.isNaN(t)) continue;
-        out.dates[id] = new Date(t).toISOString();
+        const idm = /<yt:videoId>\s*([\w-]{11})\s*<\/yt:videoId>/.exec(e);
+        const pm = /<published>\s*([^<]+?)\s*<\/published>/.exec(e);
+        const t = pm ? Date.parse(pm[1]) : NaN;
+        if (!idm || Number.isNaN(t)) continue;
+        out.dates[idm[1]] = new Date(t).toISOString();
         if (!out.oldest || t < out.oldest) out.oldest = t;
       }
-      out.ok = entries.length > 0;
+      out.ok = Object.keys(out.dates).length > 0;
     } catch (e) { /* 날짜 없이 진행(새 쇼츠는 저장하지 않음) */ }
     return out;
   }

@@ -52,14 +52,14 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v384";
+const WEB_VERSION = "v385";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };
 
 /* 이 브라우저에 저장하는 값 중 사용자마다 따로 둘 것(본 글 기록·프로필 사진·즐겨찾기 등)은 아이디별 이름으로 저장합니다.
    같은 브라우저에서 다른 아이디로 로그인해도 서로 섞이지 않습니다. (화면 설정·테마처럼 기기 설정은 공통) */
-const PER_USER_KEYS = ["snsSeen", "snsAvatar", "snsPics", "snsPicPick", "snsPicAt", "snsFavs"];
+const PER_USER_KEYS = ["snsSeen", "snsSeenReset", "snsAvatar", "snsPics", "snsPicPick", "snsPicAt", "snsFavs"];
 let UID0 = "";
 try { UID0 = localStorage.getItem("snsUid") || ""; } catch (e) {}
 const ukey = (k) => (UID0 ? k + "@" + UID0 : k);
@@ -84,6 +84,20 @@ const MAX_TRACKED = 30;
 const seen = new Set();
 try { JSON.parse(lsGet("snsSeen", "[]")).forEach((x) => typeof x === "string" && seen.add(x)); } catch (e) {}
 let seenSaveTimer = 0;
+// 본 글 기록을 비운 시각(서버 user_state.seen_reset). 서버가 더 늦은 시각을 알려 주면 이 기기의 기록도 버립니다.
+let seenReset = Number(lsGet("snsSeenReset", "0")) || 0;
+function applySeenReset(at) {
+  if (!(at > seenReset)) return false;
+  seenReset = at;
+  lsSet("snsSeenReset", String(at));
+  seen.clear();
+  if (typeof seenQueue !== "undefined") seenQueue.clear();
+  clearTimeout(seenSaveTimer);
+  lsSet("snsSeen", "[]");
+  document.querySelectorAll(".card.seen").forEach((c) => c.classList.remove("seen"));
+  if (typeof renderStories === "function") renderStories();
+  return true;
+}
 function saveSeen() {
   clearTimeout(seenSaveTimer);
   seenSaveTimer = setTimeout(() => lsSet("snsSeen", JSON.stringify([...seen].slice(-8000))), 400);

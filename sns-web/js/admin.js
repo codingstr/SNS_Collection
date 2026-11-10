@@ -186,11 +186,11 @@ function renderAdDetail() {
   acts.append(adBtn("지금 수집", async () => { await adminCall("collect", { uid: u.id }); await adAfter(u.id + "의 추적 계정 수집을 요청했습니다."); }, "", "이 사용자의 추적 계정을 지금 모읍니다"));
   if (st.running) acts.append(adBtn("수집 멈추기", async () => { await adminCall("cancel", { uid: u.id }); await adAfter("수집을 멈추도록 했습니다."); }));
   acts.append(adBtn("수집한 글 비우기", async () => {
-    if (!(await adAsk({ title: u.id + "의 수집한 글을 비울까요?", text: "지금까지 모은 글이 이 사용자에게 보이지 않게 됩니다(추적 계정은 그대로, 다음 수집부터 다시 모임). 다른 사용자의 글에는 영향이 없습니다.", ok: "비우기", danger: true }))) return;
+    if (!(await adAsk({ title: u.id + "의 수집한 글을 비울까요?", text: "지금까지 모은 글이 이 사용자에게 보이지 않게 됩니다(추적 계정은 그대로, 다음 수집부터 다시 모임). 읽음 표시도 모든 기기에서 지워집니다. 다른 사용자에게는 영향이 없습니다.", ok: "비우기", danger: true }))) return;
     await adminCall("clearItems", { uid: u.id }); await adAfter("수집한 글을 비웠습니다.");
   }));
   acts.append(adBtn("본 글 기록 지우기", async () => {
-    if (!(await adAsk({ title: u.id + "의 본 글 기록을 지울까요?", text: "읽은 글 표시(흐리게)가 모두 사라집니다.", ok: "지우기", danger: true }))) return;
+    if (!(await adAsk({ title: u.id + "의 본 글 기록을 지울까요?", text: "읽은 글 표시(흐리게)가 이 사용자의 모든 기기에서 사라집니다.", ok: "지우기", danger: true }))) return;
     const n = await adminCall("clearSeen", { uid: u.id }); await adAfter("본 글 기록 " + n + "개를 지웠습니다.");
   }));
   const lockTip = u.admin ? "관리자 계정은 여기서 바꿀 수 없습니다(계정 메뉴 또는 서버 PC의 admin_setup)" : "";

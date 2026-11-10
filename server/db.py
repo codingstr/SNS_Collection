@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS user_state (
   settings        TEXT NOT NULL DEFAULT '{}',   -- 매체별 수집 켜기/끄기 (JSON)
   window_days     INTEGER NOT NULL DEFAULT 30,  -- 가져올 기간
   status          TEXT NOT NULL DEFAULT '{}',   -- 수집 진행 상태 (JSON)
-  cleared_before  INTEGER NOT NULL DEFAULT 0    -- '글 지우기'를 누른 시각: 그 전에 모은 글은 이 사용자에게 안 보임
+  cleared_before  INTEGER NOT NULL DEFAULT 0,   -- '글 지우기'를 누른 시각: 그 전에 모은 글은 이 사용자에게 안 보임
+  seen_reset      INTEGER NOT NULL DEFAULT 0    -- 본 글 기록을 비운 시각('글 지우기'·관리자의 기록 지우기). 기기들은 이보다 앞선 자기 기록을 버림
 );
 -- 수집한 글. 여러 사용자가 같은 계정을 추적하면 한 번만 저장하고 같이 씁니다.
 CREATE TABLE IF NOT EXISTS items (
@@ -117,6 +118,14 @@ def get_db():
         conn.close()
 
 
+def reset_seen(db, uid: str):
+    """본 글 기록 비우기: 서버 기록을 지우고 비운 시각을 남깁니다. 기기들은 다음에 맞출 때 이 시각을 보고 자기 기록도 버립니다."""
+    now = int(time.time() * 1000)
+    db.execute("INSERT OR IGNORE INTO user_state(user_id) VALUES (?)", (uid,))
+    db.execute("UPDATE user_state SET seen_reset = ? WHERE user_id = ?", (now, uid))
+    return db.execute("DELETE FROM seen WHERE user_id = ?", (uid,)).rowcount
+
+
 def init_db():
     DB_PATH.parent.mkdir(exist_ok=True)
     with get_db() as db:
@@ -134,6 +143,9 @@ def init_db():
             for col in ("is_admin", "must_change"):
                 if col not in cols:
                     db.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_state'").fetchone():
+            if "seen_reset" not in {r["name"] for r in db.execute("PRAGMA table_info(user_state)")}:
+                db.execute("ALTER TABLE user_state ADD COLUMN seen_reset INTEGER NOT NULL DEFAULT 0")
         db.executescript(SCHEMA)
         if ver < SCHEMA_VERSION:
             # 한 번만 하면 되는 변환(예전에는 켤 때마다 전체 표를 훑었음)

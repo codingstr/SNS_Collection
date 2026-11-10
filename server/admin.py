@@ -32,7 +32,7 @@ from api_call import DAYS_OK, PLATFORMS, OpError, clean_tracked
 from auth import hash_pw, sha, user_by_session
 from collector import collector, get_login_state
 from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS, kv_get, page_urls
-from db import get_db
+from db import get_db, reset_seen
 
 router = APIRouter()
 log = logging.getLogger("admin")
@@ -252,9 +252,10 @@ def handle(db, me: str, act: str, p: dict):
     if act == "clearItems":
         _state(db, uid)
         db.execute("UPDATE user_state SET cleared_before = ? WHERE user_id = ?", (now_ms(), uid))
+        reset_seen(db, uid)   # 사용자의 '수집한 글 모두 삭제'와 같이 읽음 표시도 비움
         return True
     if act == "clearSeen":
-        return db.execute("DELETE FROM seen WHERE user_id = ?", (uid,)).rowcount
+        return reset_seen(db, uid)   # 서버 기록 + 그 사용자의 모든 기기(다음에 맞출 때)
     if act == "resetPassword":
         _not_admin(u, "비밀번호를 초기화")
         salt = secrets.token_hex(16)

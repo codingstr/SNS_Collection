@@ -246,6 +246,35 @@ def sanitize(raw):
     }
 
 
+def kill_profile_chrome(profile: str) -> int:
+    """그 프로필(server/profiles/<컴퓨터>/<profile>)로 띄운 크롬만 강제로 끕니다(멈춤 감시용). 서버 PC의 다른 크롬은 건드리지 않습니다.
+    끈 크롬 수를 돌려줍니다. 윈도우가 아니면 0."""
+    if sys.platform != "win32":
+        return 0
+    import subprocess
+    d = str((PROFILES / profile).resolve())
+    # 크롬 본체 프로세스(--type= 가 없는 것) 중 이 프로필 폴더로 띄운 것
+    ps = ("Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { $_.CommandLine -and "
+          "$_.CommandLine.Contains('--user-data-dir=') -and $_.CommandLine.Contains($env:SNS_PROFILE_DIR) -and "
+          "-not $_.CommandLine.Contains('--type=') } | ForEach-Object { $_.ProcessId }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True, text=True,
+                             timeout=30, env={**__import__("os").environ, "SNS_PROFILE_DIR": d},
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except Exception as e:
+        log.warning("크롬 프로세스를 찾지 못했습니다: %s", e)
+        return 0
+    n = 0
+    for pid in {x.strip() for x in out.split() if x.strip().isdigit()}:
+        try:
+            subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True, timeout=20,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            n += 1
+        except Exception as e:
+            log.warning("크롬(%s)을 끄지 못했습니다: %s", pid, e)
+    return n
+
+
 def is_closed_error(e: Exception) -> bool:
     m = str(e).lower()
     return "has been closed" in m or "target closed" in m or "browser has disconnected" in m
@@ -610,6 +639,10 @@ class Collector:
         self.login_busy = False
         self.bundles = {}
         self.thread = None
+        self.watch = None                # 멈춤 감시 스레드(_watchdog)
+        self.beat = time.time()          # 작업 스레드가 마지막으로 진전을 보인 시각(초)
+        self.in_job = 0                  # 지금 처리 중인 일의 수(겹쳐 처리 포함). 0이면 감시하지 않음
+        self.cur_profile = ""            # 마지막으로 쓴 크롬 프로필(멈췄을 때 먼저 다시 띄울 것)
         self.next_auto = 0.0             # 다음 자동 수집 시각(초)
         self.visit_seq = itertools.count(1)
         self.ig_dates = OrderedDict()    # 인스타 게시물 코드 → {"t": 게시 시각(초), "pin": 고정 게시물}
@@ -639,6 +672,9 @@ class Collector:
             self.request_login_check(recheck)
         self.thread = threading.Thread(target=self._loop, name="collector", daemon=True)
         self.thread.start()
+        if not self.watch:
+            self.watch = threading.Thread(target=self._watchdog, name="collector-watch", daemon=True)
+            self.watch.start()
 
     def request_collect(self, uid: str, mode: str, only: str = "") -> bool:
         """수집 요청. 이미 수집 중(또는 대기 중)이면 버리지 않고 모아 두었다가, 지금 수집이 끝나면 이어서 모읍니다.
@@ -783,10 +819,38 @@ class Collector:
                 continue   # 할 일이 없어도 크롬 창은 닫지 않습니다(닫혀 있으면 다음에 쓸 때 다시 엶)
             self._exec(job)
 
+    # ----- 멈춤 감시 -----
+    # 크롬 조작 중 몇 가지(페이지 안 스크립트 실행, 창 조작 등)는 기다리는 시간 제한이 없어서, 크롬 창 하나가 응답하지 않으면
+    # 작업 스레드 전체가 멈출 수 있습니다(서버 PC에서 그 창을 닫아야 풀림). 일하는 중에 STALL_S 동안 진전이 없으면
+    # 그 프로필의 크롬을 강제로 끕니다. 막혀 있던 호출이 '창이 닫힘' 오류로 풀리고, 다음에 쓸 때 크롬을 새로 띄웁니다.
+    def _tick(self):
+        self.beat = time.time()
+
+    def _watchdog(self):
+        kills = 0
+        while True:
+            time.sleep(WATCH_EVERY)
+            try:
+                if self.in_job <= 0 or time.time() - self.beat < STALL_S:
+                    kills = 0
+                    continue
+                # 처음에는 마지막으로 쓰던 프로필만, 그래도 계속 멈춰 있으면 두 프로필 모두
+                targets = [self.cur_profile] if kills == 0 and self.cur_profile else [PROFILE_COLLECT, PROFILE_SEARCH]
+                log.warning("수집기가 %d초 동안 진전이 없어 크롬(%s)을 다시 띄웁니다(창이 응답하지 않음).", int(time.time() - self.beat), ", ".join(targets))
+                for prof in targets:
+                    n = kill_profile_chrome(prof)
+                    log.warning("  %s 프로필 크롬 %s", prof, f"{n}개 종료" if n else "을 찾지 못함")
+                kills += 1
+                self.beat = time.time()   # 정리될 시간을 줍니다
+            except Exception:
+                log.exception("멈춤 감시 오류")
+
     def _exec(self, job):
         if job.get("abandoned"):
             return  # 기다리던 웹 요청이 이미 시간 초과로 끝났습니다
         self.last_used = time.time()
+        self.in_job += 1
+        self._tick()
         try:
             kind = job["kind"]
             if kind == "collect":
@@ -806,6 +870,8 @@ class Collector:
             log.exception("수집 작업 오류: %s", job.get("kind"))
             job["error"] = self._friendly(e)
         finally:
+            self.in_job -= 1
+            self._tick()
             self.last_used = time.time()
             if job["kind"] == "login":
                 self.login_busy = False
@@ -895,6 +961,7 @@ class Collector:
         return ctx
 
     def _context(self, profile: str):
+        self.cur_profile = profile
         if not self.pw:
             from playwright.sync_api import sync_playwright
             self.pw = sync_playwright().start()
@@ -906,7 +973,7 @@ class Collector:
             ctx.add_init_script(VISIBLE_JS)
             ctx.on("close", lambda *_: self._forget_profile(profile, ctx))
             if profile == PROFILE_COLLECT:
-                ctx.on("response", self._ig_on_response)   # 인스타 게시 날짜(수집 창만. 주소로 인스타 응답만 골라 둠)
+                ctx.on("requestfinished", self._ig_on_finished)   # 인스타 게시 날짜(수집 창만. 다 받은 인스타 응답만 골라 둠)
             self.ctxs[profile] = ctx
         return ctx
 
@@ -970,24 +1037,31 @@ class Collector:
             log.debug("%s 창을 칸에 놓지 못했습니다: %s", key, str(e).splitlines()[0][:120] if str(e) else e)
 
     # ----- 인스타 게시 날짜(응답 읽기) -----
-    def _ig_on_response(self, r):
-        """인스타 화면이 받은 응답 중 게시물 데이터가 있을 만한 것만 기억해 둡니다(내용은 작업 루프에서 읽음)."""
+    def _ig_on_finished(self, req):
+        """인스타 화면의 요청 중 게시물 데이터가 있을 만한 것을, 응답을 끝까지 다 받은 뒤에만 기억해 둡니다(내용은 작업 루프에서 읽음).
+        예전에는 응답 머리만 온 때('response')에 기억했다가 내용을 읽었는데, 다음 페이지로 넘어가며 끊긴 요청이나
+        끝나지 않는 요청은 내용 읽기(r.text())가 끝없이 기다려 수집기 전체가 멈췄습니다('다음 페이지 준비 중'에서 멈춤,
+        서버 PC에서 크롬 창을 닫아야 풀림). 다 받은 응답만 읽으면 기다릴 일이 없습니다."""
         try:
-            if (len(self.ig_pending) < 300 and r.status == 200 and "instagram.com/" in r.url
-                    and r.request.resource_type in ("xhr", "fetch", "document")):
-                self.ig_pending.append(r)
+            if len(self.ig_pending) < 300 and "instagram.com/" in req.url and req.resource_type in ("xhr", "fetch", "document"):
+                self.ig_pending.append(req)
         except Exception:
             pass
 
     def _ig_pump(self):
-        """기억해 둔 인스타 응답에서 게시 날짜를 읽어, 수집 스크립트에 알려 주고 날짜 없이 저장된 글도 채웁니다."""
+        """기억해 둔 인스타 응답에서 게시 날짜를 읽어, 수집 스크립트에 알려 주고 날짜 없이 저장된 글도 채웁니다.
+        (수집·검색·로그인 확인의 기다리는 반복마다 불리므로, 멈춤 감시의 '진전 있음' 표시도 여기서 합니다)"""
+        self._tick()
         if not self.ig_pending:
             return
         pend, self.ig_pending = self.ig_pending, []
         new = {}
-        for r in pend:
+        for req in pend:
             try:
-                body = r.text()   # 크롬이 이미 받은 내용을 읽기만 합니다(사이트로 새 요청을 보내지 않음)
+                r = req.response()
+                if r is None or r.status != 200:
+                    continue
+                body = r.text()   # 크롬이 이미 다 받은 내용을 읽기만 합니다(사이트로 새 요청을 보내지 않음)
             except Exception:
                 continue
             if len(body) > 8_000_000:

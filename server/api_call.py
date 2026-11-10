@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from auth import user_by_session
 from collector import SearchCancelled, collector, get_login_state
 from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS
-from db import get_db
+from db import get_db, reset_seen
 
 router = APIRouter()
 log = logging.getLogger("api_call")
@@ -57,6 +57,7 @@ def load_state(db, uid: str) -> dict:
         "windowDays": row["window_days"],
         "status": json.loads(row["status"]),
         "clearedBefore": row["cleared_before"],
+        "seenReset": row["seen_reset"],
     }
 
 
@@ -141,6 +142,7 @@ def handle(db, uid: str, op: str, p: dict):
             "loginState": get_login_state(),  # 서버 테스트 계정의 로그인 상태(모든 사용자 공통)
             "windowDays": st["windowDays"],
             "nextAuto": int(collector.next_auto * 1000),  # 다음 서버 자동 수집 시각(밀리초)
+            "seenReset": st["seenReset"],                 # 본 글 기록을 비운 시각: 화면이 더 늦은 값을 보면 자기 읽음 표시도 버림
         }
         if items is None:
             res["same"] = True        # 화면이 가진 글 목록 그대로 쓰면 됨
@@ -166,6 +168,8 @@ def handle(db, uid: str, op: str, p: dict):
     if op == "clearItems":
         load_state(db, uid)
         db.execute("UPDATE user_state SET cleared_before = ? WHERE user_id = ?", (int(time.time() * 1000), uid))
+        # 같은 글이 다시 모여도 예전 '읽음' 표시가 남지 않도록 본 글 기록도 비웁니다(모든 기기)
+        reset_seen(db, uid)
         return True
 
     if op == "openWindow":

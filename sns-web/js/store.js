@@ -42,6 +42,8 @@ async function refreshOnce() {
   checkStatus = d.status || {};
   loginState = d.loginState || {};
   nextAuto = Number(d.nextAuto) || 0;
+  // 다른 기기나 관리자가 본 글 기록을 비웠으면(30초 안에 알게 됨) 이 기기의 읽음 표시도 맞춥니다
+  if (Number(d.seenReset) > seenReset) pullSeen();
   if (!connected) {
     setConn(true); lastDataSig = ""; lastStatusSig = ""; lastLoginSig = "";
     if (Date.now() - lastSeenPull > 60000) pullSeen(); // 다시 연결되면 본 글 기록도 맞춥니다
@@ -202,8 +204,10 @@ async function flushSeenNow(opts) {
   if (!sess || !seenQueue.size) return;
   const add = Array.from(seenQueue).slice(0, 500);
   try {
-    await sapi("putSeen", { add }, opts);
+    const j = await sapi("putSeen", { add, base: seenReset }, opts);
     add.forEach((id) => seenQueue.delete(id));
+    // 그사이 다른 기기·관리자가 본 글 기록을 비웠으면 서버가 받지 않고 비운 시각을 알려 줍니다: 이 기기 기록도 버립니다
+    if (j.reset && applySeenReset(j.reset) && typeof renderList === "function") renderList();
   } catch (e) { /* 다음 기회에 다시 보냅니다 */ }
   if (seenQueue.size) { clearTimeout(seenTimer); seenTimer = setTimeout(flushSeen, 8000); }
 }
@@ -211,8 +215,11 @@ async function pullSeen() {
   if (!sess) return;
   lastSeenPull = Date.now();
   try {
-    const ids = (await sapi("getSeen")).ids || [];
+    const j = await sapi("getSeen");
+    const ids = j.ids || [];
     const server = new Set(ids);
+    // 기록을 비운 뒤 처음 맞추는 기기: 이 기기에만 남은 예전 기록은 서버로 올리지 않고 버립니다
+    if (j.reset && applySeenReset(j.reset) && typeof renderList === "function") renderList();
     let added = false;
     for (const id of ids) if (!seen.has(id)) { seen.add(id); added = true; }
     if (added) {

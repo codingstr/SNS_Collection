@@ -37,9 +37,15 @@ def sync(body: dict = Body(...)):
             if not user:
                 return fail(401, "로그인이 필요합니다.")
             uid = user["id"]
+            row = db.execute("SELECT seen_reset FROM user_state WHERE user_id = ?", (uid,)).fetchone()
+            reset = row["seen_reset"] if row else 0
             if act == "getSeen":
                 rows = db.execute("SELECT item_id FROM seen WHERE user_id = ? ORDER BY at DESC LIMIT ?", (uid, MAX_SEEN)).fetchall()
-                return {"ok": True, "ids": [r["item_id"] for r in reversed(rows)]}
+                return {"ok": True, "ids": [r["item_id"] for r in reversed(rows)], "reset": reset}
+            # 기록을 비운 뒤인데 그 사실을 아직 모르는 기기가 보낸 예전 기록은 받지 않습니다(그 기기는 reset을 보고 자기 기록을 버림)
+            base = body.get("base")
+            if act == "putSeen" and reset and (not isinstance(base, (int, float)) or base < reset):
+                return {"ok": True, "n": 0, "reset": reset}
             if act == "delSeen":
                 ids = [x for x in add[:MAX_SEEN] if isinstance(x, str) and 0 < len(x) <= 200]
                 db.executemany("DELETE FROM seen WHERE user_id = ? AND item_id = ?", [(uid, x) for x in ids])

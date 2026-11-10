@@ -239,8 +239,9 @@ $("clear").addEventListener("click", async (e) => {
   try {
     await call("clearItems");
     items = []; serverItems = [];
+    await pullSeen(); // 서버가 본 글 기록도 비웠음: 이 기기의 읽음 표시도 지웁니다(다른 기기는 다음에 맞출 때)
     renderTabs(); renderList(); renderWork();
-    toast("모은 글을 모두 지웠습니다. 다음 수집부터 다시 모입니다.");
+    toast("모은 글과 읽음 표시를 모두 지웠습니다. 다음 수집부터 다시 모입니다.");
   } catch (err) { showErr(err); }
   $("acctMenu").hidden = true; $("connAcct").setAttribute("aria-expanded", "false");
 });
