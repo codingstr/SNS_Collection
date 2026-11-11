@@ -52,7 +52,7 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v385";
+const WEB_VERSION = "v386";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };

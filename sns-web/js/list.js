@@ -141,7 +141,7 @@ function embedFor(it) {
   let m;
   if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "16 / 9" };
   // 쇼츠는 세로 화면(9:16)으로 보여 줍니다
-  if (it.source === "youtube-video" && (m = /youtube\.com\/shorts\/([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "9 / 16" };
+  if (it.source === "youtube-video" && (m = /youtube\.com\/shorts\/([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "9 / 16", kind: "short" };
   if (it.source === "x" && (m = /\/status\/(\d+)/.exec(u))) return { src: "https://platform.twitter.com/embed/Tweet.html?id=" + m[1] + "&dnt=true&lang=ko&theme=" + (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"), h: 420, tweet: m[1] };
   if (it.source === "instagram" && (m = /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(u))) return { src: "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed", h: 700 };
   return null;
@@ -169,8 +169,8 @@ function navView(d) {
   openItem(viewCtx[n]);
 }
 function closeViewer() { $("viewer").hidden = true; $("vBody").textContent = ""; setViewerKind(""); }
-// 보기 창 모양: X 글은 글 폭(최대 550px)에 맞춘 좁은 창, 그 밖은 기본
-function setViewerKind(k) { const v = document.querySelector("#viewer .viewer"); v.classList.toggle("vx", k === "x"); v.classList.toggle("vig", k === "instagram"); }
+// 보기 창 모양: X 글은 글 폭(최대 550px)에 맞춘 좁은 창, 쇼츠는 세로 영상 크기에 꼭 맞춘 창, 그 밖은 기본
+function setViewerKind(k) { const v = document.querySelector("#viewer .viewer"); v.classList.toggle("vx", k === "x"); v.classList.toggle("vig", k === "instagram"); v.classList.toggle("vshort", k === "short"); $("viewer").classList.toggle("vshort", k === "short"); }
 // X 공식 위젯(widgets.js): 글 내용 높이에 꼭 맞게 띄웁니다. 못 불러오면 iframe으로 대신합니다.
 let twttrLoad = null;
 function loadTwttr() {
@@ -253,7 +253,7 @@ function openItem(it) {
   if (!e) { openWindow(it.url); return; }
   viewerUrl = it.url;
   updateNav();
-  setViewerKind(it.source === "x" ? "x" : it.source === "instagram" ? "instagram" : "");
+  setViewerKind(e.kind || (it.source === "x" ? "x" : it.source === "instagram" ? "instagram" : ""));
   $("vTitle").textContent = it.title || it.author || "";
   const body = $("vBody");
   body.textContent = "";
@@ -261,7 +261,6 @@ function openItem(it) {
   const frame = () => {
     const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
     if (e.ratio) f.style.aspectRatio = e.ratio; else f.style.height = e.h + "px";
-    if (e.ratio === "9 / 16") { f.style.width = "min(100%, calc(78vh * 9 / 16))"; f.style.margin = "0 auto"; f.style.borderRadius = "12px"; } // 세로 쇼츠가 화면보다 길어지지 않게
     return f;
   };
   if (it.source === "x" && e.tweet) {

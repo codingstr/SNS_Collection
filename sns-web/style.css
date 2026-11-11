@@ -408,3 +408,10 @@ header .toolbar .refreshbtn,header .toolbar .refreshbtn:hover:not(:disabled){bac
 .viewer .xwrap .twitter-tweet{margin:0 auto !important}
 .viewer .xwrap > .hint{padding:24px;text-align:center}
 .viewer.vx iframe,.viewer.vig iframe{max-width:550px;margin:0 auto;border-radius:12px}
+/* 쇼츠: 창 폭을 세로(9:16) 영상에 꼭 맞춥니다. 영상 높이 = 화면 높이 - 바깥 여백(32px) - 창 제목 줄과 테두리(--vhead) */
+#viewer.vshort{--vhead:60px;--shortw:min(calc(100vw - 32px),calc((100vh - 32px - var(--vhead)) * 9 / 16),calc((100dvh - 32px - var(--vhead)) * 9 / 16))}
+.viewer.vshort{width:var(--shortw)}
+.viewer.vshort .vb{overflow:hidden}
+.viewer.vshort iframe{width:100%;aspect-ratio:9 / 16}
+#viewer.vshort #vPrev{left:max(8px,calc(50% - var(--shortw) / 2 - 52px))}
+#viewer.vshort #vNext{right:max(8px,calc(50% - var(--shortw) / 2 - 52px))}

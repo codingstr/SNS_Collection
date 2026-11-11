@@ -290,11 +290,17 @@
   // 채널 '동영상'·'쇼츠'·'게시물' 탭: 화면을 그리거나 스크롤하지 않고 유튜브가 화면용으로 쓰는 데이터 요청(youtubei browse)으로 목록을 이어서 받습니다.
   // 수집 창이 다른 창에 가려져 유튜브가 목록을 더 그리지 않아도 동작합니다. 실패하면 null → 기존 스크롤 방식으로 넘어갑니다(쇼츠는 제외).
   //
-  // 쇼츠 탭 목록에는 게시 날짜가 없습니다. 날짜는 유튜브가 공개로 주는 채널 RSS(/feeds/videos.xml, 최근 업로드 15개·영상과 쇼츠 섞임)에서
-  // 정확한 게시 시각을 받습니다(요청 1번). RSS에 없는 쇼츠는 RSS의 가장 오래된 글보다 더 오래된 것이므로:
-  //   - 그 시각이 가져올 기간보다 오래됐으면 → 기간 밖이라 거기서 멈춤
-  //   - 아니면 날짜를 알 수 없음 → 거기서 멈추고 저장하지 않음(날짜 없이 저장하면 최신 글로 잘못 정렬되기 때문)
+  // 쇼츠 탭 목록에는 게시 날짜가 없습니다. 날짜는 이렇게 채웁니다(쇼츠 탭은 최신순이라 아래로 갈수록 날짜가 오래됨).
+  //   1) 채널 RSS(/feeds/videos.xml, 최근 업로드 15개·영상과 쇼츠 섞임): 정확한 게시 시각(요청 1번). 평소 수집의 새 쇼츠는 여기서 끝납니다.
+  //   2) RSS에 없는 쇼츠: 쇼츠 하나의 정보 요청(youtubei player, 약 9KB)으로 정확한 게시 시각을 받습니다(shortDate).
+  //      모든 쇼츠를 하나씩 묻지 않고, 목록 묶음의 마지막 쇼츠만 물어서 가져올 기간의 끝이 그 묶음 안에 있으면 이진 탐색으로 경계를 찾고,
+  //      경계 안쪽은 정확히 아는 시각 사이를 순서대로 나눠 채웁니다(보간). 두 기준 시각이 하루보다 멀면 그 가운데를 더 물어 좁힙니다.
+  //      → 쇼츠끼리의 순서는 정확하고, 영상·게시물과 섞일 때 하루 이내로만 어긋납니다.
+  //   3) 묻기 한도(SHORT_ASK_MAX)를 넘거나 요청이 실패하면 예전처럼 날짜를 모르는 쇼츠에서 멈추고 저장하지 않습니다
+  //      (날짜 없이 저장하면 최신 글로 잘못 정렬되기 때문).
   // 이미 모은 쇼츠(DB에 날짜가 있음)는 날짜 없이 보내도 서버가 예전 날짜를 그대로 둡니다.
+  const SHORT_ASK_MAX = 150;          // 한 번 수집에서 쇼츠 날짜를 묻는 최대 횟수
+  const SHORT_REFINE_MS = 86400000;   // 보간하는 두 기준 시각이 이보다 멀면 가운데를 더 물어봄(하루)
   async function shortsDates(channelId) {
     const out = { ok: false, dates: {}, oldest: 0 };
     if (!/^UC[\w-]{22}$/.test(channelId || "")) return out;
@@ -334,6 +340,54 @@
       const author = clip(chMeta.title, 80);
       const runsText = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
       const rss = isShorts ? await shortsDates(chMeta.externalId) : null;
+
+      // 쇼츠 하나의 정확한 게시 시각(밀리초). 페이지를 열지 않고 정보 요청만 보냅니다. 실패하면 0.
+      let asks = 0;
+      const shortDate = async (vid) => {
+        if (asks >= SHORT_ASK_MAX || timeUp()) return 0;
+        asks += 1;
+        await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));   // 몰아서 묻지 않게(봇처럼 보이지 않게)
+        try {
+          const res = await fetch("/youtubei/v1/player?key=" + encodeURIComponent(key) + "&prettyPrint=false", {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: ver, hl: "ko", gl: "KR" } }, videoId: vid }),
+          });
+          if (!res.ok) return 0;
+          const mf = (((await res.json()) || {}).microformat || {}).playerMicroformatRenderer || {};
+          const t = Date.parse(mf.publishDate || mf.uploadDate || "");
+          return Number.isNaN(t) ? 0 : t;
+        } catch (e) {
+          return 0;
+        }
+      };
+      // 지금까지 받은 쇼츠(목록 순서 그대로)와 정확히 아는 시각(RSS·직접 물어봄). 보간한 시각은 기준으로 쓰지 않습니다.
+      const all = [], exact = new Map();
+      const need = (k) => !all[k].publishedAt && !(isKnown && isKnown(all[k].id));
+      const ask = async (k) => {
+        if (exact.has(k)) return exact.get(k);
+        const t = await shortDate(all[k].id.slice(3));
+        if (t) { exact.set(k, t); all[k].publishedAt = new Date(t).toISOString(); }
+        return t;
+      };
+      const anchorBefore = (k) => { for (let i = k - 1; i >= 0; i--) if (exact.has(i)) return i; return -1; };
+      const anchorAfter = (k, upto) => { for (let i = k + 1; i <= upto; i++) if (exact.has(i)) return i; return -1; };
+      // from~upto 사이 날짜가 필요한 쇼츠를 채웁니다. 못 채운 첫 위치를 돌려줍니다(다 채우면 -1).
+      const fill = async (from, upto) => {
+        for (let k = from; k <= upto; k++) {
+          while (need(k)) {
+            const a = anchorBefore(k), b = anchorAfter(k, upto);
+            if (a < 0 || b < 0) { if (!(await ask(k))) return k; break; }   // 앞이나 뒤에 기준이 없으면 직접 물어봄
+            const ta = exact.get(a), tb = exact.get(b);
+            if (ta - tb > SHORT_REFINE_MS) {   // 기준이 하루보다 멀면 가운데(사이에 하나뿐이면 그 쇼츠)를 물어 좁힘
+              if (!(await ask(b - a > 2 ? (a + b) >> 1 : k))) return k;
+              continue;
+            }
+            const t = Math.min(ta, Math.max(tb, ta + ((tb - ta) * (k - a)) / (b - a)));
+            all[k].publishedAt = new Date(Math.round(t)).toISOString();
+          }
+        }
+        return -1;
+      };
 
       // 쇼츠 한 개: 새 형식(shortsLockupViewModel)과 예전 형식(reelItemRenderer). 영상과 같이 '유튜브 영상'으로 저장합니다(날짜순으로 섞여 보이게).
       const toShort = (it) => {
@@ -444,17 +498,42 @@
       let batch = first, pages = 0, total = 0;
       while (batch) {
         let items = listOf(batch);
-        // 쇼츠: 날짜를 모르는 새 쇼츠가 나오면 그 앞까지만 보내고 멈춥니다(위 설명)
+        // 쇼츠: 날짜를 채웁니다(위 설명). 못 채운 새 쇼츠가 있으면 그 앞까지만 보내고 멈춥니다.
         let cut = -1;
-        if (isShorts) {
-          cut = items.findIndex((x) => !x.publishedAt && !(isKnown && isKnown(x.id)));
-          if (cut >= 0) items = items.slice(0, cut);
+        if (isShorts && items.length) {
+          const base = all.length;
+          items.forEach((x, i) => { all.push(x); if (x.publishedAt) exact.set(base + i, Date.parse(x.publishedAt)); });
+          let end = all.length - 1;
+          if (items.some((_, i) => need(base + i))) {
+            const tEnd = await ask(end);   // 이 묶음의 마지막 쇼츠
+            if (!tEnd) {
+              cut = items.findIndex((_, i) => need(base + i));
+            } else {
+              if (since && tEnd < since) {
+                // 가져올 기간의 끝이 이 묶음 안에 있음: 이진 탐색으로 기간 밖 첫 쇼츠를 찾습니다
+                let lo = base - 1, hi = end;
+                for (let i = base; i < end; i++) {
+                  if (!exact.has(i)) continue;
+                  if (exact.get(i) >= since) lo = i; else { hi = i; break; }
+                }
+                while (hi - lo > 1) {
+                  const mid = (lo + hi) >> 1, t = await ask(mid);
+                  if (!t) break;
+                  if (t >= since) lo = mid; else hi = mid;
+                }
+                end = hi - lo > 1 ? end : hi;   // 찾았으면 기간 밖 첫 쇼츠까지만(그 쇼츠에서 emit이 멈춤)
+              }
+              const miss = await fill(base, end);
+              cut = miss >= 0 ? miss - base : -1;
+            }
+          }
+          items = all.slice(base, cut >= 0 ? base + cut : end + 1);
         }
         total += items.length;
         if (emit(items)) return { pages, total, why: "기간 밖 글 도달(데이터 요청)" };
         if (cut >= 0) {
           const beyond = rss && rss.ok && rss.oldest && rss.oldest < (since || 0);
-          return { pages, total, why: beyond ? "기간 밖 글 도달(데이터 요청 · 쇼츠 날짜는 RSS)" : "날짜 없음(쇼츠, RSS 범위 밖 · 데이터 요청)" };
+          return { pages, total, why: beyond ? "기간 밖 글 도달(데이터 요청 · 쇼츠 날짜는 RSS)" : "날짜 없음(쇼츠, 날짜 확인 " + asks + "회 · 데이터 요청)" };
         }
         const tok = nextToken(batch);
         if (!tok) return { pages, total, why: "목록 끝(데이터 요청)" };
