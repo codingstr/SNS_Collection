@@ -100,6 +100,8 @@ def item_dict(r) -> dict:
         "id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"],
         "thumb": r["thumb"], "publishedAt": r["published_at"], "publishedText": r["published_text"],
         "via": r["uvia"], "collectedAt": r["collected_at"],
+        # 이 사용자의 추적 계정 중 이 글이 이어진 모든 계정(인스타 공동 게시물처럼 한 글이 두 계정에 올라온 경우 둘 다)
+        "vias": sorted(set((r["uvias"] or r["uvia"] or "").split(","))) if (r["uvias"] or r["uvia"]) else [],
     }
 
 
@@ -107,7 +109,7 @@ def items_for(db, state: dict, known_ver: str):
     """이 사용자가 추적 중인 계정의 글. 화면이 가진 버전(ver)과 같으면 글 목록은 보내지 않습니다(데이터 절약).
 
     글과 추적 계정은 item_via로 이어져 있어서, 같은 계정을 다른 사용자가 다른 이름으로 추가해도 각자 보입니다.
-    via는 이 사용자의 추적 계정 ID로 돌려줍니다(화면이 계정별로 묶는 데 씀).
+    via는 이 사용자의 추적 계정 ID로 돌려줍니다(화면이 계정별로 묶는 데 씀). vias는 그 글이 이어진 이 사용자의 모든 계정입니다.
     '글 모두 삭제'를 누른 뒤에는 그 뒤에 새로 모았거나 다시 본 글만 보입니다.
     """
     vias = [t["id"] for t in state["tracked"]]
@@ -118,10 +120,11 @@ def items_for(db, state: dict, known_ver: str):
     args = (*vias, state["clearedBefore"])
     # 버전: 글 수·가장 최근 수집·가장 최근 내용 변경(썸네일·제목·날짜 보충 등). 내용이 바뀐 글도 화면에 다시 보내집니다.
     cnt, mx, upd = db.execute(f"SELECT COUNT(DISTINCT i.id), MAX(i.collected_at), MAX(i.updated_at) {src}", args).fetchone()
-    ver = hashlib.sha1(f"{cnt}:{mx}:{upd}:{','.join(vias)}:{state['clearedBefore']}".encode()).hexdigest()[:16]
+    # 끝의 "v2": 글에 vias가 붙으면서 형식이 바뀜 → 예전 형식 글을 가진 화면도 한 번 새로 받게 합니다
+    ver = hashlib.sha1(f"{cnt}:{mx}:{upd}:{','.join(vias)}:{state['clearedBefore']}:v2".encode()).hexdigest()[:16]
     if ver == known_ver:
         return ver, None
-    rows = db.execute(f"SELECT i.*, MIN(v.via) AS uvia {src} GROUP BY i.id ORDER BY i.collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
+    rows = db.execute(f"SELECT i.*, MIN(v.via) AS uvia, GROUP_CONCAT(v.via) AS uvias {src} GROUP BY i.id ORDER BY i.collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
     return ver, {r["id"]: item_dict(r) for r in rows}
 
 

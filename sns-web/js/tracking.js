@@ -79,7 +79,8 @@ async function removeTrackedIds(ids) {
   const set = new Set(ids);
   if (!ids.length) return;
   tracked = tracked.filter((x) => !set.has(x.id));
-  items = items.filter((it) => !set.has(it.via)); // 이 계정으로 모은 글도 함께 지웁니다
+  // 이 계정으로 모은 글도 함께 지웁니다(공동 게시물처럼 남은 다른 계정에도 이어진 글은 그 계정 글로 남김)
+  items = items.filter((it) => viasOf(it).some((v) => !set.has(v))).map((it) => (it.vias && it.vias.some((v) => set.has(v)) ? { ...it, vias: it.vias.filter((v) => !set.has(v)), via: it.vias.find((v) => !set.has(v)) } : it));
   selIds = selIds.filter((i) => !set.has(i));
   ids.forEach((i) => removedIds.add(i)); // 서버가 아직 옛 목록을 돌려줘도 다시 나타나지 않게 합니다
   renderTracked(); renderTabs(); renderList();

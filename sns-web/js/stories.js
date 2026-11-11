@@ -14,17 +14,19 @@ function storyData() {
   const byVia = new Map();
   for (const it of items) {
     if (!it.via || !inPeriod(it)) continue;
-    let e = byVia.get(it.via);
-    if (!e) byVia.set(it.via, (e = { unread: [], latest: 0 }));
     const t = publishedMs(it);
-    if (t > e.latest) e.latest = t;
-    if (!seen.has(it.id)) e.unread.push(it.id);
+    viasOf(it).forEach((v) => {   // 공동 게시물은 이어진 계정마다
+      let e = byVia.get(v);
+      if (!e) byVia.set(v, (e = { unread: [], latest: 0 }));
+      if (t > e.latest) e.latest = t;
+      if (!seen.has(it.id)) e.unread.push(it.id);
+    });
   }
   const sel = effSel();
   const list = vp.map((p) => {
     const unread = [];
     let latest = 0;
-    p.ids.forEach((id) => { const e = byVia.get(id); if (e) { unread.push(...e.unread); if (e.latest > latest) latest = e.latest; } });
+    p.ids.forEach((id) => { const e = byVia.get(id); if (e) { e.unread.forEach((x) => { if (!unread.includes(x)) unread.push(x); }); if (e.latest > latest) latest = e.latest; } });   // 그룹 안 두 계정의 공동 게시물은 한 번만
     const accs = personAccounts(p);
     const chosen = accs.find((t) => t.platform === picPick[p.name]) || accs.find((t) => picMap[t.id]) || accs[0];
     return { p, unread, latest, chosen, on: sel.has(p.name) };
@@ -98,7 +100,7 @@ function storyClick(p) {
 // 그룹의 안 읽은 글을 오래된 것부터 차례로 엽니다(인스타그램 스토리처럼). 글 보기 창의 이전/다음으로 넘깁니다.
 function playUnread(p) {
   const label = personLabel(p);
-  const list = items.filter((it) => p.ids.has(it.via) && inPeriod(it) && !seen.has(it.id)).sort((a, b) => publishedMs(a) - publishedMs(b));
+  const list = items.filter((it) => viasOf(it).some((v) => p.ids.has(v)) && inPeriod(it) && !seen.has(it.id)).sort((a, b) => publishedMs(a) - publishedMs(b));
   if (!list.length) { toast("‘" + label + "’에는 읽지 않은 글이 없습니다."); return; }
   viewCtx = list; viewIdx = 0;
   toast("‘" + label + "’의 안 읽은 글 " + list.length + "개를 오래된 것부터 엽니다. ‹ › 또는 ← →로 넘기세요.");
@@ -185,7 +187,7 @@ function confirmBox({ title, text, ok, cls }) {
 async function askReadAll(p) {
   if (document.querySelector(".modal-back.readall")) return;   // 길게 누르기와 우클릭이 함께 와도 한 번만
   const label = personLabel(p);
-  const ids = items.filter((it) => p.ids.has(it.via) && inPeriod(it) && !seen.has(it.id)).map((it) => it.id);
+  const ids = items.filter((it) => viasOf(it).some((v) => p.ids.has(v)) && inPeriod(it) && !seen.has(it.id)).map((it) => it.id);
   if (!ids.length) { toast("‘" + label + "’에는 읽지 않은 글이 없습니다."); return; }
   const ok = await confirmBox({ title: "모두 읽음으로 표시할까요?", text: "‘" + label + "’의 읽지 않은 글 " + ids.length + "개를 읽은 글로 표시합니다. 바로 뒤에 뜨는 알림에서 잠시 동안 되돌릴 수 있습니다.", ok: "모두 읽음", cls: "readall" });
   if (!ok) return;

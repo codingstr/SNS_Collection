@@ -335,7 +335,12 @@ def save_items(raw_items, via: str, ig_dates=None) -> int:
             db.executemany(
                 "UPDATE items SET url=?, title=?, author=?, thumb=?, published_text=?, published_at=?, via=?, seen_at=?, updated_at=?, detail=? WHERE id=?", upd)
         if via:
-            db.executemany("INSERT OR IGNORE INTO item_via(item_id, via) VALUES (?, ?)", [(it["id"], via) for it in its])
+            linked = [it["id"] for it in its if db.execute("INSERT OR IGNORE INTO item_via(item_id, via) VALUES (?, ?)", (it["id"], via)).rowcount]
+            # 이미 있던 글에 다른 계정이 새로 이어졌으면(인스타 공동 게시물 등) 목록 버전(updated_at)을 올려,
+            # 화면이 그 글을 다시 받아 두 계정의 줄에 모두 보이게 합니다.
+            relinked = [i for i in linked if i in olds]
+            if relinked:
+                db.executemany("UPDATE items SET updated_at = ? WHERE id = ?", [(now, i) for i in relinked])
     return len(ins)
 
 

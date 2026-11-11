@@ -15,6 +15,8 @@ function trackedOf(id) {
   if (_tmapOf !== tracked) { _tmapOf = tracked; _tmap = new Map(tracked.map((t) => [t.id, t])); }
   return _tmap.get(id) || null;
 }
+// 글이 이어진 이 사용자의 모든 추적 계정. 인스타 공동 게시물처럼 한 글이 두 계정에 올라오면 둘 다(서버의 vias). 예전 형식은 via 하나.
+const viasOf = (it) => (it.vias && it.vias.length ? it.vias : it.via ? [it.via] : []);
 // 계정별 기간이 있으면 그 계정의 글은 그 기간으로, 없으면 맨 위 기간으로 거릅니다.
 const inPeriod = (it) => {
   const t = it.via ? trackedOf(it.via) : null;
@@ -475,7 +477,7 @@ function selectedVias() {
 // 홈에 보일 글: 기간 안 + 숨긴 그룹 제외 + 고른 그룹만(고른 게 있으면)
 function homeItems() {
   const hid = hiddenVias(), sel = selectedVias();
-  return items.filter((it) => inPeriod(it) && !hid.has(it.via) && (!sel || sel.has(it.via)));
+  return items.filter((it) => inPeriod(it) && viasOf(it).some((v) => !hid.has(v) && (!sel || sel.has(v))));
 }
 // 홈에 보일 추적 계정(매체 탭의 계정 목록·그룹 줄에 씀)
 function homeAccounts() {
@@ -600,7 +602,7 @@ function renderList() {
   if (activeTab !== "people" && activeTab !== "all") {
     const accs = homeAccounts().filter((t) => t.platform === activeTab);
     const counts = new Map();
-    list.forEach((it) => counts.set(it.via, (counts.get(it.via) || 0) + 1)); // 계정마다 전체 글을 다시 세지 않고 한 번에
+    list.forEach((it) => viasOf(it).forEach((v) => counts.set(v, (counts.get(v) || 0) + 1))); // 계정마다 전체 글을 다시 세지 않고 한 번에
     const cnt = (id) => counts.get(id) || 0;
     if (acctFocus && !accs.some((t) => t.id === acctFocus)) acctFocus = "";
     if (document.documentElement.getAttribute("data-design") === "bento" && accs.length) {
@@ -617,7 +619,7 @@ function renderList() {
       const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "모든 계정" }), el("span", { class: "n", text: "0" })]));
       const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb);
     }
-    if (acctFocus) list = list.filter((it) => it.via === acctFocus);
+    if (acctFocus) list = list.filter((it) => viasOf(it).includes(acctFocus));
     // 유튜브 탭: 영상만 / 둘 다 / 게시물만
     if (activeTab === "youtube") {
       const bar = el("div", { class: "segbar", role: "group", "aria-label": "유튜브 보기 방식" });
@@ -643,11 +645,11 @@ function renderList() {
       return;
     }
     const sel = effSel();
-    const rows = (sel.size ? vp.filter((p) => sel.has(p.name)) : vp).map((p) => ({ ...p, list: list.filter((it) => p.ids.has(it.via)).sort((a, b) => publishedMs(b) - publishedMs(a)) }));
+    const rows = (sel.size ? vp.filter((p) => sel.has(p.name)) : vp).map((p) => ({ ...p, list: list.filter((it) => viasOf(it).some((v) => p.ids.has(v))).sort((a, b) => publishedMs(b) - publishedMs(a)) }));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
     // 검색 중에는 어느 그룹에도 속하지 않은 계정(피드 등)의 결과도 '그 밖의 결과'로 함께 보여줍니다(그룹을 골랐으면 그 그룹만).
     const personIds = new Set(); all.forEach((p) => p.ids.forEach((id) => personIds.add(id)));
-    const others = q && page !== "fav" && !sel.size ? list.filter((it) => !personIds.has(it.via)) : [];
+    const others = q && page !== "fav" && !sel.size ? list.filter((it) => !viasOf(it).some((v) => personIds.has(v))) : [];
     if (q) {
       // 검색 중에는 검색에 걸린 글이 있는 사람만 보여줍니다(빈 사람 줄은 숨김).
       rows.splice(0, rows.length, ...rows.filter((r) => r.list.length));
@@ -683,24 +685,44 @@ function renderList() {
     }
     const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
     // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
+    // 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
+    //   유튜브: 계정마다 [영상 | 게시물] 짝, X·인스타: 순서대로 [X | 인스타] 짝. 짝이 없는 줄은 한 줄을 다 씁니다.
     const mediaRows = (r, limit, onMore) => {
       const box = el("div", { class: "sections media-grid" });
-      const has = (src) => r.list.some((it) => it.source === src);
-      MEDIA.forEach((k) => {
+      const nAcc = {};   // 이 사람(그룹)의 매체별 계정 수
+      (r.accs || []).forEach((t) => { nAcc[t.platform] = (nAcc[t.platform] || 0) + 1; });
+      // 매체(k)별 블록: 그 매체 계정이 여럿이면 계정(via)마다, 아니면 하나. 최근 글이 있는 계정부터.
+      const blocks = (k) => {
         const part = r.list.filter((it) => it.source === k);
-        if (!part.length) return;
-        const head = el("div", { class: "sec-head", title: "여기서 휠을 돌리면 옆으로 넘어갑니다" }, [srcIcon(k), el("span", { class: "slabel", text: SRC_LABELS[k] }), el("span", { class: "n", text: part.length + "건" })]);
-        if (onMore && part.length > limit) {
+        if (!part.length) return [];
+        if ((nAcc[tabOf(k)] || 0) < 2) return [{ k, via: "", part }];
+        const by = new Map();
+        // 공동 게시물처럼 이 그룹의 두 계정에 함께 이어진 글은 두 계정의 줄에 모두 넣습니다. r.list가 최신순이라 각 줄도 최신순
+        part.forEach((it) => { const vs = viasOf(it).filter((v) => r.ids && r.ids.has(v)); (vs.length ? vs : [it.via]).forEach((v) => { if (!by.has(v)) by.set(v, []); by.get(v).push(it); }); });
+        return [...by].map(([via, p]) => ({ k, via, part: p })).sort((a, b) => publishedMs(b.part[0]) - publishedMs(a.part[0]));
+      };
+      const sec = (b, full) => {
+        const t = b.via ? trackedOf(b.via) : null;
+        const who = b.via ? (b.part[0].author || (t && t.handle ? "@" + t.handle : (t && t.channelId) || "")) : "";
+        const head = el("div", { class: "sec-head", title: "여기서 휠을 돌리면 옆으로 넘어갑니다" }, [srcIcon(b.k), el("span", { class: "slabel", text: SRC_LABELS[b.k] + (who ? " · " + who : "") }), el("span", { class: "n", text: b.part.length + "건" })]);
+        if (onMore && b.part.length > limit) {
           const more = el("button", { type: "button", text: "전체 보기" });
-          more.addEventListener("click", () => onMore(k));
+          more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
           head.appendChild(more);
         }
         const grid = el("div", { class: "row-cards" });
-        fillRow(grid, part.slice(0, limit));
+        fillRow(grid, b.part.slice(0, limit));
         enableDrag(grid);
-        const full = !has(PARTNER[k]); // 짝(영상↔게시물, X↔인스타)이 없으면 한 줄을 씁니다
-        box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(k) }, [head, grid]));
-      });
+        box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(b.k) }, [head, grid]));
+      };
+      // 짝 지어 놓기: 짝이 있으면 둘 다 반 칸, 없으면 한 줄 전체
+      const pairs = [];
+      const vids = blocks("youtube-video"), posts = blocks("youtube-post");
+      vids.forEach((v) => { const i = posts.findIndex((p) => p.via === v.via); pairs.push(i >= 0 ? [v, posts.splice(i, 1)[0]] : [v]); });
+      posts.forEach((p) => pairs.push([p]));
+      const xs = blocks("x"), igs = blocks("instagram");
+      for (let i = 0; i < Math.max(xs.length, igs.length); i++) pairs.push([xs[i], igs[i]].filter(Boolean));
+      pairs.forEach((pr) => pr.forEach((b) => sec(b, pr.length === 1)));
       if (!box.children.length) box.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
       return box;
     };
@@ -717,8 +739,12 @@ function renderList() {
           requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = c.st || 0; }); // 보던 위치로
         } else { personPlat = ""; renderList(); }
       });
-        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: SRC_LABELS[personPlat] || PLATFORM[personPlat] || personPlat })])]);
-        r.list.filter((it) => it.source === personPlat || tabOf(it.source) === personPlat).slice(0, 300).forEach((it) => grid.appendChild(card(it)));
+        // personPlat: 매체(예: youtube, x) 또는 줄 종류(youtube-video …). 같은 매체 계정이 여럿인 줄의 '전체 보기'는 "줄 종류|계정"
+        const [pk, pv] = personPlat.split("|");
+        const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)));
+        const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
+        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who })])]);
+        mine.slice(0, 300).forEach((it) => grid.appendChild(card(it)));
         body.appendChild(grid);
       } else {
         body.appendChild(el("section", { class: "sec" }, [
@@ -752,18 +778,24 @@ function renderList() {
   }
   if (!q) {
     // 그룹·계정별: 그룹 이름이 같은 계정은 한 줄로, 그룹 없는 계정은 계정마다 한 줄로 보여줍니다.
+    // 매체 탭(유튜브·X·인스타)에서 한 그룹에 그 매체 계정이 여럿이면 계정마다 따로 줄을 둡니다(섞이지 않게).
     g.classList.add("sections");
     const groups = new Map();
-    homeAccounts().forEach((t) => {   // 숨긴 그룹은 빼고, 위쪽에서 그룹을 골랐으면 그 그룹만
-      const key = t.group ? "g:" + t.group : "a:" + t.id;
-      if (!groups.has(key)) groups.set(key, { name: t.group || PLATFORM[t.platform] + " @" + (t.handle || t.channelId || ""), ids: new Set(), plats: [] });
+    const accs = homeAccounts();   // 숨긴 그룹은 빼고, 위쪽에서 그룹을 골랐으면 그 그룹만
+    const many = (t) => activeTab === t.platform && accs.filter((o) => o.group === t.group && o.platform === t.platform).length > 1;
+    accs.forEach((t) => {
+      const split = t.group && many(t);
+      const key = t.group ? "g:" + t.group + (split ? "|" + t.id : "") : "a:" + t.id;
+      const tag = "@" + (t.handle || t.channelId || "");
+      if (!groups.has(key)) groups.set(key, { name: t.group ? t.group + (split ? " · " + tag : "") : PLATFORM[t.platform] + " " + tag, ids: new Set(), plats: [] });
       const gr = groups.get(key);
       gr.ids.add(t.id);
       gr.plats.push(PLATFORM[t.platform]);
     });
-    const rows = [...groups.values()].map((gr) => ({ ...gr, list: list.filter((it) => gr.ids.has(it.via)) }));
+    // 오른쪽 목록에서 계정 하나를 골랐으면 그 계정의 줄만(공동 게시물로 다른 계정 줄에도 걸리는 글이 그 줄을 따로 띄우지 않게)
+    const rows = [...groups.values()].filter((gr) => !acctFocus || gr.ids.has(acctFocus)).map((gr) => ({ ...gr, list: list.filter((it) => viasOf(it).some((v) => gr.ids.has(v))) }));
     const known = new Set(tracked.map((t) => t.id));
-    const rest = list.filter((it) => !known.has(it.via));
+    const rest = list.filter((it) => !viasOf(it).some((v) => known.has(v)));
     if (rest.length) rows.push({ name: "기타", plats: [], ids: new Set(), list: rest });
     rows.forEach((r) => r.list.sort((a, b) => publishedMs(b) - publishedMs(a)));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
