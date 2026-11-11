@@ -9,6 +9,7 @@
   크롬 로그인 정보는 만든 컴퓨터에서만 풀리므로, 외장 SSD를 여러 컴퓨터에서 써도 되게 컴퓨터마다 따로 둡니다.
 """
 import asyncio
+import contextlib
 import heapq
 import itertools
 import json
@@ -64,6 +65,10 @@ LOGIN_BAD_MS = 10 * 60000         #   로그인 안 됨/알 수 없음은 10분 
 STALL_RETRY_MS = 24 * 3600 * 1000 # 로딩이 도중에 막혔던 페이지(X 속도 제한 등)를 끝까지 다시 내려가 보는 것은 하루에 한 번만
 COVER_KEEP_MS = 90 * DAY_MS       # 90일 동안 수집하지 않은 페이지의 수집 범위 기억은 지웁니다
 ALIVE_EVERY = 3.0                 # 수집 중인 페이지에 스크립트가 남아 있는지 확인하는 간격(초)
+# 멈춤 감시(_watchdog): 일하는 중에 진전이 없으면 그 프로필의 크롬을 강제로 끕니다. 기다리는 반복은 0.25초마다 진전을 표시합니다.
+WATCH_EVERY = 5                   # 감시 간격(초)
+NEXT_STALL_S = 20                 # 한 페이지 수집이 끝나고 다음 페이지로 넘어가는 사이에 이만큼(초) 진전이 없으면 멈춘 것으로 봄
+STALL_S = 120                     # 그 밖의 때(페이지 열기 최대 55초 등 오래 걸리는 정상 작업이 있음) 멈춘 것으로 보는 시간(초)
 IG_DATES_MAX = 6000               # 인스타 게시물 날짜(응답에서 읽은 것) 기억 개수
 ALL = "*"                         # 수집 대상: 추적 계정 전체
 
@@ -643,6 +648,8 @@ class Collector:
         self.beat = time.time()          # 작업 스레드가 마지막으로 진전을 보인 시각(초)
         self.in_job = 0                  # 지금 처리 중인 일의 수(겹쳐 처리 포함). 0이면 감시하지 않음
         self.cur_profile = ""            # 마지막으로 쓴 크롬 프로필(멈췄을 때 먼저 다시 띄울 것)
+        self.between = 0.0               # 한 페이지 수집이 끝나고 다음 페이지로 넘어가는 중이면 그 시작 시각(0이면 아님)
+        self.op, self.op_at = "", 0.0    # 마지막으로 시작한 '시간 제한 없는 크롬 호출'과 그 시각(멈춤 감시 로그에 적음)
         self.next_auto = 0.0             # 다음 자동 수집 시각(초)
         self.visit_seq = itertools.count(1)
         self.ig_dates = OrderedDict()    # 인스타 게시물 코드 → {"t": 게시 시각(초), "pin": 고정 게시물}
@@ -821,27 +828,61 @@ class Collector:
 
     # ----- 멈춤 감시 -----
     # 크롬 조작 중 몇 가지(페이지 안 스크립트 실행, 창 조작 등)는 기다리는 시간 제한이 없어서, 크롬 창 하나가 응답하지 않으면
-    # 작업 스레드 전체가 멈출 수 있습니다(서버 PC에서 그 창을 닫아야 풀림). 일하는 중에 STALL_S 동안 진전이 없으면
-    # 그 프로필의 크롬을 강제로 끕니다. 막혀 있던 호출이 '창이 닫힘' 오류로 풀리고, 다음에 쓸 때 크롬을 새로 띄웁니다.
+    # 작업 스레드 전체가 멈출 수 있습니다(서버 PC에서 그 창을 닫아야 풀림). 그러면 그 프로필의 크롬을 강제로 끕니다.
+    # 막혀 있던 호출이 '창이 닫힘' 오류로 풀리고, 다음에 쓸 때 크롬을 새로 띄웁니다.
+    # - 한 페이지 수집이 끝나고 다음 페이지로 넘어가는 사이(멈춤이 실제로 생기던 곳): NEXT_STALL_S 동안 진전이 없으면.
+    #   이 사이의 오래 걸리는 정상 작업(페이지 열기·크롬 띄우기·끼워 넣은 다른 일)은 _slow로 감시에서 뺍니다.
+    # - 그 밖의 때: STALL_S 동안 진전이 없으면.
     def _tick(self):
         self.beat = time.time()
 
+    def _doing(self, what: str):
+        """시간 제한이 없는 크롬 호출 직전에 부릅니다. 그 호출에서 멈추면 멈춤 감시가 무엇에서 멈췄는지 로그에 적습니다."""
+        self.op, self.op_at = what, time.time()
+
+    @contextlib.contextmanager
+    def _slow(self):
+        """오래 걸릴 수 있는 정상 작업 동안은 '다음 페이지로 넘어가는 중' 감시를 쉬고, 끝나면 그때부터 다시 셉니다."""
+        saved, self.between = self.between, 0.0
+        try:
+            yield
+        finally:
+            self._tick()
+            if saved:
+                self.between = time.time()
+
     def _watchdog(self):
         kills = 0
+        my_beat = None   # 감시가 크롬을 끈 뒤 직접 넣은 시각(작업 스레드의 진전과 구별)
+        since = 0.0      # 작업 스레드가 마지막으로 진전을 보인 시각(로그에 처음 멈춘 때부터의 시간을 적음)
         while True:
             time.sleep(WATCH_EVERY)
             try:
-                if self.in_job <= 0 or time.time() - self.beat < STALL_S:
-                    kills = 0
+                now, nxt = time.time(), self.between > 0
+                if self.in_job <= 0 or now - self.beat < (NEXT_STALL_S if nxt else STALL_S):
+                    # 작업 스레드가 실제로 진전을 보였을 때(또는 할 일이 없을 때)만 처음부터 다시 셉니다.
+                    if self.in_job <= 0 or self.beat != my_beat:
+                        kills, my_beat = 0, None
                     continue
-                # 처음에는 마지막으로 쓰던 프로필만, 그래도 계속 멈춰 있으면 두 프로필 모두
-                targets = [self.cur_profile] if kills == 0 and self.cur_profile else [PROFILE_COLLECT, PROFILE_SEARCH]
-                log.warning("수집기가 %d초 동안 진전이 없어 크롬(%s)을 다시 띄웁니다(창이 응답하지 않음).", int(time.time() - self.beat), ", ".join(targets))
+                if kills == 0:
+                    since = self.beat
+                # 처음에는 쓰던 프로필만(다음 페이지로 넘어가는 중이면 수집용), 그래도 계속 멈춰 있으면 두 프로필 모두
+                if kills:
+                    targets = [PROFILE_COLLECT, PROFILE_SEARCH]
+                elif nxt:
+                    targets = [PROFILE_COLLECT]
+                else:
+                    targets = [self.cur_profile] if self.cur_profile else [PROFILE_COLLECT, PROFILE_SEARCH]
+                log.warning("수집기가 %d초 동안 %s 크롬(%s)을 다시 띄웁니다(창이 응답하지 않음).", int(now - since),
+                            "한 페이지 수집을 끝낸 뒤 다음 페이지로 넘어가지 못해" if nxt else "진전이 없어", ", ".join(targets))
+                if self.op:
+                    log.warning("  마지막으로 시작한 크롬 호출: %s (%d초 전%s)", self.op, int(now - self.op_at),
+                                "" if self.op_at >= since else ", 멈추기 전에 시작한 것이라 다른 곳에서 멈췄을 수 있음")
                 for prof in targets:
                     n = kill_profile_chrome(prof)
                     log.warning("  %s 프로필 크롬 %s", prof, f"{n}개 종료" if n else "을 찾지 못함")
                 kills += 1
-                self.beat = time.time()   # 정리될 시간을 줍니다
+                self.beat = my_beat = time.time()   # 정리될 시간을 줍니다
             except Exception:
                 log.exception("멈춤 감시 오류")
 
@@ -851,6 +892,7 @@ class Collector:
         self.last_used = time.time()
         self.in_job += 1
         self._tick()
+        saved, self.between = self.between, 0.0   # 페이지 사이에 끼워 넣은 일(검색 등)은 오래 걸릴 수 있음: 끝난 뒤 다시 셈
         try:
             kind = job["kind"]
             if kind == "collect":
@@ -872,6 +914,8 @@ class Collector:
         finally:
             self.in_job -= 1
             self._tick()
+            if saved:
+                self.between = time.time()
             self.last_used = time.time()
             if job["kind"] == "login":
                 self.login_busy = False
@@ -950,6 +994,7 @@ class Collector:
         kw = dict(user_data_dir=str(d), headless=False, no_viewport=True, args=args,
                   ignore_default_args=["--enable-automation"])
         snap = winpos.snapshot()
+        self._doing(f"{profile} 프로필 크롬 띄우기")
         try:
             ctx = self.pw.chromium.launch_persistent_context(channel="chrome", **kw)
         except Exception as e:
@@ -967,7 +1012,8 @@ class Collector:
             self.pw = sync_playwright().start()
         ctx = self.ctxs.get(profile)
         if ctx is None:
-            ctx = self._launch(profile)
+            with self._slow():
+                ctx = self._launch(profile)
             # 수집 스크립트의 메시지는 어느 페이지에서 왔는지와 함께 받습니다(한 프로필에 매체별 창이 여러 개).
             ctx.expose_binding("__snsBridge", lambda source, raw: self._on_msg(source.get("page"), raw))
             ctx.add_init_script(VISIBLE_JS)
@@ -999,6 +1045,7 @@ class Collector:
         base = next((pg for pg in ctx.pages if not pg.is_closed()), None)
         if base is not None:
             try:
+                self._doing("새 창 열기(크롬 창 조작)")
                 cdp = ctx.new_cdp_session(base)
                 try:
                     with ctx.expect_page(timeout=10000) as info:
@@ -1012,6 +1059,7 @@ class Collector:
                         pass
             except Exception as e:
                 log.info("새 창을 열지 못해 새 탭으로 엽니다: %s", str(e).splitlines()[0][:120])
+        self._doing("새 탭 열기")
         page = ctx.new_page()   # 창이 하나도 없으면 새 창으로 열림
         winpos.tuck(snap, move=not self.grid)
         return page
@@ -1023,6 +1071,7 @@ class Collector:
             return
         x, y, w, h = self.grid["cells"][slot]
         try:
+            self._doing(f"{key} 창을 칸에 놓기(크롬 창 조작)")
             cdp = page.context.new_cdp_session(page)
             try:
                 wid = cdp.send("Browser.getWindowForTarget")["windowId"]
@@ -1058,6 +1107,7 @@ class Collector:
         new = {}
         for req in pend:
             try:
+                self._doing("인스타 응답 내용 읽기")
                 r = req.response()
                 if r is None or r.status != 200:
                     continue
@@ -1080,6 +1130,7 @@ class Collector:
             if (cur.get("acct") or cur["platform"]) == "instagram":   # 수집 창만(검색 창은 게시물 날짜가 필요 없음)
                 try:
                     if not page.is_closed():
+                        self._doing("인스타 창에 게시 날짜 전달(페이지 스크립트)")
                         page.evaluate(IG_DATES_JS, new)
                 except Exception:
                     pass
@@ -1099,6 +1150,7 @@ class Collector:
         h["checked"] = now
         page = h["page"]
         try:
+            self._doing(f"{h.get('acct') or h['platform']} 창 살아 있는지 확인(페이지 스크립트)")
             alive = page.evaluate(ALIVE_JS)
         except Exception:
             h["miss"] = h.get("miss", 0) + 1   # 페이지가 바뀌는 순간에는 확인이 실패할 수 있어 몇 번 더 봅니다
@@ -1114,6 +1166,15 @@ class Collector:
             set_login(acct, False)
             return f"서버의 {acct_ko(acct)} 테스트 계정 로그인이 풀려 로그인 화면으로 이동했습니다(관리자가 login_setup.bat {acct} 로 다시 로그인 필요)"
         return "페이지가 다른 주소로 이동해 수집이 끊겼습니다: " + url[:120]
+
+    def _load(self, page, url: str):
+        """페이지를 엽니다(최대 45초 + 로딩 마무리 10초). 오래 걸릴 수 있는 정상 작업이라 '다음 페이지로 넘어가는 중' 감시에서 뺍니다."""
+        with self._slow():
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            try:
+                page.wait_for_load_state("load", timeout=10000)
+            except Exception:
+                pass
 
     @staticmethod
     def _halt(page):
@@ -1154,14 +1215,18 @@ class Collector:
         page = self.pages.pop(key, None)
         if page is not None:
             try:
+                self._doing(f"{key} 창 닫기")
                 page.close()
             except Exception:
                 pass
         profile = key_profile(key)
         ctx = self.ctxs.get(profile)
+        if ctx is not None:
+            self._doing(f"{profile} 프로필 크롬이 살아 있는지 확인")
         if ctx is not None and not self._ctx_alive(ctx):
             self._forget_profile(profile, ctx)
             try:
+                self._doing(f"{profile} 프로필 크롬 닫기")
                 ctx.close()
             except Exception:
                 pass
@@ -1216,11 +1281,8 @@ class Collector:
         h = {"page": page, "platform": platform, "acct": key_acct(key)}
         try:
             self.last_open[platform] = time.time()
-            page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            try:
-                page.wait_for_load_state("load", timeout=10000)
-            except Exception:
-                pass
+            self._load(page, url)
+            self._doing(f"{key} 창에 수집 스크립트 넣기")
             page.evaluate(self._bundle(platform), cfg)
             end = time.time() + limit
             while cur["done"] is None and time.time() < end:
@@ -1245,6 +1307,7 @@ class Collector:
                 self._halt(page)   # 끝나지 않은 스크립트(멈추기·시간 초과)가 뒤에서 계속 스크롤하지 않게
             if side:
                 try:
+                    self._doing(f"{key} 임시 창 닫기")
                     page.close()
                 except Exception:
                     pass
@@ -1272,16 +1335,13 @@ class Collector:
             self.busy.add(key)
             try:
                 self.last_open[platform] = time.time()
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                try:
-                    page.wait_for_load_state("load", timeout=10000)
-                except Exception:
-                    pass
+                self._load(page, url)
                 h = {"page": page, "cur": cur, "platform": platform, "pk": key, "checked": time.time()}
                 if url.endswith("/shorts") and "/shorts" not in (page.url or ""):
                     # 쇼츠 탭이 없는 채널: 유튜브가 채널 첫 화면으로 보냄. 그 화면을 쇼츠로 잘못 모으지 않고 바로 끝냅니다.
                     cur["done"] = {"type": "autoDone", "found": 0, "sent": 0, "why": "목록 끝(쇼츠 탭 없음)"}
                     return h
+                self._doing(f"{key} 창에 수집 스크립트 넣기")
                 page.evaluate(self._bundle(platform), {**cfg, "visit": visit})
                 return h
             except Exception as e:
@@ -1379,6 +1439,7 @@ class Collector:
                     try:
                         h = self._begin(t["p"], t["url"], t["cfg"], t["via"], True)
                         active[p] = (t, h, now_ms(), time.time() + limit)
+                        self.between = 0.0   # 다음 페이지로 넘어감
                     except Exception as e:
                         log.exception("페이지 수집 오류: %s", t["url"])
                         on_done(t, e, now_ms())
@@ -1401,6 +1462,7 @@ class Collector:
                         if cur["done"] is None and not closed:
                             self._halt(h["page"])   # 시간 초과·이동: 남은 스크립트를 멈춥니다
                         del active[p]
+                        self.between = time.time()   # 한 페이지가 끝남: 다음 페이지로 넘어갈 때까지 멈춤을 빨리 알아챕니다
                         on_done(t, res, t0)
                         next_at[p] = time.time() + self._gap(p)
                         if gone and "로그인이 풀려" in gone:   # 로그인이 풀린 매체는 남은 페이지를 열지 않습니다(로그아웃 상태로 계속 여는 것도 봇처럼 보임)
@@ -1419,6 +1481,7 @@ class Collector:
                     time.sleep(0.25)
         finally:
             self.depth -= 1
+            self.between = 0.0
             for t, h, t0, _ in active.values():
                 self._end(h)
                 self._halt(h["page"])
@@ -1828,11 +1891,8 @@ class Collector:
                 self.busy.add(key)
             try:
                 self.last_open[p] = time.time()   # 실패한 열기도 사이트에는 요청이므로 간격에 넣습니다
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                try:
-                    page.wait_for_load_state("load", timeout=10000)
-                except Exception:
-                    pass
+                self._load(page, url)
+                self._doing(f"{key} 창에 검색 스크립트 넣기")
                 page.evaluate(self._bundle(p), {"mode": "search", "q": job["q"], "since": 0, "visit": visit})
                 h["deadline"] = time.time() + SEARCH_WAIT
                 return h
@@ -1849,6 +1909,7 @@ class Collector:
         self.curs.pop(page, None)
         if h["side"]:
             try:
+                self._doing(f"{h['pk']} 임시 검색 창 닫기")
                 page.close()
             except Exception:
                 pass
