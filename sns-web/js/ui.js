@@ -592,3 +592,22 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   const maybe = () => { if (!seen && au && !au.hidden) { seen = true; setTimeout(open, 700); } };
   if (au) { new MutationObserver(maybe).observe(au, { attributes: true, attributeFilter: ["hidden"] }); setTimeout(maybe, 600); }
 })();
+
+/* ---------- 단축키 '/': 어느 화면에서든 위쪽 검색창에 커서를 둡니다 ----------
+   - 글자를 입력하는 중(입력칸·글 상자·편집 가능한 곳에 커서가 있음)이면 '/'는 그대로 입력됩니다.
+   - 글 보기 창이 열려 있으면 닫고 검색창으로 갑니다. 관리 탭·추적 계정 관리 등 다른 화면에서도 위쪽 검색창은 늘 있으므로 그대로 옮깁니다.
+   - 대화 상자(설정·그룹 수정·제거 확인 등)나 안내 투어가 떠 있을 때, 로그인 전(검색창을 쓸 수 없음)에는 아무것도 하지 않습니다. */
+(() => {
+  const typing = (n) => !!n && (n.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName || ""));
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.defaultPrevented) return;
+    if (typing(e.target) || typing(document.activeElement)) return;
+    const q = $("q"), au = $("acctUser");
+    if (!q || !au || au.hidden) return;   // 로그인 전
+    if (document.querySelector(".modal-back:not([hidden])") || !$("setPanel").hidden || !$("tour").hidden) return;
+    e.preventDefault();   // 검색창에 '/'가 들어가지 않게
+    if (!$("viewer").hidden) closeViewer();
+    q.focus();
+    q.select();   // 이미 적어 둔 검색어가 있으면 골라 두어 바로 새로 칠 수 있게
+  });
+})();
