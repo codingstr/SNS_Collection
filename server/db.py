@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS items (
   via             TEXT NOT NULL DEFAULT '',     -- 처음 모은 추적 계정 (예: youtube:채널핸들). 실제 연결은 item_via
   collected_at    INTEGER NOT NULL,             -- 처음 모은 시각(밀리초)
   seen_at         INTEGER NOT NULL DEFAULT 0,   -- 마지막으로 다시 본 시각(밀리초). '글 모두 삭제' 뒤에 다시 모으면 다시 보이게 하는 데 씀
-  updated_at      INTEGER NOT NULL DEFAULT 0    -- 내용(제목·썸네일·날짜 등)이 실제로 바뀐 시각(밀리초). 화면의 글 목록 버전에 씀
+  updated_at      INTEGER NOT NULL DEFAULT 0,   -- 내용(제목·썸네일·날짜 등)이 실제로 바뀐 시각(밀리초). 화면의 글 목록 버전에 씀
+  detail          TEXT NOT NULL DEFAULT ''      -- 유튜브 게시물 자세히 보기 내용(JSON: 전체 본문·사진·첨부 영상·작성자 사진). 그 밖의 글은 빈칸
 );
 -- 글 ↔ 추적 계정 연결. 같은 계정을 사용자마다 다른 이름(@핸들 / 채널 주소)으로 추가해도 각자 글이 보이게 합니다.
 CREATE TABLE IF NOT EXISTS item_via (
@@ -138,6 +139,8 @@ def init_db():
             for col in ("seen_at", "updated_at"):
                 if col not in cols:
                     db.execute(f"ALTER TABLE items ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+            if "detail" not in cols:
+                db.execute("ALTER TABLE items ADD COLUMN detail TEXT NOT NULL DEFAULT ''")
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone():
             cols = {r["name"] for r in db.execute("PRAGMA table_info(users)")}
             for col in ("is_admin", "must_change"):

@@ -66,14 +66,14 @@ async function refreshOnce() {
   const statusSig = JSON.stringify(checkStatus);
   const loginSig = JSON.stringify([loginState, settings]);
   // 확인(업데이트)이 진행되는 동안에는 글 목록을 다시 그리지 않고(상태 문구만 갱신), 끝난 뒤에 한 번만 새로 그립니다.
-  // 단, 추적 계정 목록이 바뀐 경우(추가·삭제·묶음)는 바로 반영합니다.
+  // 단, 추적 계정 목록이 바뀐 경우(추가·삭제·그룹)는 바로 반영합니다.
   const updating = !!(checkStatus && checkStatus.running) && firstDrawn;
   const trackSig = JSON.stringify([tracked, settings, winDays]);
   if (dataSig !== lastDataSig && (!updating || trackSig !== lastTrackSig)) { lastDataSig = dataSig; lastTrackSig = trackSig; lastStatusSig = statusSig; firstDrawn = true; keepView(renderAll); }
   else if (statusSig !== lastStatusSig) { lastStatusSig = statusSig; renderTracked(); }
   if (loginSig !== lastLoginSig) { lastLoginSig = loginSig; renderLogin(); }
   renderWork();
-  // 수집 중에는 글 목록을 다시 그리지 않지만, 묶음 줄의 '새 글' 빨간 점은 바로 바꿔 줍니다(바뀐 게 없으면 그대로 둠).
+  // 수집 중에는 글 목록을 다시 그리지 않지만, 그룹 줄의 '새 글' 빨간 점은 바로 바꿔 줍니다(바뀐 게 없으면 그대로 둠).
   if (typeof renderStories === "function") renderStories();
   // 이 브라우저에 사진이 없는 계정은 서버에 저장된 사진을 받아 옵니다(계정마다 한 번만 물어봄).
   if (tracked.some((t) => !picMap[t.id] && !avAsked.has(t.id))) fetchAvatars().catch(() => {});
@@ -145,7 +145,7 @@ function keepView(draw) {
   try {
     grid.querySelectorAll(".sec").forEach((sec) => {
       const key = viewKey(sec, cnt);
-      // 세로 기준: 지금 화면에 걸쳐 보이는 첫 줄(계정·묶음). 위에 새 줄이 끼어들어도 이 줄이 같은 자리에 오게 합니다.
+      // 세로 기준: 지금 화면에 걸쳐 보이는 첫 줄(계정·그룹). 위에 새 줄이 끼어들어도 이 줄이 같은 자리에 오게 합니다.
       if (!secAnchor) { const r = sec.getBoundingClientRect(); if (r.bottom > vtop + 1) secAnchor = { key, top: r.top }; }
       const row = sec.querySelector(".row-cards");
       if (row) rows[key] = { left: row.scrollLeft, a: firstVisibleCard(row, true) };

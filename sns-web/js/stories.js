@@ -1,13 +1,13 @@
-/* ---------- 위쪽 묶음 줄 (인스타그램 스토리 모양) ----------
+/* ---------- 위쪽 그룹 줄 (인스타그램 스토리 모양) ----------
    글 영역 맨 위에 가로로 놓인 동그란 프로필 사진 + 아래 이름. 글을 내려도 위에 붙어 있습니다.
-   - 누르면 그 묶음을 고르거나 풉니다(여러 개 가능). 고른 묶음은 사진 테두리가 색으로 바뀌고, 고른 묶음의 글만 보입니다.
-   - 아무것도 고르지 않으면(맨 앞 '전체'가 색 테두리) 모든 묶음을 보여 줍니다.
-   - 안 읽은 글이 있는 묶음은 이름 오른쪽 위에 빨간 점이 붙고, 줄의 앞쪽으로 옵니다.
-   - 사진을 우클릭(휴대폰은 길게 누르기)하면 한 번 확인한 뒤 그 묶음의 글을 모두 읽음으로 표시합니다.
-   숨긴 묶음(추적 계정 관리 → '홈에 보일 묶음')은 이 줄에 나오지 않습니다. 사람(묶음) 계산은 list.js의 peopleMap. */
+   - 누르면 그 그룹을 고르거나 풉니다(여러 개 가능). 고른 그룹은 사진 테두리가 색으로 바뀌고, 고른 그룹의 글만 보입니다.
+   - 아무것도 고르지 않으면(맨 앞 '전체'가 색 테두리) 모든 그룹을 보여 줍니다.
+   - 안 읽은 글이 있는 그룹은 이름 오른쪽 위에 빨간 점이 붙고, 줄의 앞쪽으로 옵니다.
+   - 사진을 우클릭(휴대폰은 길게 누르기)하면 한 번 확인한 뒤 그 그룹의 글을 모두 읽음으로 표시합니다.
+   숨긴 그룹(추적 계정 관리 → '홈에 보일 그룹')은 이 줄에 나오지 않습니다. 사람(그룹) 계산은 list.js의 peopleMap. */
 let storySig = "", storyScroll = 0;
 
-// 묶음마다: 안 읽은 글 ID, 가장 최근 글 시각, 이름 옆 사진에 쓸 계정
+// 그룹마다: 안 읽은 글 ID, 가장 최근 글 시각, 이름 옆 사진에 쓸 계정
 function storyData() {
   const vp = visiblePeople();
   if (!vp.length) return null;
@@ -29,7 +29,7 @@ function storyData() {
     const chosen = accs.find((t) => t.platform === picPick[p.name]) || accs.find((t) => picMap[t.id]) || accs[0];
     return { p, unread, latest, chosen, on: sel.has(p.name) };
   });
-  // 안 읽은 글이 있는 묶음을 앞으로, 그 안에서는 최근 글 순(인스타그램 스토리처럼)
+  // 안 읽은 글이 있는 그룹을 앞으로, 그 안에서는 최근 글 순(인스타그램 스토리처럼)
   list.sort((a, b) => (b.unread.length > 0) - (a.unread.length > 0) || b.latest - a.latest);
   return { list, sel };
 }
@@ -64,7 +64,7 @@ function onLongPress(b, fn) {
   ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => b.addEventListener(ev, stop));
 }
 
-// 고른 묶음이 바뀐 뒤: 글 목록을 다시 그리고, 키보드로 고르던 중이면 같은 묶음에 포커스를 돌려줍니다.
+// 고른 그룹이 바뀐 뒤: 글 목록을 다시 그리고, 키보드로 고르던 중이면 같은 그룹에 포커스를 돌려줍니다.
 function afterStorySelect(name) {
   const hadFocus = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest("#storyBar"));
   personFocus = ""; personPlat = ""; backCtx = null;
@@ -91,11 +91,11 @@ function storyClick(p) {
     playUnread(p);
     return;
   }
-  if (storyTap) { clearTimeout(storyTap.timer); const prev = storyTap.name; storyTap = null; toggleStory(prev); } // 다른 묶음을 이어서 누름: 앞의 것 먼저 적용
+  if (storyTap) { clearTimeout(storyTap.timer); const prev = storyTap.name; storyTap = null; toggleStory(prev); } // 다른 그룹을 이어서 누름: 앞의 것 먼저 적용
   const name = p.name;
   storyTap = { name, timer: setTimeout(() => { storyTap = null; toggleStory(name); }, STORY_TAP_MS) };
 }
-// 묶음의 안 읽은 글을 오래된 것부터 차례로 엽니다(인스타그램 스토리처럼). 글 보기 창의 이전/다음으로 넘깁니다.
+// 그룹의 안 읽은 글을 오래된 것부터 차례로 엽니다(인스타그램 스토리처럼). 글 보기 창의 이전/다음으로 넘깁니다.
 function playUnread(p) {
   const label = personLabel(p);
   const list = items.filter((it) => p.ids.has(it.via) && inPeriod(it) && !seen.has(it.id)).sort((a, b) => publishedMs(a) - publishedMs(b));
@@ -108,14 +108,14 @@ function playUnread(p) {
 function storyBar(d) {
   d = d || storyData();
   if (!d) { storySig = ""; return null; }
-  const bar = el("div", { id: "storyBar", class: "storybar", role: "toolbar", "aria-label": "볼 묶음 고르기(여러 개 가능). 사진을 우클릭하면 모두 읽음" });
+  const bar = el("div", { id: "storyBar", class: "storybar", role: "toolbar", "aria-label": "볼 그룹 고르기(여러 개 가능). 사진을 우클릭하면 모두 읽음" });
   const allOn = !d.sel.size;
-  const all = storyItem({ face: allFace(), label: "전체", on: allOn, aria: allOn ? "전체(모든 묶음을 보는 중)" : "전체: 고른 묶음을 모두 풀기" });
+  const all = storyItem({ face: allFace(), label: "전체", on: allOn, aria: allOn ? "전체(모든 그룹을 보는 중)" : "전체: 고른 그룹을 모두 풀기" });
   all.addEventListener("click", () => { if (!storySel.size) return; storySel = new Set(); afterStorySelect(""); });
   bar.appendChild(all);
   d.list.forEach((s) => {
     const label = personLabel(s.p);
-    const single = s.p.accs.length === 1 && !s.p.accs[0].group;   // 묶지 않은 계정 하나: 어느 매체인지 작은 아이콘으로
+    const single = s.p.accs.length === 1 && !s.p.accs[0].group;   // 그룹화하지 않은 계정 하나: 어느 매체인지 작은 아이콘으로
     const n = s.unread.length;
     const b = storyItem({
       face: picFace(s.chosen, label.replace(/^@/, ""), "sface"), label, on: s.on, dot: n > 0,
@@ -133,7 +133,7 @@ function storyBar(d) {
   return bar;
 }
 
-// 글 목록은 그대로 두고 묶음 줄만 새로 그립니다(본 글·새 글이 바뀌었을 때). 바뀐 게 없으면 아무것도 하지 않습니다.
+// 글 목록은 그대로 두고 그룹 줄만 새로 그립니다(본 글·새 글이 바뀌었을 때). 바뀐 게 없으면 아무것도 하지 않습니다.
 function renderStories() {
   refreshSideUnread();
   const cur = document.getElementById("storyBar");
@@ -152,7 +152,7 @@ function renderStories() {
   }
 }
 
-// 오른쪽 묶음 목록의 '안 읽은 글' 빨간 점만 다시 맞춥니다(글 목록을 새로 그리지 않고).
+// 오른쪽 그룹 목록의 '안 읽은 글' 빨간 점만 다시 맞춥니다(글 목록을 새로 그리지 않고).
 function refreshSideUnread() {
   document.querySelectorAll("#sidePeople .pbar button").forEach((b) => {
     if (!b._ids) return;
@@ -181,7 +181,7 @@ function confirmBox({ title, text, ok, cls }) {
   });
 }
 
-// 묶음의 안 읽은 글을 모두 읽음으로(한 번 확인)
+// 그룹의 안 읽은 글을 모두 읽음으로(한 번 확인)
 async function askReadAll(p) {
   if (document.querySelector(".modal-back.readall")) return;   // 길게 누르기와 우클릭이 함께 와도 한 번만
   const label = personLabel(p);

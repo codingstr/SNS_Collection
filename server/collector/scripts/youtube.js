@@ -190,6 +190,34 @@
   // 게시물 한 개의 내용을 읽어 돌려줍니다(저장하지 않고, 사용자가 카드를 눌렀을 때만 화면에 보여주는 용도).
   // 게시물 페이지의 데이터(ytInitialData)에서 본문 전체와 모든 사진을 직접 읽습니다. 화면을 그리지 않는 탭에서도 되고,
   // '자세히 알아보기'를 누르지 않아도 전체 본문이 들어 있습니다. 못 읽으면 null → 화면에서 읽는 방식으로 넘어갑니다.
+  // 게시물 데이터(backstagePostRenderer)에서 자세히 보기에 쓸 내용을 꺼냅니다. 게시물 탭 수집(collectApi → 서버가 DB에 저장)과
+  // 게시물 페이지 읽기(postFromData, DB에 내용이 없는 예전 게시물)가 같이 씁니다. 게시물 탭의 데이터는 게시물 페이지와 내용이 같습니다.
+  // 좋아요 수는 가져오지 않습니다(저장해 두면 금방 낡고, 새로 맞추려면 기간 밖의 게시물까지 매번 다시 봐야 함).
+  function postInfo(p) {
+    const rt = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
+    const images = [];
+    const att = p.backstageAttachment || {};
+    const addImg = (r) => {
+      const th = (r && r.image && r.image.thumbnails) || [];
+      const u = (th[th.length - 1] || {}).url;
+      if (/^https:\/\//.test(u || "")) { const b = bigImg(u, 1000); if (!images.includes(b)) images.push(b); }
+    };
+    if (att.postMultiImageRenderer) (att.postMultiImageRenderer.images || []).forEach((i) => addImg(i.backstageImageRenderer));
+    if (att.backstageImageRenderer) addImg(att.backstageImageRenderer);
+    let video = null;
+    const vm = JSON.stringify(att.videoRenderer || {}).match(/"videoId":"([\w-]{11})"/);
+    if (vm) video = { id: vm[1], title: clip(rt((att.videoRenderer || {}).title), 120) };
+    const av = (((p.authorThumbnail || {}).thumbnails) || []).slice(-1)[0];
+    return {
+      author: clip(rt(p.authorText), 80),
+      time: clip(rt(p.publishedTimeText), 40),
+      text: rt(p.contentText).replace(/\r/g, "").trim(),
+      avatar: (av && av.url) || "",
+      images: images.slice(0, 10),
+      video,
+    };
+  }
+
   async function postFromData() {
     try {
       const html = await (await fetch(location.href, { credentials: "include" })).text();
@@ -202,30 +230,7 @@
         for (const k in o) walk(o[k], d + 1);
       };
       walk(JSON.parse(mm[1]), 0);
-      if (!p) return null;
-      const rt = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
-      const images = [];
-      const att = p.backstageAttachment || {};
-      const addImg = (r) => {
-        const th = (r && r.image && r.image.thumbnails) || [];
-        const u = (th[th.length - 1] || {}).url;
-        if (/^https:\/\//.test(u || "")) { const b = bigImg(u, 1000); if (!images.includes(b)) images.push(b); }
-      };
-      if (att.postMultiImageRenderer) (att.postMultiImageRenderer.images || []).forEach((i) => addImg(i.backstageImageRenderer));
-      if (att.backstageImageRenderer) addImg(att.backstageImageRenderer);
-      let video = null;
-      const vm = JSON.stringify(att.videoRenderer || {}).match(/"videoId":"([\w-]{11})"/);
-      if (vm) video = { id: vm[1], title: clip(rt((att.videoRenderer || {}).title), 120) };
-      const av = (((p.authorThumbnail || {}).thumbnails) || []).slice(-1)[0];
-      return {
-        author: clip(rt(p.authorText), 80),
-        time: clip(rt(p.publishedTimeText), 40),
-        text: rt(p.contentText).replace(/\r/g, "").trim(),
-        likes: clip(rt(p.voteCount), 20),
-        avatar: (av && av.url) || "",
-        images: images.slice(0, 10),
-        video,
-      };
+      return p ? postInfo(p) : null;
     } catch (e) {
       return null;
     }
@@ -280,7 +285,6 @@
       author: clip((p.querySelector("#author-text") || {}).textContent, 80),
       time: clip((p.querySelector("#published-time-text") || {}).textContent, 40),
       text,
-      likes: clip((p.querySelector("#vote-count-middle") || {}).textContent, 20),
       avatar: (avatarEl && avatarEl.src) || "",
       images: images.slice(0, 6),
       video,
@@ -473,6 +477,7 @@
           url: "https://www.youtube.com/post/" + p.postId,
           title: text || "(이미지 게시물)", author: clip(runsText(p.authorText), 80) || author,
           thumb, publishedText: pubText, publishedAt: relativeToIso(pubText),
+          detail: postInfo(p),   // 자세히 보기 내용(서버가 DB에 저장해 두고, 게시물을 열 때 바로 돌려줌)
           _noStop: !!p.pinnedText, // 고정 게시물은 순서에서 벗어나므로 멈춤 판단에서 제외
         };
       };

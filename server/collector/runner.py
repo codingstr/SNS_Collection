@@ -248,6 +248,7 @@ def sanitize(raw):
         "title": _s(raw.get("title"), 300), "author": _s(raw.get("author"), 100),
         "thumb": thumb if thumb.startswith("https://") else "",
         "published_at": _s(raw.get("publishedAt"), 40), "published_text": _s(raw.get("publishedText"), 40),
+        "detail": post_detail_json(raw.get("detail")) if raw["source"] == "youtube-post" else "",
     }
 
 
@@ -313,25 +314,26 @@ def save_items(raw_items, via: str, ig_dates=None) -> int:
         return 0
     with get_db() as db:
         olds = {r["id"]: r for r in db.execute(f"SELECT * FROM items WHERE id IN ({','.join('?' * len(its))})", [it["id"] for it in its])}
+        # 자세히 보기 내용(detail)은 화면의 글 목록에 쓰지 않으므로 바뀌어도 updated_at(목록 버전)을 고치지 않습니다.
         ins, upd = [], []
         for it in its:
             old = olds.get(it["id"])
             if old is None:
                 ins.append((it["id"], it["source"], it["url"], it["title"], it["author"], it["thumb"],
-                            it["published_at"], it["published_text"], via, now, now, now))
+                            it["published_at"], it["published_text"], via, now, now, now, it["detail"]))
                 continue
             m = {k: (it[k] or old[k]) for k in MERGE_KEYS}
             m["published_at"] = earlier(old["published_at"], it["published_at"]) if old["published_at"] and it["published_at"] else (it["published_at"] or old["published_at"])
             changed = any(m[k] != old[k] for k in (*MERGE_KEYS, "published_at"))
             upd.append((m["url"], m["title"], m["author"], m["thumb"], m["published_text"], m["published_at"],
-                        old["via"] or via, now, now if changed else old["updated_at"], it["id"]))
+                        old["via"] or via, now, now if changed else old["updated_at"], it["detail"] or old["detail"], it["id"]))
         if ins:
             db.executemany(
-                """INSERT OR IGNORE INTO items(id, source, url, title, author, thumb, published_at, published_text, via, collected_at, seen_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", ins)
+                """INSERT OR IGNORE INTO items(id, source, url, title, author, thumb, published_at, published_text, via, collected_at, seen_at, updated_at, detail)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", ins)
         if upd:
             db.executemany(
-                "UPDATE items SET url=?, title=?, author=?, thumb=?, published_text=?, published_at=?, via=?, seen_at=?, updated_at=? WHERE id=?", upd)
+                "UPDATE items SET url=?, title=?, author=?, thumb=?, published_text=?, published_at=?, via=?, seen_at=?, updated_at=?, detail=? WHERE id=?", upd)
         if via:
             db.executemany("INSERT OR IGNORE INTO item_via(item_id, via) VALUES (?, ?)", [(it["id"], via) for it in its])
     return len(ins)
@@ -604,16 +606,46 @@ def clean_results(results) -> list:
 
 
 def clean_post(p):
+    """유튜브 게시물 자세히 보기 내용 검사(좋아요 수는 다루지 않음)."""
     if not isinstance(p, dict):
         return None
     https = lambda u: isinstance(u, str) and u.startswith("https://")
     v = p.get("video") if isinstance(p.get("video"), dict) else None
     return {
         "author": _s(p.get("author"), 80), "time": _s(p.get("time"), 40), "text": _s(p.get("text"), 5000),
-        "likes": _s(p.get("likes"), 20), "avatar": p["avatar"] if https(p.get("avatar")) else "",
+        "avatar": p["avatar"] if https(p.get("avatar")) else "",
         "images": [u for u in (p.get("images") or []) if https(u)][:6],
         "video": {"id": v["id"], "title": _s(v.get("title"), 120)} if v and re.match(r"^[\w-]{11}$", str(v.get("id") or "")) else None,
     }
+
+
+def post_detail_json(p) -> str:
+    """DB(items.detail)에 저장할 게시물 내용. 작성자·게시 시각은 글 줄의 author·published_at을 쓰므로 빼고 저장합니다. 내용이 없으면 빈칸."""
+    c = clean_post(p)
+    if not c or not (c["text"] or c["images"] or c["video"]):
+        return ""
+    return json.dumps({k: c[k] for k in ("text", "avatar", "images", "video")}, ensure_ascii=False, separators=(",", ":"))
+
+
+def saved_post(post_id: str):
+    """DB에 저장해 둔 유튜브 게시물 자세히 보기 내용(없으면 None)."""
+    with get_db() as db:
+        r = db.execute("SELECT author, detail FROM items WHERE id = ?", ("ytpost:" + post_id,)).fetchone()
+    if not r or not r["detail"]:
+        return None
+    try:
+        d = json.loads(r["detail"])
+    except ValueError:
+        return None
+    return {**d, "author": r["author"], "time": ""}
+
+
+def save_post(post_id: str, post) -> None:
+    """수집 창에서 읽어 온 게시물 내용을 DB에 저장합니다(그 글이 DB에 있을 때만). 다음부터는 바로 엽니다."""
+    d = post_detail_json(post)
+    if d:
+        with get_db() as db:
+            db.execute("UPDATE items SET detail = ? WHERE id = ?", (d, "ytpost:" + post_id))
 
 
 class SearchCancelled(Exception):
@@ -1561,7 +1593,7 @@ class Collector:
                 if not ctx["total"]:
                     set_status(uid, running=True, closed=False, paused=False, message="수집 준비 중…")
                 first = len(ctx["targets"])
-                # 숨긴 묶음의 계정은 모으지 않습니다(숨기는 동안 사이트 방문을 줄여 테스트 계정이 봇으로 보일 위험을 낮춤).
+                # 숨긴 그룹의 계정은 모으지 않습니다(숨기는 동안 사이트 방문을 줄여 테스트 계정이 봇으로 보일 위험을 낮춤).
                 hidden = [t for t in tracked if t.get("hidden") is True]
                 ctx["hidden"] = ctx.get("hidden", 0) + len(hidden)
                 tracked = [t for t in tracked if t.get("hidden") is not True]
@@ -1739,7 +1771,7 @@ class Collector:
         if ctx["skipped"]:
             parts.append("서버 테스트 계정이 로그인되어 있지 않아 건너뜀: " + ", ".join(PLATFORM_KO[p] for p in sorted(ctx["skipped"])) + " (관리자 확인 필요)")
         if ctx.get("hidden"):
-            parts.append(f"숨긴 묶음의 계정 {ctx['hidden']}개는 수집하지 않음")
+            parts.append(f"숨긴 그룹의 계정 {ctx['hidden']}개는 수집하지 않음")
         errors = ctx["errors"]
         if errors:
             other = [e for e in errors if e != "수집을 멈췄습니다"]
@@ -1753,7 +1785,7 @@ class Collector:
             return "확인할 계정이 없습니다. 추적 계정을 추가하세요."
         if not ctx["targets"] and not ctx["skipped"] and not errors:
             if ctx.get("hidden") and ctx["hidden"] >= len(ctx["tracked"]):
-                return "수집할 계정이 없습니다. 숨긴 묶음은 수집하지 않습니다(추적 계정 관리에서 다시 보이게 할 수 있습니다)."
+                return "수집할 계정이 없습니다. 숨긴 그룹은 수집하지 않습니다(추적 계정 관리에서 다시 보이게 할 수 있습니다)."
             return "수집할 계정이 없습니다. 매체 아이콘에서 수집이 꺼져 있는지 확인하세요."
         return " · ".join(parts)
 
@@ -1775,7 +1807,7 @@ class Collector:
                 if p not in PLATFORMS or settings.get(p) is False or t.get("kind") == "feed":
                     continue
                 if t.get("hidden") is True:
-                    continue   # 숨긴 묶음은 모으지 않음(같은 계정을 숨기지 않은 다른 사용자가 있으면 그 사용자 몫으로 모음)
+                    continue   # 숨긴 그룹은 모으지 않음(같은 계정을 숨기지 않은 다른 사용자가 있으면 그 사용자 몫으로 모음)
                 if p != "youtube" and (logins.get(p) or {}).get("loggedIn") is False:
                     continue
                 days = t["days"] if t.get("days") in (7, 14, 30, 60) else row["window_days"]

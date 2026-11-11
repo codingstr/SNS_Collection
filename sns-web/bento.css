@@ -1106,7 +1106,7 @@ html[data-design="bento"] .infocard .gh{order:-1}
   html[data-design="bento"] #trackPanel #tracked.chips::-webkit-scrollbar,
   html[data-design="bento"] #adminPanel #tracked.chips::-webkit-scrollbar{display:none}
 }
-/* 묶음/기간/제거 컨트롤은 패널 맨 아래로 */
+/* 그룹/기간/제거 컨트롤은 패널 맨 아래로 */
 @media (min-width:861px){
   html[data-design="bento"] #trackPanel:not([hidden]),
   html[data-design="bento"] #adminPanel:not([hidden]){display:flex;flex-direction:column}
@@ -1118,7 +1118,7 @@ html[data-design="bento"] .infocard .gh{order:-1}
   html[data-design="bento"] #adminPanel .manage-bottom .hint{margin-top:6px;margin-bottom:0}
 }
 
-/* 묶음 이름 추천 목록 */
+/* 그룹 이름 추천 목록 */
 html[data-design="bento"] .gsuggest{position:absolute;left:0;bottom:calc(100% + 8px);width:min(420px,100%);max-height:260px;overflow-y:auto;scrollbar-width:none;padding:8px;background:var(--card);border-radius:24px;box-shadow:0 12px 36px rgba(40,38,35,.18),0 0 0 1px var(--line);z-index:6;display:flex;flex-direction:column;gap:4px}
 html[data-design="bento"] .gsuggest::-webkit-scrollbar{display:none}
 html[data-design="bento"] .gsuggest[hidden]{display:none}
@@ -1205,7 +1205,7 @@ html[data-design="bento"] #grid.cards > .card{content-visibility:auto;contain-in
 html[data-design="bento"] #grid .sec{-webkit-backdrop-filter:none !important;backdrop-filter:none !important;background:rgba(255,255,255,.66)}
 html[data-design="bento"][data-theme="dark"] #grid .sec{background:rgba(34,34,32,.85)}
 
-/* 묶음 고르기 칩(이름 변경용) */
+/* 그룹 고르기 칩(이름 변경용) */
 html[data-design="bento"] .gchips2{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
 html[data-design="bento"] .gchips2[hidden]{display:none}
 html[data-design="bento"] .gchips2 .gl{font-size:12px;color:var(--muted);margin-right:4px}
@@ -1307,7 +1307,7 @@ html[data-design="bento"] .sresults .sr-body::-webkit-scrollbar{display:none}
   html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):has(#sidePeople[hidden]) .workcard{grid-row:3 !important;align-self:end !important}
   /* 사람 목록이 없는 화면(검색 중 등)에도 사람 목록 칸은 없어지지 않고 빈 상자로 남습니다 */
   html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople[hidden]{display:block !important;grid-row:1 !important;align-self:stretch !important;max-height:none !important;min-height:0 !important}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople[hidden]::before{content:"묶음 목록이 없습니다";display:block;padding:12px 10px;font-size:12.5px;color:var(--muted)}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople[hidden]::before{content:"그룹 목록이 없습니다";display:block;padding:12px 10px;font-size:12.5px;color:var(--muted)}
 }
 
 /* 상단 점 안의 표시: 인스타 = 가운데 빈 흰 원, X = 흰 X, 유튜브 = 흰 재생 세모(유튜브 재생 버튼 비율, 무게중심을 가운데로) */
@@ -1322,7 +1322,7 @@ html[data-design="bento"] .themeswitch{background:#c3cfd9}
 html[data-design="bento"] .themeswitch{background:#dde5ec}
 html[data-design="bento"] .themeswitch{background:#9fcbee}
 
-/* 창 높이가 낮을 때(약 700px 이하): 오른쪽 열이 서로 겹치지 않게 매체 탭·현재 작업 카드를 낮추고, 남는 높이는 묶음 목록이 쓰도록 합니다 */
+/* 창 높이가 낮을 때(약 700px 이하): 오른쪽 열이 서로 겹치지 않게 매체 탭·현재 작업 카드를 낮추고, 남는 높이는 그룹 목록이 쓰도록 합니다 */
 @media (min-width:861px) and (max-height:700px){
   html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) auto auto !important}
   html[data-design="bento"] #tabs{padding:8px !important;gap:6px !important}
@@ -1385,7 +1385,7 @@ html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head button
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card .badge{display:none !important}
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] .card:not(:has(> img)) .body{padding-top:16px}
 
-/* ===== 위쪽 묶음 줄(인스타그램 스토리 모양): 글 영역 맨 위, 글을 내려도 위에 붙어 있음 (js/stories.js) ===== */
+/* ===== 위쪽 그룹 줄(인스타그램 스토리 모양): 글 영역 맨 위, 글을 내려도 위에 붙어 있음 (js/stories.js) ===== */
 html[data-design="bento"] #storyBar{position:sticky;top:0;z-index:4;grid-column:1 / -1;display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;
   padding:10px 14px 8px;margin:0 0 14px;border-radius:24px;box-sizing:border-box;max-width:100%;
   background:rgba(255,255,255,.66);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);
@@ -1420,7 +1420,7 @@ html[data-design="bento"] #storyBar .story:focus-visible .sring{outline:2px soli
   html[data-design="bento"] #storyBar .sname{max-width:62px;font-size:11.5px}
 }
 
-/* ===== 추적 계정 관리: 홈에 보일 묶음(숨기기/보이기) ===== */
+/* ===== 추적 계정 관리: 홈에 보일 그룹(숨기기/보이기) ===== */
 html[data-design="bento"] #hideBox{margin:14px 0 4px;padding:12px 14px;border-radius:20px;background:var(--soft)}
 html[data-design="bento"] #hideBox .hb-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:10px}
 html[data-design="bento"] #hideBox .hb-head b{font-size:14px}
@@ -1435,7 +1435,7 @@ html[data-design="bento"] #hideList .hchip.off .hn{text-decoration:line-through}
 html[data-design="bento"] #hideList .hchip.off .hs{color:var(--muted)}
 html[data-design="bento"] #hideList .hchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* 사람별 화면 오른쪽 칸: 지금 보이는 묶음 목록(누르면 그 줄로 이동). 고르기는 위쪽 묶음 줄에서 */
+/* 사람별 화면 오른쪽 칸: 지금 보이는 그룹 목록(누르면 그 줄로 이동). 고르기는 위쪽 그룹 줄에서 */
 html[data-design="bento"] #sidePeople .pb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 8px;font-size:12.5px;color:var(--muted)}
 html[data-design="bento"] #sidePeople .pb-head b{font-weight:700}
 html[data-design="bento"] #sidePeople .pb-clear{padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--fg);font:inherit;font-size:12px;cursor:pointer}
@@ -1454,7 +1454,7 @@ html[data-design="bento"] #adminPanel .mg-count{font-size:12.5px;color:var(--mut
   html[data-design="bento"] header .toolbar.inpanel{display:none !important}
 }
 
-/* ===== 추적 계정 관리 (js/manage.js): 묶음 카드 + 아래 작업 막대 ===== */
+/* ===== 추적 계정 관리 (js/manage.js): 그룹 카드 + 아래 작업 막대 ===== */
 html[data-design="bento"] #trackPanel .mg-help,
 html[data-design="bento"] #adminPanel .mg-help{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
 html[data-design="bento"] #trackPanel .mg-help summary,
@@ -1580,7 +1580,7 @@ html[data-design="bento"] #trackPanel .mg-act :disabled,
 html[data-design="bento"] #adminPanel .mg-act :disabled{opacity:.45;cursor:not-allowed}
 html[data-design="bento"] #trackPanel .mg-act .gsuggest,
 html[data-design="bento"] #adminPanel .mg-act .gsuggest{bottom:calc(100% + 8px);top:auto}
-/* 넓은 화면: 패널 높이 안에서 묶음 목록만 스크롤, 작업 막대는 맨 아래 */
+/* 넓은 화면: 패널 높이 안에서 그룹 목록만 스크롤, 작업 막대는 맨 아래 */
 @media (min-width:861px){
   html[data-design="bento"] #trackPanel .mg-list,
   html[data-design="bento"] #adminPanel .mg-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin}
@@ -1614,7 +1614,7 @@ html[data-design="bento"] #adminPanel .mg-gtext{flex:1;min-width:0;display:flex;
   html[data-design="bento"] #trackPanel .mg-gsel,
   html[data-design="bento"] #adminPanel .mg-gsel{height:auto;min-height:44px;padding-top:4px;padding-bottom:4px}
   /* 작업 막대: 고른 계정이 있을 때만 버튼이 나오고, 버튼은 빈틈없이 두 줄 정도로 채웁니다.
-     칸 묶음(.mg-act)을 풀어(display:contents) 버튼끼리 한 흐름으로 줄을 바꾸고, 묶음 이름 추천 목록은 막대 위로 뜹니다. */
+     칸 묶음(.mg-act)을 풀어(display:contents) 버튼끼리 한 흐름으로 줄을 바꾸고, 그룹 이름 추천 목록은 막대 위로 뜹니다. */
   html[data-design="bento"] #trackPanel .mg-bar,
   html[data-design="bento"] #adminPanel .mg-bar{gap:8px;padding:10px 12px}
   html[data-design="bento"] #trackPanel .mg-bar.empty .mg-actions,

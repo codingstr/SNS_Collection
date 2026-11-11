@@ -132,7 +132,7 @@ function renderAdUsers() {
     ]);
     if (u.admin) b.append(adBadge("관리자", "admin"));
     if (u.mustChange) b.append(adBadge("비번 초기화됨", "warn"));
-    b.append(el("span", { class: "ad-umeta", text: "계정 " + u.accounts + (u.groups ? " · 묶음 " + u.groups : "") + (u.hidden ? " · 숨김 " + u.hidden : "") + " · 수집 " + adAgo(u.lastRun) }));
+    b.append(el("span", { class: "ad-umeta", text: "계정 " + u.accounts + (u.groups ? " · 그룹 " + u.groups : "") + (u.hidden ? " · 숨김 " + u.hidden : "") + " · 수집 " + adAgo(u.lastRun) }));
     b.addEventListener("click", () => { if (adUid !== u.id) adSel = new Set(); adUid = u.id; renderAdUsers(); adOpenUser(u.id); });
     box.append(b);
   });
@@ -166,7 +166,7 @@ function adGroups(tracked) {
 }
 function renderAdDetail() {
   const u = adDetail, d = $("adDetail");
-  // 다시 그려도 입력 중이던 묶음 이름은 남깁니다
+  // 다시 그려도 입력 중이던 그룹 이름은 남깁니다
   const keepName = $("adGName") ? $("adGName").value : "";
   d.textContent = "";
   if (!u) return;
@@ -233,10 +233,10 @@ function renderAdDetail() {
   set.append(wd);
   d.append(set);
 
-  // 묶음·계정
+  // 그룹·계정
   const { groups, singles } = adGroups(u.tracked);
-  d.append(el("div", { class: "ad-sub" }, [el("b", { text: "추적 계정 " + u.tracked.length + "개" + (groups.size ? " · 묶음 " + groups.size + "개" : "") }),
-    el("span", { class: "hint", text: "계정이나 묶음 이름을 눌러 고른 뒤 아래 막대에서 고칩니다." })]));
+  d.append(el("div", { class: "ad-sub" }, [el("b", { text: "추적 계정 " + u.tracked.length + "개" + (groups.size ? " · 그룹 " + groups.size + "개" : "") }),
+    el("span", { class: "hint", text: "계정이나 그룹 이름을 눌러 고른 뒤 아래 막대에서 고칩니다." })]));
   if (!u.tracked.length) d.append(el("p", { class: "hint", text: "추적 중인 계정이 없습니다." }));
   const list = el("div", { class: "mg-list ad-glist" });
   [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([g, accs]) => list.append(adGroupCard(g, accs)));
@@ -255,10 +255,10 @@ function adGroupCard(group, accs) {
   const nSel = ids.filter((id) => adSel.has(id)).length, all = nSel === ids.length;
   const hidden = group ? accs.every((t) => t.hidden) : false;
   const days = [...new Set(accs.map((t) => t.days || 0))];
-  const sel = el("button", { type: "button", class: "mg-gsel", "aria-pressed": String(all), "aria-label": (group ? "‘" + group + "’ 묶음" : "묶지 않은 계정") + " " + ids.length + "개 " + (all ? "모두 풀기" : "모두 고르기") }, [
+  const sel = el("button", { type: "button", class: "mg-gsel", "aria-pressed": String(all), "aria-label": (group ? "‘" + group + "’ 그룹" : "그룹화하지 않은 계정") + " " + ids.length + "개 " + (all ? "모두 풀기" : "모두 고르기") }, [
     el("span", { class: "mg-check" + (all ? " on" : nSel ? " part" : ""), "aria-hidden": "true" }),
     el("span", { class: "mg-gtext" }, [
-      el("span", { class: "mg-gname", text: group || "묶지 않은 계정" }),
+      el("span", { class: "mg-gname", text: group || "그룹화하지 않은 계정" }),
       el("span", { class: "mg-gmeta", text: "계정 " + ids.length + (group ? " · " + (days.length === 1 ? daysText(days[0]) : "기간 섞임") : "") }),
     ]),
   ]);
@@ -266,13 +266,13 @@ function adGroupCard(group, accs) {
   const head = el("div", { class: "mg-ghead" }, [sel]);
   if (group) {
     if (hidden) head.append(el("span", { class: "mg-badge", text: "숨김 · 수집 안 함" }));
-    head.append(iconBtn("rename", "‘" + group + "’ 묶음 이름 바꾸기", "ar:" + group, async () => {
-      const v = await adAsk({ title: "‘" + group + "’ 묶음 이름 바꾸기", ok: "저장", input: group, placeholder: "새 묶음 이름" });
+    head.append(iconBtn("rename", "‘" + group + "’ 그룹 이름 바꾸기", "ar:" + group, async () => {
+      const v = await adAsk({ title: "‘" + group + "’ 그룹 이름 바꾸기", ok: "저장", input: group, placeholder: "새 그룹 이름" });
       if (!v || v === group) return;
-      try { await adminCall("editTracked", { uid: u.id, ids, change: { group: v } }); await adAfter("묶음 이름을 ‘" + v + "’(으)로 바꿨습니다."); } catch (e) { showErr(e); }
+      try { await adminCall("editTracked", { uid: u.id, ids, change: { group: v } }); await adAfter("그룹 이름을 ‘" + v + "’(으)로 바꿨습니다."); } catch (e) { showErr(e); }
     }));
-    head.append(iconBtn(hidden ? "hidden" : "shown", "‘" + group + "’ 묶음 " + (hidden ? "다시 보이게 하기" : "숨기기"), "ae:" + group, async () => {
-      try { await adminCall("editTracked", { uid: u.id, ids, change: { hidden: !hidden } }); await adAfter("‘" + group + "’ 묶음을 " + (hidden ? "다시 보이게 했습니다." : "숨겼습니다(수집하지 않음).")); } catch (e) { showErr(e); }
+    head.append(iconBtn(hidden ? "hidden" : "shown", "‘" + group + "’ 그룹 " + (hidden ? "다시 보이게 하기" : "숨기기"), "ae:" + group, async () => {
+      try { await adminCall("editTracked", { uid: u.id, ids, change: { hidden: !hidden } }); await adAfter("‘" + group + "’ 그룹을 " + (hidden ? "다시 보이게 했습니다." : "숨겼습니다(수집하지 않음).")); } catch (e) { showErr(e); }
     }));
   }
   const chips = accs.map((t) => {
@@ -290,7 +290,7 @@ function adSelBar(keepName) {
   const u = adDetail, ids = [...adSel];
   const bar = el("div", { class: "mg-bar ad-bar" + (ids.length ? "" : " empty") });
   const info = el("div", { class: "mg-selinfo" });
-  if (!ids.length) info.append(el("span", { class: "ph", text: "계정이나 묶음 이름을 눌러 고르세요 (여러 개 가능)" }));
+  if (!ids.length) info.append(el("span", { class: "ph", text: "계정이나 그룹 이름을 눌러 고르세요 (여러 개 가능)" }));
   else info.append(el("b", { text: ids.length + "개 계정 선택" }));
   const row = el("div", { class: "mg-selrow" }, [info]);
   if (ids.length) {
@@ -307,14 +307,14 @@ function adSelBar(keepName) {
   };
   const dd = el("select", { "aria-label": "고른 계정의 가져올 기간" });
   [[0, "기본(사용자 기본 기간)"], [7, "1주 (7일)"], [14, "2주 (14일)"], [30, "1개월 (30일)"], [60, "2개월 (60일)"]].forEach(([v, t]) => dd.append(el("option", { value: String(v), text: t })));
-  const gName = el("input", { id: "adGName", type: "text", maxlength: "30", placeholder: "묶음 이름", autocomplete: "off", "aria-label": "묶을 묶음 이름" });
+  const gName = el("input", { id: "adGName", type: "text", maxlength: "30", placeholder: "그룹 이름", autocomplete: "off", "aria-label": "넣을 그룹 이름" });
   gName.value = keepName || "";
   const allHidden = ids.every((id) => (u.tracked.find((t) => t.id === id) || {}).hidden);
   bar.append(el("div", { class: "mg-actions" }, [
     el("div", { class: "mg-act" }, [dd, adBtn("기간 적용", () => edit({ days: Number(dd.value) }, "기간을 바꿨습니다."))]),
     el("div", { class: "mg-act" }, [gName,
-      adBtn("묶기", () => { const g = gName.value.trim(); if (!g) { toast("묶음 이름을 적으세요.", "error"); return; } return edit({ group: g }, "‘" + g + "’ 묶음으로 묶었습니다.").then(() => { if ($("adGName")) $("adGName").value = ""; }); }),
-      adBtn("묶음 풀기", () => edit({ group: "" }, "묶음에서 뺐습니다."))]),
+      adBtn("그룹화", () => { const g = gName.value.trim(); if (!g) { toast("그룹 이름을 적으세요.", "error"); return; } return edit({ group: g }, "‘" + g + "’ 그룹에 넣었습니다.").then(() => { if ($("adGName")) $("adGName").value = ""; }); }),
+      adBtn("그룹 해제", () => edit({ group: "" }, "그룹에서 뺐습니다."))]),
     el("div", { class: "mg-act" }, [
       adBtn(allHidden ? "다시 보이기" : "숨기기", () => edit({ hidden: !allHidden }, allHidden ? "다시 보이게 했습니다(숨긴 동안 못 모은 글을 모읍니다)." : "숨겼습니다(수집하지 않음).")),
       adBtn("제거", async () => {
@@ -349,7 +349,7 @@ function renderAdAccts() {
     const name = el(url ? "a" : "span", { class: "ad-aname", text: a.handle ? "@" + a.handle : a.channelId || a.id });
     if (url) { name.href = url; name.target = "_blank"; name.rel = "noopener noreferrer"; }
     const owners = el("div", { class: "ad-owners" }, a.owners.map((o) => {
-      const b = el("button", { type: "button", class: "ad-owner" + (o.hidden || o.off ? " off" : ""), title: o.uid + (o.group ? " · 묶음 ‘" + o.group + "’" : "") + (o.hidden ? " · 숨김" : "") + (o.off ? " · 이 매체 수집 꺼짐" : "") + " (눌러서 사용자 보기)" },
+      const b = el("button", { type: "button", class: "ad-owner" + (o.hidden || o.off ? " off" : ""), title: o.uid + (o.group ? " · 그룹 ‘" + o.group + "’" : "") + (o.hidden ? " · 숨김" : "") + (o.off ? " · 이 매체 수집 꺼짐" : "") + " (눌러서 사용자 보기)" },
         [el("span", { text: o.uid }), ...(o.group ? [el("small", { text: o.group })] : []), ...(o.hidden ? [el("small", { text: "숨김" })] : o.off ? [el("small", { text: "꺼짐" })] : [])]);
       b.addEventListener("click", () => { adUid = o.uid; adSel = new Set(); adSetTab("users"); });
       return b;

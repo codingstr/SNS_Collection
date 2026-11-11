@@ -52,7 +52,7 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v386";
+const WEB_VERSION = "v388";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };
@@ -108,9 +108,9 @@ function markSeen(it) {
   saveSeen();
   if (typeof queueSeen === "function") queueSeen(it.id); // 로그인 상태면 다른 기기에도 반영
   document.querySelectorAll(".card").forEach((c) => { if (c._item && c._item.id === it.id) c.classList.add("seen"); });
-  if (typeof renderStories === "function") renderStories(); // 묶음 줄의 '안 읽은 글' 빨간 점
+  if (typeof renderStories === "function") renderStories(); // 그룹 줄의 '안 읽은 글' 빨간 점
 }
-// 여러 글을 한꺼번에 읽음으로(묶음 줄에서 '모두 읽음'). 새로 읽음 처리한 글 ID 목록을 돌려줍니다(되돌리기에 씀).
+// 여러 글을 한꺼번에 읽음으로(그룹 줄에서 '모두 읽음'). 새로 읽음 처리한 글 ID 목록을 돌려줍니다(되돌리기에 씀).
 function markSeenMany(ids) {
   const done = [];
   ids.forEach((id) => {

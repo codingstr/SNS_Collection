@@ -5,8 +5,8 @@
 
 action
   users                          모든 사용자 요약
-  user          {uid}            한 사용자: 추적 계정(묶음·숨김·기간), 매체별 수집 켜기, 기본 기간, 수집 상태, 통계
-  editTracked   {uid, ids, change}   고른 추적 계정 고치기. change: {hidden: bool} / {group: "이름" 또는 ""(묶음 풀기)} /
+  user          {uid}            한 사용자: 추적 계정(그룹·숨김·기간), 매체별 수집 켜기, 기본 기간, 수집 상태, 통계
+  editTracked   {uid, ids, change}   고른 추적 계정 고치기. change: {hidden: bool} / {group: "이름" 또는 ""(그룹 해제)} /
                                      {days: 7|14|30|60|0(기본)} / {remove: true}
   setUser       {uid, settings?, windowDays?}   매체별 수집 켜기/끄기, 기본 기간
   collect       {uid}            그 사용자의 추적 계정을 지금 수집

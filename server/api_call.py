@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 from auth import user_by_session
 from collector import SearchCancelled, collector, get_login_state
-from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS
+from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS, save_post, saved_post
 from db import get_db, reset_seen
 
 router = APIRouter()
@@ -89,7 +89,7 @@ def clean_tracked(lst) -> list:
         if t.get("days") in DAYS_OK:
             c["days"] = t["days"]
         if t.get("hidden") is True:
-            c["hidden"] = True   # 홈 화면·묶음 줄에서 숨김(표시만 숨기고 수집은 계속)
+            c["hidden"] = True   # 홈 화면·그룹 줄에서 숨김(표시만 숨기고 수집은 계속)
         out.append(c)
     return out
 
@@ -260,10 +260,18 @@ def handle_collector(uid: str, op: str, p: dict):
         url = p.get("url") if isinstance(p.get("url"), str) else ""
         if not re.match(r"^https://www\.youtube\.com/post/[\w-]{10,60}$", url):
             raise OpError("게시물 주소가 올바르지 않습니다.")
+        # 게시물 탭을 수집할 때 저장해 둔 내용이 있으면 바로 돌려줍니다(크롬을 쓰지 않음).
+        pid = url.rsplit("/", 1)[1]
+        post = saved_post(pid)
+        if post:
+            return post
+        # 저장해 둔 내용이 없는 예전 게시물만 수집 창에서 읽어 오고, 다음부터 바로 열도록 저장합니다.
         try:
-            return collector.run_blocking({"kind": "post", "url": url}, 60)
+            post = collector.run_blocking({"kind": "post", "url": url}, 60)
         except Exception as e:
             raise OpError(str(e))
+        save_post(pid, post)
+        return post
     raise OpError("알 수 없는 요청입니다.")
 
 

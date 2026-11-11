@@ -8,8 +8,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=386">
-<link rel="stylesheet" href="bento.css?v=386">
+<link rel="stylesheet" href="style.css?v=388">
+<link rel="stylesheet" href="bento.css?v=388">
 
 <header>
   <div id="infoCard2" class="infocard info2"></div>
@@ -99,11 +99,11 @@
 <div id="gmModal" class="modal-back" role="dialog" aria-modal="true" aria-labelledby="gmTitle" hidden>
   <div class="modal">
     <button id="gmX" class="x" type="button" aria-label="닫기">×</button>
-    <h2 id="gmTitle">묶음 수정</h2>
-    <label class="hint" for="gmSel">수정할 묶음</label>
+    <h2 id="gmTitle">그룹 수정</h2>
+    <label class="hint" for="gmSel">수정할 그룹</label>
     <select id="gmSel"></select>
     <label class="hint" for="gmName">새 이름</label>
-    <input id="gmName" type="text" maxlength="30" autocomplete="off" placeholder="새 묶음 이름">
+    <input id="gmName" type="text" maxlength="30" autocomplete="off" placeholder="새 그룹 이름">
     <p id="gmErr" class="error" hidden></p>
     <div class="foot"><button id="gmCancel" type="button">취소</button><button id="gmOk" class="primary" type="button">저장</button></div>
   </div>
@@ -156,10 +156,10 @@
       <details id="mgHelp" class="mg-help">
         <summary>사용 방법</summary>
         <ul>
-          <li><b>계정</b>을 누르면 골라집니다(여러 개 가능). <b>묶음 이름</b>을 누르면 그 묶음의 계정이 한꺼번에 골라집니다.</li>
-          <li>고른 뒤 아래 막대에서 <b>가져올 기간</b>을 정하거나, <b>묶음 이름</b>을 적어 묶거나, <b>숨기기</b>·<b>제거</b>를 합니다.</li>
-          <li>같은 사람의 유튜브·X·인스타 계정을 한 묶음으로 묶으면 홈에서 한 사람으로 모아 봅니다.</li>
-          <li><b>숨긴 묶음</b>은 홈에 나오지 않고 글도 모으지 않습니다. 묶음 오른쪽 눈 버튼으로 바로 숨기거나 다시 보이게 할 수 있습니다.</li>
+          <li><b>계정</b>을 누르면 골라집니다(여러 개 가능). <b>그룹 이름</b>을 누르면 그 그룹의 계정이 한꺼번에 골라집니다.</li>
+          <li>고른 뒤 아래 막대에서 <b>가져올 기간</b>을 정하거나, <b>그룹 이름</b>을 적어 그룹화하거나, <b>숨기기</b>·<b>제거</b>를 합니다.</li>
+          <li>같은 사람의 유튜브·X·인스타 계정을 한 그룹에 넣으면 홈에서 한 사람으로 모아 봅니다.</li>
+          <li><b>숨긴 그룹</b>은 홈에 나오지 않고 글도 모으지 않습니다. 그룹 오른쪽 눈 버튼으로 바로 숨기거나 다시 보이게 할 수 있습니다.</li>
           <li>계정 추가는 위쪽 검색창에서 합니다(이름·@아이디·프로필 주소를 넣고 Enter).</li>
         </ul>
       </details>
@@ -176,9 +176,9 @@
             <button id="dApply" type="button">기간 적용</button>
           </div>
           <form id="groupForm" class="mg-act">
-            <input id="gName" type="text" maxlength="30" placeholder="묶음 이름" aria-label="묶을 묶음 이름" autocomplete="off">
-            <button type="submit">묶기</button>
-            <button id="gClear" type="button" title="고른 계정을 묶음에서 뺍니다">묶음 풀기</button>
+            <input id="gName" type="text" maxlength="30" placeholder="그룹 이름" aria-label="넣을 그룹 이름" autocomplete="off">
+            <button type="submit">그룹화</button>
+            <button id="gClear" type="button" title="고른 계정을 그룹에서 뺍니다">그룹 해제</button>
           </form>
           <div class="mg-act">
             <button id="selHide" type="button">숨기기</button>
@@ -228,14 +228,14 @@
   </main>
 </div>
 
-<script src="js/core.js?v=386"></script>
-<script src="js/bridge.js?v=386"></script>
-<script src="js/store.js?v=386"></script>
-<script src="js/list.js?v=386"></script>
-<script src="js/stories.js?v=386"></script>
-<script src="js/tracking.js?v=386"></script>
-<script src="js/manage.js?v=386"></script>
-<script src="js/admin.js?v=386"></script>
-<script src="js/account.js?v=386"></script>
-<script src="js/ui.js?v=386"></script>
+<script src="js/core.js?v=388"></script>
+<script src="js/bridge.js?v=388"></script>
+<script src="js/store.js?v=388"></script>
+<script src="js/list.js?v=388"></script>
+<script src="js/stories.js?v=388"></script>
+<script src="js/tracking.js?v=388"></script>
+<script src="js/manage.js?v=388"></script>
+<script src="js/admin.js?v=388"></script>
+<script src="js/account.js?v=388"></script>
+<script src="js/ui.js?v=388"></script>
 

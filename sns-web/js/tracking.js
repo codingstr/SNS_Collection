@@ -74,7 +74,7 @@ function parseAccount(platformHint, raw) {
 
 /* ---------- 이벤트 ---------- */
 { let qt = 0; $("q").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(renderList, 180); }); } // 글자마다 전체를 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
-// 추적 계정 관리 화면(고르기·묶기·기간·숨기기·제거)은 js/manage.js에 있습니다.
+// 추적 계정 관리 화면(고르기·그룹화·기간·숨기기·제거)은 js/manage.js에 있습니다.
 async function removeTrackedIds(ids) {
   const set = new Set(ids);
   if (!ids.length) return;
@@ -96,7 +96,7 @@ function addAccount(acc) {
   if (tracked.some((t) => t.id === acc.id)) { toast("이미 추가된 계정입니다.", "error"); return Promise.resolve(false); }
   if (tracked.length >= MAX_TRACKED) { toast("계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다.", "error"); return Promise.resolve(false); }
   if (!acc.days) acc.days = 30; // 이 계정만의 가져올 기간
-  // 숨긴 묶음에 넣으면 이 계정도 숨김(안 그러면 묶음 전체가 다시 보이게 됨)
+  // 숨긴 그룹에 넣으면 이 계정도 숨김(안 그러면 그룹 전체가 다시 보이게 됨)
   const sameGroup = acc.group ? tracked.filter((t) => t.group === acc.group) : [];
   const intoHidden = sameGroup.length > 0 && sameGroup.every((t) => t.hidden);
   if (intoHidden) acc.hidden = true; else delete acc.hidden;
@@ -107,8 +107,8 @@ function addAccount(acc) {
   return saveTracked().then(() => {
     const who = PLATFORM[acc.platform] + " " + (acc.handle ? "@" + acc.handle : acc.channelId || "계정");
     if (intoHidden) {
-      // 숨긴 묶음은 수집하지 않으므로 바로 모으지도 않습니다.
-      toast(who + " 추가됨 · 숨긴 묶음 ‘" + acc.group + "’에 들어가 홈에 보이지 않고, 다시 보이게 할 때까지 글을 모으지 않습니다.");
+      // 숨긴 그룹은 수집하지 않으므로 바로 모으지도 않습니다.
+      toast(who + " 추가됨 · 숨긴 그룹 ‘" + acc.group + "’에 들어가 홈에 보이지 않고, 다시 보이게 할 때까지 글을 모으지 않습니다.");
     } else {
       toast(who + " 추가됨 · 글을 모으는 중입니다");
       call("checkNow", { only: acc.id }).catch(showErr);
@@ -134,9 +134,9 @@ function pickPeriod() {
       });
     };
     drawPeriods();
-    // 묶음: 직접 입력하거나, 이미 있는 묶음 이름을 검색해서 고릅니다.
+    // 그룹: 직접 입력하거나, 이미 있는 그룹 이름을 검색해서 고릅니다.
     const groups = Array.from(new Set(tracked.map((t) => t.group).filter(Boolean)));
-    const gin = el("input", { type: "text", maxlength: "30", placeholder: "묶음 이름 (선택) · 기존 묶음 검색", "aria-label": "묶음 이름", autocomplete: "off" });
+    const gin = el("input", { type: "text", maxlength: "30", placeholder: "그룹 이름 (선택) · 기존 그룹 검색", "aria-label": "그룹 이름", autocomplete: "off" });
     const gbox = el("div", { class: "gchips" });
     const drawGroups = () => {
       const q = gin.value.trim().toLowerCase();
@@ -155,7 +155,7 @@ function pickPeriod() {
     gin.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok.click(); } });
     const x = el("button", { type: "button", class: "x", text: "×", "aria-label": "닫기" });
     x.addEventListener("click", () => done(null));
-    const box = el("div", { class: "modal" }, [x, el("h2", { text: "가져올 기간" }), row, el("h2", { text: "묶음" }), gin, gbox, el("div", { class: "row" }, [ok])]);
+    const box = el("div", { class: "modal" }, [x, el("h2", { text: "가져올 기간" }), row, el("h2", { text: "그룹" }), gin, gbox, el("div", { class: "row" }, [ok])]);
     const back = el("div", { class: "modal-back", role: "dialog", "aria-modal": "true" }, [box]);
     back.addEventListener("click", (e) => { if (e.target === back) done(null); });
     document.addEventListener("keydown", onKey);
@@ -218,8 +218,8 @@ async function startRefresh() {
   if (!tracked.length) { toast("먼저 위쪽 검색창에서 추적할 계정을 찾아 추가하세요.", "error"); return; }
   refreshing = true; paintCheckNow();
   try {
-    const shown = tracked.filter((t) => !t.hidden);   // 숨긴 묶음은 수집하지 않음
-    if (!shown.length) { toast("모든 묶음을 숨겨 둬서 모을 계정이 없습니다. 추적 계정 관리에서 다시 보이게 할 수 있습니다.", "error"); return; }
+    const shown = tracked.filter((t) => !t.hidden);   // 숨긴 그룹은 수집하지 않음
+    if (!shown.length) { toast("모든 그룹을 숨겨 둬서 모을 계정이 없습니다. 추적 계정 관리에서 다시 보이게 할 수 있습니다.", "error"); return; }
     const plats = Array.from(new Set(shown.filter((t) => settings[t.platform] !== false).map((t) => t.platform)));
     if (!plats.length) { toast("모든 매체의 수집이 꺼져 있습니다. 위쪽 매체 아이콘을 눌러 켜세요.", "error"); return; }
     const out = plats.filter(loggedOut);
@@ -248,7 +248,7 @@ $("clear").addEventListener("click", async (e) => {
 
 
 
-/* 묶음 이름 입력: 이미 만들어 둔 묶음을 보여주고, 입력하면 연관 묶음으로 걸러서 고를 수 있게 합니다 */
+/* 그룹 이름 입력: 이미 만들어 둔 그룹을 보여주고, 입력하면 연관 그룹으로 걸러서 고를 수 있게 합니다 */
 (function () {
   function groupNames() {
     const m = new Map();
