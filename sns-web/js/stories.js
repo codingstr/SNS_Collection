@@ -4,6 +4,7 @@
    - 아무것도 고르지 않으면(맨 앞 '전체'가 색 테두리) 모든 그룹을 보여 줍니다.
    - 안 읽은 글이 있는 그룹은 이름 오른쪽 위에 빨간 점이 붙고, 줄의 앞쪽으로 옵니다.
    - 사진을 우클릭(휴대폰은 길게 누르기)하면 한 번 확인한 뒤 그 그룹의 글을 모두 읽음으로 표시합니다.
+   - 매체 탭(유튜브·X·인스타그램)에서는 그 매체의 글이 있는 그룹만 보여 줍니다(이미 고른 그룹은 풀 수 있게 남겨 둠).
    숨긴 그룹(추적 계정 관리 → '홈에 보일 그룹')은 이 줄에 나오지 않습니다. 사람(그룹) 계산은 list.js의 peopleMap. */
 let storySig = "", storyScroll = 0;
 
@@ -17,13 +18,17 @@ function storyData() {
     const t = publishedMs(it);
     viasOf(it).forEach((v) => {   // 공동 게시물은 이어진 계정마다
       let e = byVia.get(v);
-      if (!e) byVia.set(v, (e = { unread: [], latest: 0 }));
+      if (!e) byVia.set(v, (e = { unread: [], latest: 0, plats: new Set() }));
+      e.plats.add(tabOf(it.source));
       if (t > e.latest) e.latest = t;
       if (!seen.has(it.id)) e.unread.push(it.id);
     });
   }
   const sel = effSel();
-  const list = vp.map((p) => {
+  // 매체 탭에서는 그 매체 글이 하나도 없는 그룹을 뺍니다. 고른 그룹은 남겨 둡니다(안 보이면 풀 수가 없어 빈 화면의 이유를 알 수 없음).
+  const plat = activeTab !== "people" && activeTab !== "all" ? activeTab : "";
+  const hasPlat = (p) => [...p.ids].some((id) => { const e = byVia.get(id); return e && e.plats.has(plat); });
+  const list = (plat ? vp.filter((p) => sel.has(p.name) || hasPlat(p)) : vp).map((p) => {
     const unread = [];
     let latest = 0;
     p.ids.forEach((id) => { const e = byVia.get(id); if (e) { e.unread.forEach((x) => { if (!unread.includes(x)) unread.push(x); }); if (e.latest > latest) latest = e.latest; } });   // 그룹 안 두 계정의 공동 게시물은 한 번만

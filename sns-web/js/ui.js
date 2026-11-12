@@ -287,7 +287,13 @@ renderAll();
     const r = rail.getBoundingClientRect(), frac = (ev.clientY - r.top - PAD) / Math.max(1, r.height - PAD * 2);
     box.scrollTop = frac * (box.scrollHeight - box.clientHeight);
   });
-  const close = () => { cancelCur(); box.hidden = true; };
+  // 이 결과 상자에서 계정을 추가했다면, 닫을 때 검색어도 비웁니다(글 목록 거르기도 풀림). 추가하지 않고 닫으면 검색어는 그대로 둡니다.
+  let added = false;
+  box.addEventListener("acct-added", () => { added = true; });
+  const close = () => {
+    cancelCur(); box.hidden = true;
+    if (added) { added = false; q.value = ""; renderList(); }
+  };
   // 페이지를 떠나면 서버의 검색도 멈춥니다. 뒤로 가기로 이 화면이 그대로 돌아오면(브라우저가 보관해 둔 화면)
   // '찾는 중…'으로 멈춰 있는 매체를 '중단됨'으로 바꿔, 계속 기다리는 것처럼 보이지 않게 합니다.
   let leftMidSearch = false;
@@ -312,6 +318,7 @@ renderAll();
     const name = q.value.trim();
     if (!name) return;
     cancelCur(); // 진행 중인 검색이 있으면 취소하고 새로 시작합니다
+    added = false;
     const my = { seq: ++searchSeq, sid: newSid(), ctl: new AbortController() };
     const live = () => cur === my; // 이 검색이 아직 화면에 보이는 검색인지(아니면 늦게 온 결과는 버림)
     box.hidden = false; box.textContent = "";

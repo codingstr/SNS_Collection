@@ -191,7 +191,7 @@ function fillResults(box, platform, list) {
       const pk = await pickPeriod(); if (!pk) return;
       const a = { ...acc, days: pk.days }; if (pk.group) a.group = pk.group;
       add.disabled = true;
-      if (await addAccount(a)) { paint(); if (r.avatar) storePic(a.id, r.avatar).then((ok) => { if (ok) renderList(); }); } else paint();
+      if (await addAccount(a)) { paint(); box.dispatchEvent(new CustomEvent("acct-added", { bubbles: true })); if (r.avatar) storePic(a.id, r.avatar).then((ok) => { if (ok) renderList(); }); } else paint();
     });
     const initial = (r.name || r.handle || acc.handle || "?").trim().charAt(0).toUpperCase();
     const ph = (why) => el("span", { class: "ph", text: initial, title: why || "" });

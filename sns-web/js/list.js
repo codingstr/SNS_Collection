@@ -148,7 +148,16 @@ function embedFor(it) {
   if (it.source === "instagram" && (m = /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(u))) return { src: "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed", h: 700 };
   return null;
 }
-function openWindow(url) { if (/^https:\/\//.test(url || "")) window.open(url, "_blank", "noopener"); }
+// 새 탭: 기능 문자열에 크기·popup이 없으면 브라우저는 새 탭으로 엽니다.
+function openTab(url) { if (/^https:\/\//.test(url || "")) window.open(url, "_blank", "noopener,noreferrer"); }
+// 새 창: popup과 크기·위치를 주면 탭이 아니라 따로 떨어진 창으로 열립니다(화면 가운데, 화면의 약 80%×90%).
+function openWindow(url) {
+  if (!/^https:\/\//.test(url || "")) return;
+  const s = window.screen, aw = s.availWidth || 1280, ah = s.availHeight || 800;
+  const w = Math.min(1100, Math.round(aw * 0.8)), h = Math.round(ah * 0.9);
+  const x = Math.round((s.availLeft || 0) + (aw - w) / 2), y = Math.round((s.availTop || 0) + (ah - h) / 2);
+  window.open(url, "_blank", "popup,noopener,noreferrer,width=" + w + ",height=" + h + ",left=" + x + ",top=" + y);
+}
 let viewerUrl = "";
 let viewCtx = [], viewIdx = -1;
 // 누른 카드가 속한 줄(또는 격자)의 카드들을 이전/다음 이동 순서로 씁니다.
@@ -215,7 +224,7 @@ function renderPost(p, it) {
     const box = el("div", { class: "vid" });
     if (window.claude) {
       box.appendChild(el("button", { type: "button", text: "▶ 첨부 영상 보기" + (p.video.title ? ": " + p.video.title : "") }));
-      box.firstChild.addEventListener("click", () => openWindow("https://www.youtube.com/watch?v=" + p.video.id));
+      box.firstChild.addEventListener("click", () => openTab("https://www.youtube.com/watch?v=" + p.video.id));
     } else {
       box.appendChild(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + p.video.id + "?rel=0", title: p.video.title || "첨부 영상", allow: "encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" }));
     }
@@ -249,14 +258,14 @@ async function openPost(it) {
   } catch (e) {
     if (viewerUrl !== it.url) return;
     body.textContent = "";
-    body.appendChild(el("p", { class: "error", style: "padding:24px", text: "게시물을 불러오지 못했습니다. " + (e && e.message ? e.message : "") + " 위의 '새 창으로 열기'로 원본을 열어 주세요." }));
+    body.appendChild(el("p", { class: "error", style: "padding:24px", text: "게시물을 불러오지 못했습니다. " + (e && e.message ? e.message : "") + " 위의 '새 탭으로 열기'나 '새 창으로 열기'로 원본을 열어 주세요." }));
   }
 }
 function openItem(it) {
   markSeen(it);
   if (it.source === "youtube-post" && /^https:\/\/www\.youtube\.com\/post\//.test(it.url || "")) { openPost(it); return; }
   const e = embedFor(it);
-  if (!e) { openWindow(it.url); return; }
+  if (!e) { openTab(it.url); return; }
   viewerUrl = it.url;
   updateNav();
   setViewerKind(e.kind || (it.source === "x" ? "x" : it.source === "instagram" ? "instagram" : ""));
@@ -301,6 +310,7 @@ document.addEventListener("keydown", (e) => {
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
   if (e.key === "ArrowLeft") navView(-1); else if (e.key === "ArrowRight") navView(1);
 });
+$("vTab").addEventListener("click", () => { openTab(viewerUrl); });
 $("vWin").addEventListener("click", () => { openWindow(viewerUrl); });
 $("viewer").addEventListener("click", (e) => { if (e.target === $("viewer")) closeViewer(); });
 
