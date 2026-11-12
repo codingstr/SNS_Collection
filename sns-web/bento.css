@@ -1776,9 +1776,7 @@ html[data-design="bento"] #grid .media-grid .card .meta .who{display:none}
 html[data-design="bento"] #grid .row-cards > .card{height:226px;min-height:226px;max-height:226px;overflow:hidden}
 html[data-design="bento"] #grid .row-cards > .card > .body{min-height:0;overflow:hidden}
 /* 고정 높이(226px) 상자 안 배치: 사진 높이 고정, 제목은 남는 자리에 맞춰 줄 단위로 자름(사진 있으면 2줄, 없으면 7줄) → 글이 줄 중간에서 잘리지 않음 */
-html[data-design="bento"] #grid .row-cards > .card > img{flex:none;height:106px !important;min-height:106px;max-height:106px;width:100%;object-fit:cover}
-/* 사람별 매체 칸은 매체 이름표가 없어 그만큼 사진을 크게(매체 탭은 이름표 한 줄 때문에 106px) */
-html[data-design="bento"] #grid .media-grid .row-cards > .card > img{height:128px !important;min-height:128px;max-height:128px}
+html[data-design="bento"] #grid .row-cards > .card > img{flex:none;height:128px !important;min-height:128px;max-height:128px;width:100%;object-fit:cover}
 html[data-design="bento"] #grid .row-cards > .card .title{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:7;max-height:none}
 html[data-design="bento"] #grid .row-cards > .card:has(> img) .title{-webkit-line-clamp:2}
 html[data-design="bento"] #grid .row-cards > .card .meta{flex:none}
@@ -1830,3 +1828,8 @@ html[data-design="bento"] #grid > .storywrap > .island.new .idot{display:block}
   html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:has(:focus-visible)) > #storyBar > .story{opacity:0;transition:opacity .1s}
   html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:has(:focus-visible)) > .island{opacity:1;transform:translateX(-50%);transition:opacity .18s .06s,transform .3s cubic-bezier(.2,.9,.25,1)}
 }
+
+/* 매체 탭(유튜브·X·인스타): 글 상자마다 붙던 매체·종류 이름표(예: '유튜브 영상')와 작성자를 숨김. 줄 머리글에 "그룹 · @계정"이 있음 */
+html[data-design="bento"] #grid:not([data-tab="people"]) .card .badge{display:none !important}
+html[data-design="bento"] #grid:not([data-tab="people"]) .card .meta .who{display:none}
+html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(:has(> img)) > .body{padding-top:16px !important}

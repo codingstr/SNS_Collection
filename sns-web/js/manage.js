@@ -240,7 +240,6 @@ function openRename(group) {
     const before = tracked;
     tracked = tracked.map((t) => (t.group === old ? { ...t, group: neu } : t));
     if (favs.has(old)) { favs.delete(old); favs.add(neu); saveFavs(); }
-    if (groupFocus === old) groupFocus = neu;
     if (personFocus === old) personFocus = neu;
     if (storySel.has(old)) { storySel.delete(old); storySel.add(neu); } // 위쪽 그룹 줄에서 고른 그룹도 따라감
     if (picPick[old]) { picPick[neu] = picPick[old]; delete picPick[old]; savePics(); } // 이름 옆 사진 고른 것도 따라감

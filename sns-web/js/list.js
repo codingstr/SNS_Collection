@@ -325,7 +325,7 @@ function platMeta(r) {
   platOrder([...r.plats]).forEach((p, i) => {
     if (i) span.append(document.createTextNode("·"));
     const a = el("span", { class: "platlink", role: "button", tabindex: "0", text: PLATFORM[p] });
-    const go = (e) => { e.stopPropagation(); e.preventDefault(); backCtx = { tab: activeTab, pf: personFocus, pp: personPlat, af: acctFocus, gf: groupFocus, pg: page, st: ($("grid") || {}).scrollTop || 0 }; activeTab = "people"; acctFocus = ""; personFocus = r.name; personPlat = p; renderList(); }; // 이 사람의 이 매체 글만
+    const go = (e) => { e.stopPropagation(); e.preventDefault(); backCtx = { tab: activeTab, pf: personFocus, pp: personPlat, pg: page, st: ($("grid") || {}).scrollTop || 0 }; activeTab = "people"; personFocus = r.name; personPlat = p; renderList(); }; // 이 사람의 이 매체 글만
     a.addEventListener("click", go);
     a.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(e); });
     span.append(a);
@@ -401,7 +401,7 @@ function renderTabs() {
   Object.keys(LABELS).forEach((k) => {
     const ico = k === "people" ? el("span", { class: "tabico people", "aria-hidden": "true" }) : el("span", { class: "tabico sicon", "aria-hidden": "true" }, [typeof pIcon === "function" ? pIcon(k) : el("span")]);
     const b = el("button", { type: "button", class: k === activeTab ? "active" : "", title: LABELS[k], "aria-label": LABELS[k] }, [el("span", { class: "tabtxt", text: LABELS[k] }), ico, el("span", { class: "n", text: String(counts[k] || 0) })]);
-    b.addEventListener("click", () => { if (k === "people") { personFocus = ""; personPlat = ""; } if (k !== activeTab) acctFocus = ""; activeTab = k; renderList(); });
+    b.addEventListener("click", () => { if (k === "people") { personFocus = ""; personPlat = ""; } activeTab = k; renderList(); });
     nav.appendChild(b);
   });
 }
@@ -528,7 +528,6 @@ function pickPicFile(id) {
   });
   document.body.appendChild(f); f.click();
 }
-let acctFocus = ""; // 매체 탭에서 고른 계정(없으면 전체)
 let favs = new Set();
 try { favs = new Set(JSON.parse(lsGet("snsFavs", "[]"))); } catch (e) {}
 const saveFavs = () => lsSet("snsFavs", JSON.stringify([...favs]));
@@ -623,6 +622,78 @@ function sizeSections(g) {
 let sizeT = 0;
 window.addEventListener("resize", () => { clearTimeout(sizeT); sizeT = setTimeout(() => sizeSections($("grid")), 200); });
 
+// 사람별 화면의 매체 칸과 매체 탭(유튜브 영상+게시물)이 함께 씁니다
+const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
+// 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
+// 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
+//   줄은 모두 반 칸(한 줄에 두 개)이고, 개수가 홀수면 마지막 하나만 한 줄을 다 씁니다.
+function mediaRows(r, limit, onMore) {
+  const box = el("div", { class: "sections media-grid" });
+  const nAcc = {};   // 이 사람(그룹)의 매체별 계정 수
+  (r.accs || []).forEach((t) => { nAcc[t.platform] = (nAcc[t.platform] || 0) + 1; });
+  // 매체(k)별 블록: 그 매체 계정이 여럿이면 계정(via)마다, 아니면 하나. 최근 글이 있는 계정부터.
+  const blocks = (k) => {
+    const part = r.list.filter((it) => it.source === k);
+    if (!part.length) return [];
+    if ((nAcc[tabOf(k)] || 0) < 2) return [{ k, via: "", part }];
+    const by = new Map();
+    // 공동 게시물처럼 이 그룹의 두 계정에 함께 이어진 글은 두 계정의 줄에 모두 넣습니다. r.list가 최신순이라 각 줄도 최신순
+    part.forEach((it) => { const vs = viasOf(it).filter((v) => r.ids && r.ids.has(v)); (vs.length ? vs : [it.via]).forEach((v) => { if (!by.has(v)) by.set(v, []); by.get(v).push(it); }); });
+    return [...by].map(([via, p]) => ({ k, via, part: p })).sort((a, b) => publishedMs(b.part[0]) - publishedMs(a.part[0]));
+  };
+  const sec = (b, full) => {
+    // 머리글: 매체 이름 대신 계정 이름(유튜브는 영상·게시물을 덧붙임). 매체는 앞의 아이콘으로 구분합니다
+    const via = b.via || [...(r.ids || [])].find((id) => id.split(":")[0] === tabOf(b.k)) || "";
+    const t = via ? trackedOf(via) : null;
+    const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : "") || b.part[0].author || (t && t.channelId) || "";
+    const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
+    const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: b.part.length + "건" })]);
+    if (onMore && b.part.length > limit) {
+      const more = el("button", { type: "button", text: "전체 보기" });
+      more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
+      head.appendChild(more);
+    }
+    const grid = el("div", { class: "row-cards" });
+    fillRow(grid, b.part.slice(0, limit));
+    enableDrag(grid);
+    box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(b.k) }, [head, grid]));
+  };
+  // 놓는 순서: 유튜브는 계정마다 [영상, 게시물], 그다음 X, 인스타. 모두 반 칸씩 두 개가 한 줄이고,
+  // 개수가 홀수면 마지막 하나만 한 줄 전체를 씁니다(같은 매체 줄이 많아도 공간을 덜 차지하게).
+  const order = [];
+  const vids = blocks("youtube-video"), posts = blocks("youtube-post");
+  vids.forEach((v) => { order.push(v); const i = posts.findIndex((p) => p.via === v.via); if (i >= 0) order.push(posts.splice(i, 1)[0]); });
+  order.push(...posts, ...blocks("x"), ...blocks("instagram"));
+  order.forEach((b, i) => sec(b, order.length % 2 === 1 && i === order.length - 1));
+  if (!box.children.length) box.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
+  return box;
+}
+// 오른쪽 칸: 지금 보이는 그룹 목록(글 수·안 읽은 글 빨간 점). 누르면 그 그룹 줄로 바로 내려갑니다. 고르기는 위쪽 그룹 줄에서 합니다.
+// 사람별 화면과 매체 탭이 같은 모양으로 씁니다(매체 탭의 글 수는 그 매체 글만). focusName: 한 그룹만 크게 보는 중이면 그 이름(이동 없음)
+function sidePeople(rows, sel, focusName, noJump) {
+  const sp = $("sidePeople");
+  const head = el("div", { class: "pb-head" }, [el("b", { text: (sel.size ? "고른 그룹 " : "모든 그룹 ") + rows.length + "개" })]);
+  if (sel.size) {
+    const clr = el("button", { type: "button", class: "pb-clear", text: "선택 풀기" });
+    clr.addEventListener("click", () => { storySel = new Set(); afterStorySelect(""); });
+    head.appendChild(clr);
+  }
+  const jump = !focusName && !noJump;
+  const bar = el("div", { class: "pbar" });
+  rows.forEach((r) => {
+    const label = personLabel(r), accs = personAccounts(r);
+    const chosen = accs.find((t) => t.platform === picPick[r.name]) || accs.find((t) => picMap[t.id]) || accs[0];
+    const unread = r.list.some((it) => !seen.has(it.id));
+    const b = el("button", { type: "button", class: (focusName === r.name ? "active" : "") + (unread ? " new" : ""), "aria-label": label + " " + r.list.length + "건" + (unread ? ", 안 읽은 글 있음" : "") + (jump ? " · 눌러서 그 줄로 이동" : "") },
+      [picFace(chosen, label.replace(/^@/, ""), "pface"), el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(r.list.length) })]);
+    b._ids = r.list.map((it) => it.id);   // 읽음이 바뀌면 refreshSideUnread가 빨간 점을 다시 맞춥니다
+    b._label = label; b._n = r.list.length; b._jump = jump;
+    if (jump) b.addEventListener("click", () => jumpToPerson(r.name));
+    bar.appendChild(b);
+  });
+  sp.append(head, bar);
+  sp.hidden = false;
+}
 function renderList() {
   queueMicrotask(() => sizeSections($("grid")));   // 다 그린 뒤에 섹션 자리 높이를 맞춤
   renderTabs();
@@ -644,32 +715,13 @@ function renderList() {
   { const ob = $("storyBar"); if (ob && typeof storyScroll !== "undefined") storyScroll = ob.scrollLeft; } // 그룹 줄을 옆으로 넘겨 둔 위치 유지
   g.textContent = "";
   g.className = "";
+  g.dataset.tab = activeTab;   // 매체 탭에서는 글 상자의 매체 이름표·작성자를 숨김(bento.css)
   // 위쪽 그룹 줄(인스타 스토리 모양): 글 영역 맨 위에 붙어 있고, 글을 내려도 위에 남습니다(stories.js)
   if (typeof storyBar === "function") { const sb = storyBar(); if (sb) { g.appendChild(wrapStory(sb)); sb.scrollLeft = storyScroll; } }
   let ytBar = null;
   { const sp = $("sidePeople"); sp.textContent = ""; sp.hidden = true; }
-  // 매체 탭(유튜브·X·인스타그램): 오른쪽 아래에 그 매체의 계정 목록(그룹 아님)을 보여주고, 누르면 그 계정 글만 봅니다.
+  // 매체 탭(유튜브·X·인스타그램): 오른쪽 목록은 기본(사람별) 화면과 같은 그룹 목록입니다(글 수는 이 매체 글만). 누르면 그 그룹 줄로 내려갑니다.
   if (activeTab !== "people" && activeTab !== "all") {
-    const accs = homeAccounts().filter((t) => t.platform === activeTab);
-    const counts = new Map();
-    list.forEach((it) => viasOf(it).forEach((v) => counts.set(v, (counts.get(v) || 0) + 1))); // 계정마다 전체 글을 다시 세지 않고 한 번에
-    const cnt = (id) => counts.get(id) || 0;
-    if (acctFocus && !accs.some((t) => t.id === acctFocus)) acctFocus = "";
-    if (document.documentElement.getAttribute("data-design") === "bento" && accs.length) {
-      const bar = el("div", { class: "pbar" });
-      const chip = (face, label, n, active, fn) => { const b = el("button", { type: "button", class: active ? "active" : "" }, [face, el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(n) })].filter(Boolean)); b.addEventListener("click", fn); bar.appendChild(b); };
-      chip(null, "모든 계정", list.length, !acctFocus, () => { acctFocus = ""; renderList(); });
-      accs.map((t) => ({ t, n: cnt(t.id) })).sort((a, b) => b.n - a.n).forEach(({ t, n }) => {
-        const nm = t.kind === "feed" ? FEED[t.platform] : t.handle ? "@" + t.handle : t.channelId || "";
-        chip(picFace(t, t.handle || nm, "pface"), nm, n, acctFocus === t.id, () => { acctFocus = acctFocus === t.id ? "" : t.id; renderList(); });
-      });
-      const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(bar);
-    } else if (document.documentElement.getAttribute("data-design") === "bento") {
-      // 이 매체에 추적 계정이 없어도 오른쪽 목록 카드를 같은 자리에 비어 있는 채로 보여줍니다
-      const eb = el("div", { class: "pbar" }); eb.appendChild(el("button", { type: "button", class: "active" }, [el("span", { text: "모든 계정" }), el("span", { class: "n", text: "0" })]));
-      const sp = $("sidePeople"); sp.hidden = false; sp.appendChild(eb);
-    }
-    if (acctFocus) list = list.filter((it) => viasOf(it).includes(acctFocus));
     // 유튜브 탭: 영상만 / 둘 다 / 게시물만
     if (activeTab === "youtube") {
       const bar = el("div", { class: "segbar", role: "group", "aria-label": "유튜브 보기 방식" });
@@ -681,6 +733,11 @@ function renderList() {
       ytBar = bar;
       if (ytMode !== "both") list = list.filter((it) => it.source === "youtube-" + ytMode);
     }
+    const sel = effSel();
+    const prows = (sel.size ? visiblePeople().filter((p) => sel.has(p.name)) : visiblePeople())
+      .map((p) => ({ ...p, list: list.filter((it) => viasOf(it).some((v) => p.ids.has(v))) })).filter((r) => r.list.length)
+      .sort((a, b) => publishedMs(b.list[0]) - publishedMs(a.list[0]));
+    sidePeople(prows, sel, "", !!q);   // 검색 중에는 그룹 줄이 없어 이동하지 않음
   }
   if (activeTab === "people") {
     // 사람별: 같은 그룹 이름을 가진 유튜브·X·인스타 계정의 글을 한 사람 기준으로 모아 봅니다.
@@ -710,75 +767,7 @@ function renderList() {
     if (personPlat && !rows.some((r) => r.name === personFocus)) { personFocus = ""; personPlat = ""; }
     // 한 사람만 볼 때(그룹을 하나만 골랐거나, 매체 전체 보기 중): 그 사람의 글을 더 많이 보여 줍니다.
     const focusName = personPlat ? personFocus : sel.size === 1 && rows.length === 1 ? rows[0].name : "";
-    // 오른쪽 칸: 지금 보이는 그룹 목록(글 수·안 읽은 글 빨간 점). 누르면 그 그룹 줄로 바로 내려갑니다. 고르기는 위쪽 그룹 줄에서 합니다.
-    {
-      const sp = $("sidePeople");
-      const head = el("div", { class: "pb-head" }, [el("b", { text: (sel.size ? "고른 그룹 " : "모든 그룹 ") + rows.length + "개" })]);
-      if (sel.size) {
-        const clr = el("button", { type: "button", class: "pb-clear", text: "선택 풀기" });
-        clr.addEventListener("click", () => { storySel = new Set(); afterStorySelect(""); });
-        head.appendChild(clr);
-      }
-      const bar = el("div", { class: "pbar" });
-      rows.forEach((r) => {
-        const label = personLabel(r), accs = personAccounts(r);
-        const chosen = accs.find((t) => t.platform === picPick[r.name]) || accs.find((t) => picMap[t.id]) || accs[0];
-        const unread = r.list.some((it) => !seen.has(it.id));
-        const b = el("button", { type: "button", class: (focusName === r.name ? "active" : "") + (unread ? " new" : ""), "aria-label": label + " " + r.list.length + "건" + (unread ? ", 안 읽은 글 있음" : "") + (focusName ? "" : " · 눌러서 그 줄로 이동") },
-          [picFace(chosen, label.replace(/^@/, ""), "pface"), el("span", { class: "nm", text: label }), el("span", { class: "n", text: String(r.list.length) })]);
-        b._ids = r.list.map((it) => it.id);   // 읽음이 바뀌면 refreshSideUnread가 빨간 점을 다시 맞춥니다
-        b._label = label; b._n = r.list.length; b._jump = !focusName;
-        if (!focusName) b.addEventListener("click", () => jumpToPerson(r.name));
-        bar.appendChild(b);
-      });
-      sp.append(head, bar);
-      sp.hidden = false;
-    }
-    const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
-    // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
-    // 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
-    //   줄은 모두 반 칸(한 줄에 두 개)이고, 개수가 홀수면 마지막 하나만 한 줄을 다 씁니다.
-    const mediaRows = (r, limit, onMore) => {
-      const box = el("div", { class: "sections media-grid" });
-      const nAcc = {};   // 이 사람(그룹)의 매체별 계정 수
-      (r.accs || []).forEach((t) => { nAcc[t.platform] = (nAcc[t.platform] || 0) + 1; });
-      // 매체(k)별 블록: 그 매체 계정이 여럿이면 계정(via)마다, 아니면 하나. 최근 글이 있는 계정부터.
-      const blocks = (k) => {
-        const part = r.list.filter((it) => it.source === k);
-        if (!part.length) return [];
-        if ((nAcc[tabOf(k)] || 0) < 2) return [{ k, via: "", part }];
-        const by = new Map();
-        // 공동 게시물처럼 이 그룹의 두 계정에 함께 이어진 글은 두 계정의 줄에 모두 넣습니다. r.list가 최신순이라 각 줄도 최신순
-        part.forEach((it) => { const vs = viasOf(it).filter((v) => r.ids && r.ids.has(v)); (vs.length ? vs : [it.via]).forEach((v) => { if (!by.has(v)) by.set(v, []); by.get(v).push(it); }); });
-        return [...by].map(([via, p]) => ({ k, via, part: p })).sort((a, b) => publishedMs(b.part[0]) - publishedMs(a.part[0]));
-      };
-      const sec = (b, full) => {
-        // 머리글: 매체 이름 대신 계정 이름(유튜브는 영상·게시물을 덧붙임). 매체는 앞의 아이콘으로 구분합니다
-        const via = b.via || [...(r.ids || [])].find((id) => id.split(":")[0] === tabOf(b.k)) || "";
-        const t = via ? trackedOf(via) : null;
-        const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : "") || b.part[0].author || (t && t.channelId) || "";
-        const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
-        const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: b.part.length + "건" })]);
-        if (onMore && b.part.length > limit) {
-          const more = el("button", { type: "button", text: "전체 보기" });
-          more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
-          head.appendChild(more);
-        }
-        const grid = el("div", { class: "row-cards" });
-        fillRow(grid, b.part.slice(0, limit));
-        enableDrag(grid);
-        box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(b.k) }, [head, grid]));
-      };
-      // 놓는 순서: 유튜브는 계정마다 [영상, 게시물], 그다음 X, 인스타. 모두 반 칸씩 두 개가 한 줄이고,
-      // 개수가 홀수면 마지막 하나만 한 줄 전체를 씁니다(같은 매체 줄이 많아도 공간을 덜 차지하게).
-      const order = [];
-      const vids = blocks("youtube-video"), posts = blocks("youtube-post");
-      vids.forEach((v) => { order.push(v); const i = posts.findIndex((p) => p.via === v.via); if (i >= 0) order.push(posts.splice(i, 1)[0]); });
-      order.push(...posts, ...blocks("x"), ...blocks("instagram"));
-      order.forEach((b, i) => sec(b, order.length % 2 === 1 && i === order.length - 1));
-      if (!box.children.length) box.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
-      return box;
-    };
+    sidePeople(rows, sel, focusName, false);
     const body = el("div", { class: "sections" });
     if (focusName) {
       const r = rows.find((x) => x.name === focusName);
@@ -786,7 +775,7 @@ function renderList() {
         const back = el("button", { type: "button", text: "← " + r.name });
         back.addEventListener("click", () => { if (backCtx) {
           const c = backCtx; backCtx = null;
-          activeTab = c.tab; personFocus = c.pf; personPlat = c.pp; acctFocus = c.af; groupFocus = c.gf;
+          activeTab = c.tab; personFocus = c.pf; personPlat = c.pp;
           if (c.pg && c.pg !== page) { page = c.pg; try { applyPage(); } catch (e) {} }
           renderList();
           requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = c.st || 0; }); // 보던 위치로
@@ -835,49 +824,36 @@ function renderList() {
     g.classList.add("sections");
     const groups = new Map();
     const accs = homeAccounts();   // 숨긴 그룹은 빼고, 위쪽에서 그룹을 골랐으면 그 그룹만
-    const many = (t) => activeTab === t.platform && accs.filter((o) => o.group === t.group && o.platform === t.platform).length > 1;
     accs.forEach((t) => {
-      const split = t.group && many(t);
+      // 매체 탭에서는 그룹의 그 매체 계정이 하나여도 계정마다 줄을 두고 "그룹 · @계정"으로 씁니다
+      const split = t.group && activeTab === t.platform;
       const key = t.group ? "g:" + t.group + (split ? "|" + t.id : "") : "a:" + t.id;
       const tag = "@" + (t.handle || t.channelId || "");
-      if (!groups.has(key)) groups.set(key, { name: t.group ? t.group + (split ? " · " + tag : "") : PLATFORM[t.platform] + " " + tag, ids: new Set(), plats: [] });
+      if (!groups.has(key)) groups.set(key, { name: t.group ? t.group + (split ? " · " + tag : "") : PLATFORM[t.platform] + " " + tag, person: personKey(t), ids: new Set(), plats: [] });
       const gr = groups.get(key);
       gr.ids.add(t.id);
       gr.plats.push(PLATFORM[t.platform]);
     });
-    // 오른쪽 목록에서 계정 하나를 골랐으면 그 계정의 줄만(공동 게시물로 다른 계정 줄에도 걸리는 글이 그 줄을 따로 띄우지 않게)
-    const rows = [...groups.values()].filter((gr) => !acctFocus || gr.ids.has(acctFocus)).map((gr) => ({ ...gr, list: list.filter((it) => viasOf(it).some((v) => gr.ids.has(v))) }));
+    const rows = [...groups.values()].map((gr) => ({ ...gr, list: list.filter((it) => viasOf(it).some((v) => gr.ids.has(v))) }));
     const known = new Set(tracked.map((t) => t.id));
     const rest = list.filter((it) => !viasOf(it).some((v) => known.has(v)));
     if (rest.length) rows.push({ name: "기타", plats: [], ids: new Set(), list: rest });
     rows.forEach((r) => r.list.sort((a, b) => publishedMs(b) - publishedMs(a)));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
-    const focused = groupFocus && rows.find((r) => r.name === groupFocus);
-    if (groupFocus && !focused) groupFocus = "";
-    if (focused) {
-      // 한 그룹의 글을 전부 펼쳐서 보여줍니다.
-      g.className = "cards";
-      if (ytBar) g.appendChild(el("div", { style: "grid-column: 1 / -1" }, [ytBar]));
-      const back = el("button", { type: "button", text: "← 그룹 목록으로" });
-      back.addEventListener("click", () => { groupFocus = ""; renderList(); });
-      g.appendChild(el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: dispName(focused) }), el("span", { class: "n", text: focused.list.length + "건" })]));
-      appendProgressive(g, focused.list.slice(0, 300));
-      $("empty").hidden = list.length > 0;
-      return;
-    }
     if (ytBar) g.appendChild(el("div", { class: "segwrap" }, [ytBar]));
     // 특정 매체 탭에서는 그 매체에 글이 없는 계정·그룹 줄은 숨깁니다.
     (activeTab === "all" ? rows : rows.filter((r) => r.list.length)).forEach((r) => {
-      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: r.list.length + "건" + (r.plats.length ? " · " + platOrder([...new Set(r.plats)].map((n) => Object.keys(PLATFORM).find((k) => PLATFORM[k] === n) || n)).map((k) => PLATFORM[k] || k).join("·") : "") })]);
-      if (r.list.length > 30) {
-        const more = el("button", { type: "button", text: "전체 보기" });
-        more.addEventListener("click", () => { groupFocus = r.name; renderList(); });
-        head.appendChild(more);
+      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: r.list.length + "건" })]);
+      let grid;
+      if (activeTab === "youtube" && ytMode === "both" && r.list.length) grid = mediaRows(r, 30, null);   // 유튜브 영상+게시물: 사람별 화면처럼 왼쪽 영상, 오른쪽 게시물
+      else {
+        grid = el("div", { class: "row-cards" });
+        if (r.list.length) { fillRow(grid, r.list.slice(0, 30)); enableDrag(grid); }
+        else grid.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
       }
-      const grid = el("div", { class: "row-cards" });
-      if (r.list.length) { fillRow(grid, r.list.slice(0, 30)); enableDrag(grid); }
-      else grid.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
-      g.appendChild(el("section", { class: "sec" }, [head, grid]));
+      const sec = el("section", { class: "sec" }, [head, grid]);
+      sec._person = r.person;   // 오른쪽 그룹 목록에서 누르면 이 줄로(jumpToPerson). 한 그룹이 여러 줄이면 첫 줄로
+      g.appendChild(sec);
     });
   } else {
     g.className = "cards";
