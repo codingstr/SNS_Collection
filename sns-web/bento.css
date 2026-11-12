@@ -553,7 +553,7 @@ html[data-design="bento"] #vbar{display:none}
   html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i{background:color-mix(in srgb,var(--line),var(--muted) 40%)}
 }
 @media (min-width:861px){
-  html[data-design="bento"] .layout{gap:10px 56px}
+  html[data-design="bento"] .layout{gap:10px}   /* 세로 스크롤바는 글 박스 안에 있으므로 글 박스와 오른쪽 열 사이도 다른 곳처럼 10px */
 }
 @media (min-width:861px){
   html[data-design="bento"] #vbar::before{background:
@@ -641,12 +641,34 @@ html[data-design="bento"] #vbar{display:none}
   html[data-design="bento"] #vbar.idle i{pointer-events:none;cursor:default}
 }
 @media (min-width:861px){
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:56px;box-sizing:border-box}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:24px;box-sizing:border-box}
 }
 @media (min-width:861px){
   html[data-design="bento"] #vbar.inpanel::before{background:var(--soft);box-shadow:none}
   html[data-design="bento"] #vbar.inpanel i{background:var(--line)}
   html[data-design="bento"] #vbar.inpanel:hover i,html[data-design="bento"] #vbar.inpanel.drag i{background:color-mix(in srgb,var(--line),var(--muted) 40%)}
+}
+/* 세로 스크롤바: 글 박스 안쪽 오른쪽 끝, 바탕 박스 없이 손잡이만(가로 스크롤바와 같은 모양).
+   - 잡는 영역은 박스 오른쪽 끝의 24px 띠(누르기·휠·끌기는 그대로), 손잡이는 그 가운데 6px(마우스를 올리거나 끄는 중이면 10px)
+   - 손잡이는 박스 오른쪽 끝에서 9px, 글·카드와도 약 9px. 박스 오른쪽 안쪽 여백 24px = 잡는 영역 폭(겹치지 않음)
+   - 스크롤할 내용이 없으면 손잡이를 숨김
+   값은 js/ui.js의 VBAR_W(24)·VBAR_INSET_Y(12)와 맞춥니다. */
+@media (min-width:861px){
+  html[data-design="bento"] #grid,html[data-design="bento"] #empty{padding-right:24px}
+}
+/* 세로 스크롤바를 더 얇게: 바탕 36px → 24px, 손잡이 20px → 10px (폭은 js/ui.js의 VBAR_W와 같게) */
+@media (min-width:861px){
+  html[data-design="bento"] #vbar{width:24px}
+  html[data-design="bento"] #vbar::before{border-radius:12px}
+  html[data-design="bento"] #vbar i,html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i{left:7px;right:7px;border-radius:5px}
+}
+@media (min-width:861px){
+  html[data-design="bento"] #vbar::before,html[data-design="bento"] #vbar.inpanel::before{display:none}
+  html[data-design="bento"] #vbar i,html[data-design="bento"] #vbar.inpanel i{left:9px;right:9px;border-radius:3px;box-shadow:none;background:rgba(125,122,118,.38);transition:background .15s,left .15s,right .15s,opacity .2s}
+  html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i,html[data-design="bento"] #vbar.inpanel:hover i,html[data-design="bento"] #vbar.inpanel.drag i{left:7px;right:7px;border-radius:5px;background:rgba(125,122,118,.65)}
+  html[data-design="bento"][data-theme="dark"] #vbar i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel i{background:rgba(255,255,255,.24)}
+  html[data-design="bento"][data-theme="dark"] #vbar:hover i,html[data-design="bento"][data-theme="dark"] #vbar.drag i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel:hover i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel.drag i{background:rgba(255,255,255,.45)}
+  html[data-design="bento"] #vbar.idle i{opacity:0}
 }
 
 /* 검색 범위 메뉴: 검색창 왼쪽 끝에 맞추고, 완전한 타원(알약)으로 */
@@ -1220,6 +1242,9 @@ html[data-design="bento"] #gRename.armed{background:var(--accent);color:var(--ac
 html[data-design="bento"] .media-grid .card .badge{-webkit-backdrop-filter:none !important;backdrop-filter:none !important;background:rgba(255,255,255,.92) !important}
 html[data-design="bento"] #grid.sections > .sec,html[data-design="bento"] #grid > .sections > .sec,html[data-design="bento"] #grid > .sec{content-visibility:auto;contain-intrinsic-size:auto 420px}
 html[data-design="bento"] #grid .sec .card{contain:layout paint style}
+/* 세로로 쌓인 섹션(매체 탭의 그룹·계정 줄)이 화면 밖에서 그리지 않는 동안 세로 flex에 눌려 여백 높이(약 24px)로 줄었다가,
+   화면에 들어와 그려지는 순간 원래 높이로 늘어나며 스크롤이 튀고 떨렸습니다. 줄어들지 않게 합니다(자리 높이는 js/list.js의 sizeSections). */
+html[data-design="bento"] #grid.sections > .sec,html[data-design="bento"] #grid > .sections > .sec,html[data-design="bento"] #grid > .sec{flex-shrink:0}
 html[data-design="bento"] #grid .sec{box-shadow:0 2px 10px rgba(40,38,35,.06) !important}
 html[data-design="bento"][data-theme="dark"] #grid .sec{box-shadow:0 2px 10px rgba(0,0,0,.3) !important}
 html[data-design="bento"] #grid .card img{content-visibility:auto}

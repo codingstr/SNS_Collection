@@ -21,6 +21,9 @@ function barWheel(el, dy) {
   const raw = (room > 0 ? dy * max / room : dy) * SLOW, cap = el.clientHeight * 0.6 * SLOW; // 내용이 아주 길어도 휠 한 칸에 한 화면의 60%까지만(한 번에 수백 장이 새로 그려지며 렉 걸리는 것 방지)
   vScroll(el, Math.max(-cap, Math.min(cap, raw)));
 }
+// 휠 방향 고정(아래 wheel 처리): 지금 휠 동작이 움직이는 대상과 마지막 휠 시각
+const WHEEL_LATCH_MS = 350;
+const wheelLock = { to: null, at: 0 };
 document.addEventListener("wheel", (ev) => {
   if (ev.ctrlKey || window.innerWidth < 861 || !ev.target.closest) return;
   const dy = ev.deltaMode === 1 ? ev.deltaY * 40 : ev.deltaY;
@@ -36,13 +39,29 @@ document.addEventListener("wheel", (ev) => {
   }
   // 글 영역에서는 세로 휠 스크롤을 막고, 카드 줄 위에서는 그 줄을 좌우로 움직입니다
   if (!ev.target.closest("#grid")) return;
-  if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) {
+  ev.preventDefault();
+  const horiz = Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+  const dx = ev.deltaMode === 1 ? ev.deltaX * 40 : ev.deltaX;
+  // 방향 고정: 휠을 돌리기 시작할 때 움직일 대상(글 영역 세로 "v" 또는 커서 아래의 줄)을 정하고, 휠이 잠깐(WHEEL_LATCH_MS) 멈출 때까지
+  // 그 대상만 움직입니다. 세로로 내리던 중에 내용이 올라와 커서 밑에 카드 줄이 와도 가로 넘기기로 바뀌지 않습니다(트랙패드 관성도 한 동작).
+  // 옆으로 넘길 게 없는 줄(카드가 적은 줄) 위에서 시작한 휠은 세로로 움직입니다. 넘길 수 있는 줄이면 끝에 닿아 있어도 그 줄이 대상이라,
+  // 끝에서 더 넘기려는 휠은 아무 일도 하지 않습니다(세로로 바뀌어 화면이 갑자기 내려가지 않게).
+  const now = Date.now(), fresh = now - wheelLock.at > WHEEL_LATCH_MS;
+  wheelLock.at = now;
+  if (fresh || !wheelLock.to || (wheelLock.to !== "v" && !wheelLock.to.isConnected)) {
+    let r = ev.target.closest(".row-cards, .storybar");
+    if (r && r.scrollWidth <= r.clientWidth + 1) r = null;
+    wheelLock.to = r || "v";
+  }
+  if (wheelLock.to === "v") {
+    // 세로 동작 중의 가로 성분(트랙패드)은 무시합니다(브라우저의 '뒤로/앞으로 가기' 스와이프도 막힘).
+    if (!horiz) { const g = document.getElementById("grid"); if (g && g.scrollHeight > g.clientHeight) barWheel(g, dy); } // 스크롤바 위에서 돌릴 때와 같은 속도
+    return;
+  }
+  if (horiz) {
     // 트랙패드 가로 스크롤: 카드 줄을 손가락 움직임 그대로(1:1) 따라가게 직접 움직이고, 멈추면 가장 가까운 카드 자리로 살짝 맞춥니다.
-    // 줄이 그 방향으로 더 갈 수 없거나 줄이 아닌 곳이면 막아서 브라우저의 '뒤로/앞으로 가기' 스와이프가 발동하지 않게 합니다.
-    ev.preventDefault();
-    const r = ev.target.closest(".row-cards, .storybar");
-    if (!r) return;
-    const dx = ev.deltaMode === 1 ? ev.deltaX * 40 : ev.deltaX, mx = r.scrollWidth - r.clientWidth;
+    // 줄이 그 방향으로 더 갈 수 없으면 그대로 멈춥니다(막아 두었으므로 '뒤로/앞으로 가기' 스와이프도 발동하지 않음).
+    const r = wheelLock.to, mx = r.scrollWidth - r.clientWidth;
     if (mx <= 0 || (dx < 0 && r.scrollLeft <= 0) || (dx > 0 && r.scrollLeft >= mx - 1)) return;
     const st = wheelAnim.get(r) || { target: 0, raf: 0 };
     wheelAnim.set(r, st);
@@ -53,15 +72,8 @@ document.addEventListener("wheel", (ev) => {
     st.settle = setTimeout(() => { st.target = snapPos(r, r.scrollLeft); wheelRun(r, st); }, 160);
     return;
   }
-  ev.preventDefault();
-  let row = ev.target.closest(".row-cards, .storybar");
-  // 그룹 줄이 옆으로 넘길 만큼 길지 않으면, 그 위에서 돌린 휠은 글 영역을 세로로 움직입니다.
-  if (row && row.classList.contains("storybar") && row.scrollWidth <= row.clientWidth + 1) row = null;
-  if (!row) { // 카드 줄이 아닌 곳(세로로 쌓인 카드 목록 등): 스크롤바에 마우스를 올리지 않아도 휠로 글 영역이 세로로 움직입니다
-    const g = document.getElementById("grid");
-    if (g && g.scrollHeight > g.clientHeight) barWheel(g, dy); // 스크롤바 위에서 돌릴 때와 같은 속도
-    return;
-  }
+  // 세로 휠로 줄 넘기기: 휠 한 칸 = 카드 한 장(그룹 줄은 세 개)
+  const row = wheelLock.to;
   const max = row.scrollWidth - row.clientWidth;
   if (max <= 0) return;
   let st = wheelAnim.get(row);
@@ -73,7 +85,6 @@ document.addEventListener("wheel", (ev) => {
   const kids = Array.from(row.children).filter((c) => c.offsetWidth);
   const unit = kids.length > 1 ? kids[1].offsetLeft - kids[0].offsetLeft : kids[0] ? kids[0].offsetWidth + 4 : 240; // 실제 카드 간격(줄마다 gap이 달라도 어긋나지 않게)
   const step = row.classList.contains("storybar") ? 3 : 1; // 그룹 줄은 휠 한 칸에 세 개씩
-  const now = Date.now();
   if (st.last && now - st.last < 60) { return; } // 트랙패드 연속 이벤트는 한 번으로 묶기
   st.last = now;
   const base = st.raf ? st.target : snapPos(row, row.scrollLeft);
@@ -397,26 +408,26 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   let drag = null;
   const THUMB = 120;
   const PAD = 6; // 손잡이가 바탕 박스 끝 밖으로 튀어나오지 않게 안쪽 여백
+  const VBAR_W = 24; // 스크롤바 폭(bento.css의 #vbar width와 같게)
+  const VBAR_INSET_Y = 12; // 박스 위·아래 가장자리에서 스크롤바까지(둥근 모서리에 닿지 않게). 오른쪽은 박스 끝에 붙임(손잡이는 그 안쪽 9px)
   const target = () => ["setPanel", "trackPanel", "adminPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
   function update() {
     const el = target();
     if (!el || window.innerWidth < 861) { bar.hidden = true; return; }
     bar.classList.toggle("idle", el.scrollHeight <= el.clientHeight + 1); // 스크롤할 내용이 없어도 바탕은 어느 화면에서나 보입니다
+    // 스크롤바(잡는 영역 24px 띠)는 글 박스(또는 설정·추적 화면 박스) 안쪽 오른쪽 끝에 둡니다.
+    // 글·카드와 겹치지 않게 박스의 오른쪽 안쪽 여백을 그 폭만큼(24px) 비워 두었습니다(bento.css).
     const r = el.getBoundingClientRect();
-    const side = document.getElementById("workCard") || document.getElementById("tabs");
-    const sr = side && side.getBoundingClientRect();
-    const hasGap = sr && sr.width > 0 && sr.left > r.right; // 오른쪽 열이 없는 화면(설정·추적)은 박스 안쪽 오른쪽 끝에 둡니다
-    const gap = hasGap ? sr.left - r.right : 0;
     // 읽기를 먼저 모두 하고 쓰기는 뒤에 몰아서: 스크롤 때마다 강제 레이아웃(수백 장 카드 전체 다시 계산)이 생기지 않게 합니다.
-    const bh = Math.max(40, r.height);
+    const bh = Math.max(40, r.height - 2 * VBAR_INSET_Y);
     const th = Math.min(THUMB, bh - 2 * PAD); // 내용 길이와 상관없이 고정 길이
     const room = bh - 2 * PAD - th;
     const max = Math.max(0, el.scrollHeight - el.clientHeight);
     const st = el.scrollTop;
     bar.hidden = false;
-    bar.classList.toggle("inpanel", !hasGap);
-    bar.style.left = hasGap ? r.right + (gap - 36) / 2 + "px" : r.right - 36 - 8 + "px";
-    bar.style.top = r.top + "px";
+    bar.classList.add("inpanel");
+    bar.style.left = r.right - VBAR_W + "px";
+    bar.style.top = r.top + VBAR_INSET_Y + "px";
     bar.style.height = bh + "px";
     thumb.style.height = th + "px";
     thumb.style.transform = `translateY(${max > 0 ? PAD + room * st / max : PAD}px)`;
@@ -610,4 +621,91 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
     q.focus();
     q.select();   // 이미 적어 둔 검색어가 있으면 골라 두어 바로 새로 칠 수 있게
   });
+})();
+
+/* ---------- 가로 스크롤바: 그룹 줄·카드 줄(게시물 영역) ----------
+   화면 전체가 기본 스크롤바를 숨기므로(style.css), 옆으로 넘길 만큼 내용이 많을 때만 얇은 막대를 줄 아래쪽에 띄웁니다.
+   - 마우스를 줄 위에 올리거나 실제로 옆으로 넘기면 보이고, 마우스가 떠나고 넘기기를 멈추면 잠시 뒤 사라집니다.
+   - 대상은 게시물 카드 줄(.row-cards)과 위쪽 그룹 줄(.storybar)뿐입니다. 매체 이름 줄(.sec-head)은 넘기는 영역이 아닙니다.
+   - 손잡이를 끌거나 막대 바탕을 누르면 그 줄이 넘어가고, 막대 위에서 휠을 돌려도 그 줄이 옆으로 넘어갑니다.
+   막대는 하나만 두고 지금 대상 줄의 위치에 맞춰 옮깁니다(줄마다 만들지 않음). */
+(() => {
+  const SEL = ".row-cards, .storybar";
+  const bar = el("div", { id: "hbar", "aria-hidden": "true" }, [el("i")]);
+  const thumb = bar.firstChild;
+  document.body.appendChild(bar);
+  let cur = null, overRow = false, overBar = false, drag = null, hideT = 0;
+  const scrollable = (r) => r && r.isConnected && r.offsetParent !== null && r.scrollWidth > r.clientWidth + 1;
+  const place = () => {
+    if (!scrollable(cur)) { bar.classList.remove("on"); return; }
+    const rc = cur.getBoundingClientRect();
+    // 그룹 줄은 화면 위쪽에 붙어 있어 안쪽 아래 여백에, 카드 줄은 줄 바로 아래 틈에 놓습니다(카드를 가리지 않게).
+    const inside = cur.classList.contains("storybar");
+    const left = rc.left + (inside ? 14 : 0), width = rc.width - (inside ? 28 : 0);
+    bar.style.left = left + "px"; bar.style.width = width + "px";
+    bar.style.top = (inside ? rc.bottom - 9 : rc.bottom + 1) + "px";
+    const tw = Math.max(36, width * cur.clientWidth / cur.scrollWidth);
+    const mx = cur.scrollWidth - cur.clientWidth;
+    thumb.style.width = tw + "px";
+    thumb.style.transform = "translateX(" + ((width - tw) * (mx > 0 ? cur.scrollLeft / mx : 0)) + "px)";
+    bar.classList.add("on");
+  };
+  const update = () => place();   // 스크롤 이벤트는 화면을 그릴 때마다 한 번꼴이라 바로 맞춰도 가볍습니다
+  const hideLater = (ms) => {
+    clearTimeout(hideT);
+    hideT = setTimeout(() => { if (!overRow && !overBar && !drag) { bar.classList.remove("on"); cur = null; } }, ms);
+  };
+  const show = (r) => { if (!scrollable(r)) return; cur = r; clearTimeout(hideT); update(); };
+  document.addEventListener("pointerover", (e) => {
+    if (e.pointerType === "touch") return;
+    const r = e.target.closest ? e.target.closest(SEL) : null;
+    if (e.target.closest && e.target.closest("#hbar")) return;
+    if (r) { overRow = true; show(r); } else if (overRow) { overRow = false; hideLater(700); }
+  });
+  document.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "touch" || !cur) return;
+    const to = e.relatedTarget;
+    if (!to || !(cur.contains(to) || bar.contains(to))) { overRow = false; hideLater(700); }
+  });
+  // 줄을 옆으로 넘길 때(휠·끌기·트랙패드·터치) 보여 주고, 글 영역이 세로로 움직이면 막대도 따라갑니다.
+  document.addEventListener("scroll", (e) => {
+    const t = e.target;
+    if (t && t.matches && t.matches(SEL)) { show(t); if (!overRow && !overBar) hideLater(900); }
+    else if (cur) update();
+  }, true);
+  window.addEventListener("resize", () => { if (cur) update(); });
+  bar.addEventListener("pointerenter", () => { overBar = true; clearTimeout(hideT); });
+  bar.addEventListener("pointerleave", () => { overBar = false; hideLater(700); });
+  // 손잡이 끌기
+  thumb.addEventListener("pointerdown", (e) => {
+    if (!cur) return;
+    e.preventDefault(); e.stopPropagation();
+    drag = { x: e.clientX, left: cur.scrollLeft, r: cur };
+    bar.classList.add("drag");
+    try { thumb.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
+  });
+  thumb.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const r = drag.r, w = bar.clientWidth, tw = thumb.offsetWidth;
+    const mx = r.scrollWidth - r.clientWidth;
+    if (w - tw > 0) r.scrollLeft = drag.left + (e.clientX - drag.x) * mx / (w - tw);
+  });
+  const endDrag = () => { if (!drag) return; drag = null; bar.classList.remove("drag"); if (!overBar && !overRow) hideLater(700); };
+  thumb.addEventListener("pointerup", endDrag);
+  thumb.addEventListener("pointercancel", endDrag);
+  thumb.addEventListener("lostpointercapture", endDrag);
+  // 막대 바탕을 누르면 그쪽으로 한 화면만큼
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.target !== bar || !cur) return;
+    e.preventDefault();
+    const tr = thumb.getBoundingClientRect();
+    cur.scrollBy({ left: (e.clientX < tr.left ? -1 : 1) * cur.clientWidth * 0.9, behavior: "smooth" });
+  });
+  // 막대 위에서 돌린 휠은 그 줄을 옆으로
+  bar.addEventListener("wheel", (e) => {
+    if (!cur) return;
+    e.preventDefault(); e.stopPropagation();
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    cur.scrollBy({ left: (e.deltaMode === 1 ? d * 40 : d) * 2, behavior: "auto" });
+  }, { passive: false });
 })();

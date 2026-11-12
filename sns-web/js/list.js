@@ -574,7 +574,40 @@ function jumpToPerson(name) {
   const dy = sec.getBoundingClientRect().top - (g.scrollHeight > g.clientHeight + 1 ? g.getBoundingClientRect().top : 0) - barH - 8;
   if (g.scrollHeight > g.clientHeight + 1) g.scrollBy({ top: dy, behavior: "smooth" }); else window.scrollBy({ top: dy, behavior: "smooth" });
 }
+/* 화면 밖 섹션의 자리 높이 맞추기(스크롤 떨림 방지)
+   bento.css는 렉을 줄이려고 화면 밖 섹션을 그리지 않고(content-visibility:auto) 고정 높이(420px)로 자리만 잡아 둡니다.
+   실제 높이는 블록 줄 수에 따라 제각각(예: 342px·616px)이라, 섹션이 화면에 들어와 그려지는 순간 페이지 높이가 바뀌며
+   스크롤 위치·스크롤바가 튀고 화면이 떨렸습니다. 그래서 섹션 하나를 실제로 재서 줄 높이를 구하고, 나머지 섹션의 자리 높이를
+   블록 줄 수로 계산해 넣습니다("auto"라 한 번 그려진 섹션은 실제 높이를 기억). */
+function sizeSections(g) {
+  if (!g || !g.isConnected) return;
+  const secs = [...g.querySelectorAll(":scope > .sections > .sec, :scope > .sec")];
+  if (secs.length < 2) return;
+  const rowsOf = (s) => { const mg = s.querySelector(":scope > .media-grid, :scope > .sections.media-grid"); return mg ? { mg, n: Math.ceil(mg.querySelectorAll(":scope > .sec").length / 2) } : null; };
+  const measure = (s) => { const o = s.style.contentVisibility; s.style.contentVisibility = "visible"; const h = s.getBoundingClientRect().height; const r = rowsOf(s); const mgH = r ? r.mg.getBoundingClientRect().height : 0; s.style.contentVisibility = o; return { h, r, mgH }; };
+  let ref = null, single = 0;
+  for (const s of secs) {
+    const m = measure(s);
+    if (m.r && m.r.n > 0 && !ref) ref = m;
+    if (!m.r && !single) single = m.h;
+    if ((ref || !secs.some(rowsOf)) && (single || secs.every(rowsOf))) break;
+  }
+  const gap = ref ? parseFloat(getComputedStyle(ref.r.mg).rowGap) || 0 : 0;
+  const rowH = ref ? (ref.mgH - (ref.r.n - 1) * gap) / ref.r.n : 0, base = ref ? ref.h - ref.mgH : 0;
+  // 자리 높이(contain-intrinsic-size)는 안쪽 높이라 위아래 여백·테두리를 뺍니다.
+  const cs = getComputedStyle(secs[0]);
+  const pad = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"].reduce((t, k) => t + (parseFloat(cs[k]) || 0), 0);
+  secs.forEach((s) => {
+    const r = rowsOf(s);
+    const est = (r ? (r.n ? base + r.n * rowH + (r.n - 1) * gap : 0) : single) - pad;
+    if (est > 0) s.style.containIntrinsicSize = "auto " + Math.round(est) + "px";
+  });
+}
+let sizeT = 0;
+window.addEventListener("resize", () => { clearTimeout(sizeT); sizeT = setTimeout(() => sizeSections($("grid")), 200); });
+
 function renderList() {
+  queueMicrotask(() => sizeSections($("grid")));   // 다 그린 뒤에 섹션 자리 높이를 맞춤
   renderTabs();
   const q = $("q").value.trim().toLowerCase();
   let list = homeItems().filter((it) => activeTab === "all" || activeTab === "people" || tabOf(it.source) === activeTab);
@@ -704,7 +737,7 @@ function renderList() {
       const sec = (b, full) => {
         const t = b.via ? trackedOf(b.via) : null;
         const who = b.via ? (b.part[0].author || (t && t.handle ? "@" + t.handle : (t && t.channelId) || "")) : "";
-        const head = el("div", { class: "sec-head", title: "여기서 휠을 돌리면 옆으로 넘어갑니다" }, [srcIcon(b.k), el("span", { class: "slabel", text: SRC_LABELS[b.k] + (who ? " · " + who : "") }), el("span", { class: "n", text: b.part.length + "건" })]);
+        const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: SRC_LABELS[b.k] + (who ? " · " + who : "") }), el("span", { class: "n", text: b.part.length + "건" })]);
         if (onMore && b.part.length > limit) {
           const more = el("button", { type: "button", text: "전체 보기" });
           more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
