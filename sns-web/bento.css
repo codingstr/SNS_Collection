@@ -1911,3 +1911,15 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
     html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:calc((100cqw - 32px) / 5)}
   }
 }
+
+/* 스크롤바 손잡이: 더 진하게(라이트 .38 → .55, 다크 .24 → .38), 마우스를 올리거나 끌 때 굵어지고 진해지는 강조는 끔(늘 6px 같은 색) */
+@media (min-width:861px){
+  html[data-design="bento"] #vbar i,html[data-design="bento"] #vbar.inpanel i,
+  html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i,html[data-design="bento"] #vbar.inpanel:hover i,html[data-design="bento"] #vbar.inpanel.drag i{left:4px;right:4px;border-radius:3px;background:rgba(125,122,118,.55)}
+  html[data-design="bento"] #sbar i,html[data-design="bento"] #sbar:hover i,html[data-design="bento"] #sbar.drag i{right:4px;width:6px;border-radius:3px;background:rgba(125,122,118,.55)}
+  html[data-design="bento"][data-theme="dark"] #vbar i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel i,
+  html[data-design="bento"][data-theme="dark"] #vbar:hover i,html[data-design="bento"][data-theme="dark"] #vbar.drag i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel:hover i,html[data-design="bento"][data-theme="dark"] #vbar.inpanel.drag i,
+  html[data-design="bento"][data-theme="dark"] #sbar i,html[data-design="bento"][data-theme="dark"] #sbar:hover i,html[data-design="bento"][data-theme="dark"] #sbar.drag i{background:rgba(255,255,255,.38)}
+}
+html[data-design="bento"] #hbar i,html[data-design="bento"] #hbar:hover i,html[data-design="bento"] #hbar.drag i{top:2px;bottom:2px;border-radius:3px;background:rgba(125,122,118,.55)}
+html[data-design="bento"][data-theme="dark"] #hbar i,html[data-design="bento"][data-theme="dark"] #hbar:hover i,html[data-design="bento"][data-theme="dark"] #hbar.drag i{background:rgba(255,255,255,.38)}
