@@ -1863,3 +1863,51 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
   html[data-design="bento"] .workcard .wk-msg{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;-webkit-line-clamp:2 !important;overflow:hidden}
   html[data-design="bento"] .workcard .wk-list{margin-top:auto !important}
 }
+
+/* ===== 간격 정리 =====
+   큰 박스 사이 10px · 큰 박스 안쪽 14px · 그룹 묶음 사이 12px · 묶음 안쪽 12/14px · 칸 사이 10px · 카드 사이 8px
+   둥근 모서리는 바깥 → 안쪽으로 갈수록 작게: 글 박스 26 → 그룹 묶음 22 → 매체 칸 18 → 카드 14
+   스크롤바(#vbar·#sbar)는 박스 안쪽 여백(14px) 위에 손잡이만 겹쳐 그리고(글·버튼과 겹치지 않음), 스크롤할 때만 보입니다.
+   값은 js/ui.js의 VBAR_W·#sbar W(14)와 맞춥니다. */
+@media (min-width:861px){
+  html[data-design="bento"] #grid{padding:14px !important}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:14px}
+  html[data-design="bento"] #grid > .storywrap{margin-bottom:12px}
+  html[data-design="bento"] #grid > .storywrap #storyBar{margin-bottom:0}
+  html[data-design="bento"] #grid .sections{gap:12px}
+  html[data-design="bento"] #grid > .sections > .sec{margin:0 !important;padding:12px 14px 14px !important}
+  html[data-design="bento"] #grid > .sections > .sec > .sec-head{margin-bottom:10px !important}
+  html[data-design="bento"] #grid .sections.media-grid{gap:10px !important}
+  html[data-design="bento"] #grid .sec .media-grid > .sec{border-radius:18px !important;padding:10px !important}
+  html[data-design="bento"] #grid .sec[data-plat] .row-cards{gap:8px}
+  html[data-design="bento"] #grid .row-cards > .card,html[data-design="bento"] #grid .row-cards .cstack > .card{border-radius:14px}
+  html[data-design="bento"] #sidePeople,html[data-design="bento"] #tabs{padding:14px !important}
+  html[data-design="bento"] #sidePeople.hasbar{padding-right:14px !important}
+  /* 세로 스크롤바: 잡는 띠 14px(박스 안쪽 여백), 손잡이 6px(마우스를 올리거나 끄는 중이면 10px). 스크롤할 때만 보임 */
+  html[data-design="bento"] #vbar{width:14px}
+  html[data-design="bento"] #vbar i,html[data-design="bento"] #vbar.inpanel i{left:4px;right:4px;opacity:0;transition:background .15s,left .15s,right .15s,opacity .2s}
+  html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i,html[data-design="bento"] #vbar.inpanel:hover i,html[data-design="bento"] #vbar.inpanel.drag i{left:2px;right:2px}
+  html[data-design="bento"] #vbar.on i,html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i{opacity:1}
+  html[data-design="bento"] #vbar.idle i{opacity:0 !important}
+  html[data-design="bento"] #sbar{width:14px}
+  html[data-design="bento"] #sbar i{right:4px}
+  html[data-design="bento"] #sbar:hover i,html[data-design="bento"] #sbar.drag i{right:2px}
+}
+/* 간격 정리(이어서): 매체 탭 박스는 안쪽 여백 14px만큼 키 230px, 카드 사이 8px에 맞춘 카드 폭 */
+@media (min-width:861px){
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) 230px auto !important}
+  html[data-design="bento"] #grid > .sections > .sec > .sec-head{margin-bottom:8px !important}
+  html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:100cqw}
+  @container (min-width:440px){
+    html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:calc((100cqw - 8px) / 2)}
+  }
+  @container (min-width:650px){
+    html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:calc((100cqw - 16px) / 3)}
+  }
+  @container (min-width:870px){
+    html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:calc((100cqw - 24px) / 4)}
+  }
+  @container (min-width:1090px){
+    html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:calc((100cqw - 32px) / 5)}
+  }
+}

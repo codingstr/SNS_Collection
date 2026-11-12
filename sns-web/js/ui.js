@@ -416,7 +416,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   let drag = null;
   const THUMB = 120;
   const PAD = 6; // 손잡이가 바탕 박스 끝 밖으로 튀어나오지 않게 안쪽 여백
-  const VBAR_W = 24; // 스크롤바 폭(bento.css의 #vbar width와 같게)
+  const VBAR_W = 14; // 잡는 띠 폭 = 글 박스 오른쪽 안쪽 여백(bento.css의 #vbar width와 같게)
   const VBAR_INSET_Y = 12; // 박스 위·아래 가장자리에서 스크롤바까지(둥근 모서리에 닿지 않게). 오른쪽은 박스 끝에 붙임(손잡이는 그 안쪽 9px)
   const target = () => ["setPanel", "trackPanel", "adminPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
   function update() {
@@ -445,10 +445,14 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   thumb.addEventListener("pointermove", (e) => { if (drag !== null) scrollTo(e.clientY - bar.getBoundingClientRect().top - drag); });
   const end = () => { drag = null; bar.classList.remove("drag"); };
   thumb.addEventListener("pointerup", end); thumb.addEventListener("pointercancel", end);
+  // 스크롤할 때만 손잡이를 보이고, 멈추면 잠시 뒤 숨김(막대 위에 마우스가 있거나 끄는 중이면 남음, bento.css #vbar.on)
+  let hideT = 0;
+  const showBar = () => { bar.classList.add("on"); clearTimeout(hideT); hideT = setTimeout(() => { if (!bar.matches(":hover") && drag === null) bar.classList.remove("on"); else showBar(); }, 900); };
+  bar.addEventListener("pointerleave", () => { if (bar.classList.contains("on")) showBar(); });
   bar.addEventListener("pointerdown", (e) => { if (e.target === bar) scrollTo(e.clientY - bar.getBoundingClientRect().top - thumb.offsetHeight / 2); });
   let upRaf = 0;
   const updateSoon = () => { if (!upRaf) upRaf = requestAnimationFrame(() => { upRaf = 0; update(); }); }; // 한 프레임에 한 번만
-  ["grid", "setPanel", "trackPanel", "adminPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", updateSoon, { passive: true }); });
+  ["grid", "setPanel", "trackPanel", "adminPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", () => { updateSoon(); showBar(); }, { passive: true }); });
   window.addEventListener("resize", updateSoon);
   new MutationObserver(updateSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class"] });
   setInterval(update, 800);
@@ -466,7 +470,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   const bar = el("div", { id: "sbar", "aria-hidden": "true" }, [el("i")]);
   const thumb = bar.firstChild;
   document.body.appendChild(bar);
-  const INSET_Y = 6, BOTTOM = 14, W = 16, MIN = 36;
+  const INSET_Y = 6, BOTTOM = 14, W = 14, MIN = 36;   // W = 목록 박스 오른쪽 안쪽 여백(bento.css)
   let drag = null, over = false, hideT = 0, raf = 0;
   const list = () => sp.querySelector(":scope > .pbar");
   const geom = () => {
