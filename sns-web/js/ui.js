@@ -51,6 +51,7 @@ document.addEventListener("wheel", (ev) => {
   if (fresh || !wheelLock.to || (wheelLock.to !== "v" && !wheelLock.to.isConnected)) {
     let r = ev.target.closest(".row-cards, .storybar");
     if (r && r.scrollWidth <= r.clientWidth + 1) r = null;
+    if (r && r.classList.contains("storybar") && typeof islandFolded === "function" && islandFolded(r.parentElement)) r = null;   // 접힌 섬 위의 휠은 세로로
     wheelLock.to = r || "v";
   }
   if (wheelLock.to === "v") {
@@ -645,12 +646,24 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   const scrollable = (r) => r && r.isConnected && r.offsetParent !== null && r.scrollWidth > r.clientWidth + 1;
   const place = () => {
     if (!scrollable(cur)) { bar.classList.remove("on"); return; }
+    const wrap = cur.closest(".storywrap") || (cur.closest("#grid") && cur.closest("#grid").querySelector(":scope > .storywrap"));
+    const folded = typeof islandFolded === "function" && islandFolded(wrap);
+    if (folded && cur.classList.contains("storybar")) { bar.classList.remove("on"); return; }   // 접힌 섬에는 막대를 띄우지 않음
     const rc = cur.getBoundingClientRect();
     // 그룹 줄은 화면 위쪽에 붙어 있어 안쪽 아래 여백에, 카드 줄은 줄 바로 아래 틈에 놓습니다(카드를 가리지 않게).
     const inside = cur.classList.contains("storybar");
     const left = rc.left + (inside ? 14 : 0), width = rc.width - (inside ? 28 : 0);
+    const top = inside ? rc.bottom - 9 : rc.bottom + 1;
+    // 카드 줄 막대는 글 영역 안에서 보이는 부분에만: 위에 붙은 그룹 줄 뒤나 글 영역 밖으로 가면 숨김(막대가 그룹 줄을 뚫고 보이지 않게)
+    if (!inside) {
+      const g = cur.closest("#grid"), gr = g ? g.getBoundingClientRect() : null;
+      // 그룹 줄이 접혀 섬이면 섬 아래(위에서 약 42px)까지만 가립니다
+      const sb = wrap && wrap.offsetParent !== null ? wrap.getBoundingClientRect() : null;
+      const clipTop = Math.max(gr ? gr.top : 0, sb ? (folded ? sb.top + 42 : sb.bottom) : 0);
+      if (top < clipTop || (gr && top + 7 > gr.bottom)) { bar.classList.remove("on"); return; }
+    }
     bar.style.left = left + "px"; bar.style.width = width + "px";
-    bar.style.top = (inside ? rc.bottom - 9 : rc.bottom + 1) + "px";
+    bar.style.top = top + "px";
     const tw = Math.max(36, width * cur.clientWidth / cur.scrollWidth);
     const mx = cur.scrollWidth - cur.clientWidth;
     thumb.style.width = tw + "px";

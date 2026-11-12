@@ -551,10 +551,15 @@ function closePicMenu() { const m = document.getElementById("picMenu"); if (m) m
 document.addEventListener("click", (e) => { if (!e.target.closest || !e.target.closest("#picMenu, .pav")) closePicMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePicMenu(); });
 // 이름 옆 프로필 사진. 누르면 이 사람의 계정 중 어느 사진을 쓸지 고릅니다.
+// 그룹 없는 계정 하나짜리 줄인지(이름은 내부적으로 "매체 @계정"이지만 화면에는 "@계정"과 매체 아이콘으로 보여 줌)
+function soloAcct(r) { const a = r && r.ids ? personAccounts(r) : []; return a.length === 1 && !a[0].group ? a[0] : null; }
+function dispName(r) { const t = soloAcct(r); return t ? (t.handle ? "@" + t.handle : t.channelId || r.name) : r.name; }
 function personAvatar(r) {
   const accs = personAccounts(r);
   const chosen = accs.find((t) => t.platform === picPick[r.name]) || accs.find((t) => picMap[t.id]) || accs[0];
-  const b = el("button", { type: "button", class: "pav", title: "프로필 사진 고르기", "aria-label": r.name + " 프로필 사진 고르기" }, [picFace(chosen, r.name, "pface")]);
+  const solo = soloAcct(r);
+  const b = el("button", { type: "button", class: "pav", title: "프로필 사진 고르기", "aria-label": dispName(r) + " 프로필 사진 고르기" }, [picFace(chosen, solo ? (solo.handle || solo.channelId || r.name) : r.name, "pface")]);
+  if (solo && typeof pIcon === "function") b.appendChild(el("span", { class: "pbadge", "aria-hidden": "true" }, [pIcon(solo.platform)]));
   b.addEventListener("click", (ev) => {
     ev.stopPropagation();
     if (document.getElementById("picMenu")) { closePicMenu(); return; }
@@ -582,7 +587,7 @@ function jumpToPerson(name) {
   const g = $("grid");
   const sec = Array.from(g.querySelectorAll(".sections > .sec")).find((s) => s._person === name);
   if (!sec) return;
-  const bar = $("storyBar"), barH = bar ? bar.offsetHeight + 12 : 0;
+  const bar = $("storyBar"), barH = bar ? 48 : 0;   // 내려가면 그룹 줄은 위쪽 가운데 섬(높이 약 42px)으로 접힙니다
   const dy = sec.getBoundingClientRect().top - (g.scrollHeight > g.clientHeight + 1 ? g.getBoundingClientRect().top : 0) - barH - 8;
   if (g.scrollHeight > g.clientHeight + 1) g.scrollBy({ top: dy, behavior: "smooth" }); else window.scrollBy({ top: dy, behavior: "smooth" });
 }
@@ -640,7 +645,7 @@ function renderList() {
   g.textContent = "";
   g.className = "";
   // 위쪽 그룹 줄(인스타 스토리 모양): 글 영역 맨 위에 붙어 있고, 글을 내려도 위에 남습니다(stories.js)
-  if (typeof storyBar === "function") { const sb = storyBar(); if (sb) { g.appendChild(sb); sb.scrollLeft = storyScroll; } }
+  if (typeof storyBar === "function") { const sb = storyBar(); if (sb) { g.appendChild(wrapStory(sb)); sb.scrollLeft = storyScroll; } }
   let ytBar = null;
   { const sp = $("sidePeople"); sp.textContent = ""; sp.hidden = true; }
   // 매체 탭(유튜브·X·인스타그램): 오른쪽 아래에 그 매체의 계정 목록(그룹 아님)을 보여주고, 누르면 그 계정 글만 봅니다.
@@ -751,7 +756,7 @@ function renderList() {
         // 머리글: 매체 이름 대신 계정 이름(유튜브는 영상·게시물을 덧붙임). 매체는 앞의 아이콘으로 구분합니다
         const via = b.via || [...(r.ids || [])].find((id) => id.split(":")[0] === tabOf(b.k)) || "";
         const t = via ? trackedOf(via) : null;
-        const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : (t && t.channelId) || "") || b.part[0].author || "";
+        const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : "") || b.part[0].author || (t && t.channelId) || "";
         const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
         const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: b.part.length + "건" })]);
         if (onMore && b.part.length > limit) {
@@ -796,14 +801,14 @@ function renderList() {
         body.appendChild(grid);
       } else {
         body.appendChild(el("section", { class: "sec" }, [
-          el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: r.name }), favStar(r.name), platMeta(r)]),
+          el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: dispName(r) }), favStar(r.name), platMeta(r)]),
           mediaRows(r, 30, (k) => { backCtx = null; personFocus = r.name; personPlat = k; renderList(); }),
         ]));
       }
     } else {
       rows.forEach((r) => {
         // 이름을 누르면 위쪽 그룹 줄에서 이 사람만 고른 것과 같습니다.
-        const nameBtn = el("h3", { class: "namelink", text: r.name, role: "button", tabindex: "0", title: "이 사람만 보기" });
+        const nameBtn = el("h3", { class: "namelink", text: dispName(r), role: "button", tabindex: "0", title: "이 사람만 보기" });
         const go = () => { storySel = new Set([r.name]); personFocus = ""; personPlat = ""; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
         nameBtn.addEventListener("click", go);
         nameBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
@@ -855,7 +860,7 @@ function renderList() {
       if (ytBar) g.appendChild(el("div", { style: "grid-column: 1 / -1" }, [ytBar]));
       const back = el("button", { type: "button", text: "← 그룹 목록으로" });
       back.addEventListener("click", () => { groupFocus = ""; renderList(); });
-      g.appendChild(el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: focused.name }), el("span", { class: "n", text: focused.list.length + "건" })]));
+      g.appendChild(el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: dispName(focused) }), el("span", { class: "n", text: focused.list.length + "건" })]));
       appendProgressive(g, focused.list.slice(0, 300));
       $("empty").hidden = list.length > 0;
       return;
@@ -863,7 +868,7 @@ function renderList() {
     if (ytBar) g.appendChild(el("div", { class: "segwrap" }, [ytBar]));
     // 특정 매체 탭에서는 그 매체에 글이 없는 계정·그룹 줄은 숨깁니다.
     (activeTab === "all" ? rows : rows.filter((r) => r.list.length)).forEach((r) => {
-      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: r.name }), el("span", { class: "n", text: r.list.length + "건" + (r.plats.length ? " · " + platOrder([...new Set(r.plats)].map((n) => Object.keys(PLATFORM).find((k) => PLATFORM[k] === n) || n)).map((k) => PLATFORM[k] || k).join("·") : "") })]);
+      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: r.list.length + "건" + (r.plats.length ? " · " + platOrder([...new Set(r.plats)].map((n) => Object.keys(PLATFORM).find((k) => PLATFORM[k] === n) || n)).map((k) => PLATFORM[k] || k).join("·") : "") })]);
       if (r.list.length > 30) {
         const more = el("button", { type: "button", text: "전체 보기" });
         more.addEventListener("click", () => { groupFocus = r.name; renderList(); });

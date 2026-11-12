@@ -1764,19 +1764,69 @@ html[data-design="bento"] .ad-modal .modal input{height:40px;border:1px solid va
 html[data-design="bento"] #grid .media-grid > .sec[data-plat]{border:1px solid var(--line) !important;background:color-mix(in srgb,var(--fg) 3%,transparent) !important}
 html[data-design="bento"][data-theme="dark"] #grid .media-grid > .sec[data-plat]{background:color-mix(in srgb,var(--fg) 5%,transparent) !important}
 /* 글 상자: 작성자·게시·수집 정보를 상자 맨 아래에 고정 */
-html[data-design="bento"] #grid .media-grid .row-cards .card{display:flex !important;flex-direction:column}
-html[data-design="bento"] #grid .media-grid .row-cards .card > .body{flex:1 1 auto;display:flex !important;flex-direction:column}
-html[data-design="bento"] #grid .media-grid .row-cards .card > .body > .meta{margin-top:auto !important;padding-top:8px}
+html[data-design="bento"] #grid .row-cards > .card{display:flex !important;flex-direction:column}
+html[data-design="bento"] #grid .row-cards > .card > .body{flex:1 1 auto;display:flex !important;flex-direction:column}
+html[data-design="bento"] #grid .row-cards > .card > .body > .meta{margin-top:auto !important;padding-top:8px}
 /* 머리글: 건수를 계정명과 같은 높이로 */
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .slabel,html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{line-height:20px !important;height:20px;align-self:center;vertical-align:middle;top:auto !important;transform:none !important}
 html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{display:inline-flex !important;align-items:center}
 /* 매체 칸 글 상자: 계정명은 머리글에 있으므로 정보 줄에서 뺌 */
 html[data-design="bento"] #grid .media-grid .card .meta .who{display:none}
-/* 스크롤 떨림 방지: 매체 칸 글 상자 높이를 하나로 고정. 높이가 글마다 다르면 화면 밖 섹션의 자리 높이(sizeSections) 추정이 어긋나 스크롤이 튐 */
-html[data-design="bento"] #grid .media-grid .row-cards > .card{height:226px;min-height:226px;max-height:226px;overflow:hidden}
-html[data-design="bento"] #grid .media-grid .row-cards > .card > .body{min-height:0;overflow:hidden}
-/* 고정 높이(226px) 상자 안 배치: 사진 128px 고정, 제목은 남는 자리에 맞춰 줄 단위로 자름(사진 있으면 2줄, 없으면 7줄) → 글이 줄 중간에서 잘리지 않음 */
-html[data-design="bento"] #grid .media-grid .row-cards > .card > img{flex:none;height:128px !important;min-height:128px;max-height:128px;width:100%;object-fit:cover}
-html[data-design="bento"] #grid .media-grid .row-cards > .card .title{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:7;max-height:none}
-html[data-design="bento"] #grid .media-grid .row-cards > .card:has(> img) .title{-webkit-line-clamp:2}
-html[data-design="bento"] #grid .media-grid .row-cards > .card .meta{flex:none}
+/* 스크롤 떨림 방지: 카드 줄(사람별 매체 칸·매체 탭)의 글 상자 높이를 하나로 고정. 높이가 글마다 다르면 화면 밖 섹션의 자리 높이(sizeSections) 추정이 어긋나 스크롤이 튐 */
+html[data-design="bento"] #grid .row-cards > .card{height:226px;min-height:226px;max-height:226px;overflow:hidden}
+html[data-design="bento"] #grid .row-cards > .card > .body{min-height:0;overflow:hidden}
+/* 고정 높이(226px) 상자 안 배치: 사진 높이 고정, 제목은 남는 자리에 맞춰 줄 단위로 자름(사진 있으면 2줄, 없으면 7줄) → 글이 줄 중간에서 잘리지 않음 */
+html[data-design="bento"] #grid .row-cards > .card > img{flex:none;height:106px !important;min-height:106px;max-height:106px;width:100%;object-fit:cover}
+/* 사람별 매체 칸은 매체 이름표가 없어 그만큼 사진을 크게(매체 탭은 이름표 한 줄 때문에 106px) */
+html[data-design="bento"] #grid .media-grid .row-cards > .card > img{height:128px !important;min-height:128px;max-height:128px}
+html[data-design="bento"] #grid .row-cards > .card .title{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:7;max-height:none}
+html[data-design="bento"] #grid .row-cards > .card:has(> img) .title{-webkit-line-clamp:2}
+html[data-design="bento"] #grid .row-cards > .card .meta{flex:none}
+/* 정보 줄은 한 줄로(좁은 상자에서 여러 줄로 접혀 고정 높이를 넘지 않게) */
+html[data-design="bento"] #grid .row-cards > .card .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 매체 탭에서 그룹 줄이 글 영역(세로 flex) 안에서 눌려 찌그러지지 않게 */
+html[data-design="bento"] #storyBar{flex-shrink:0}
+/* 글 영역 그룹/계정 머리글: 이름·프로필 사진을 작게(사진 46→34px, 이름 24→17px) */
+html[data-design="bento"] #grid .sec-head .pface{width:34px !important;height:34px !important;font-size:14px !important}
+html[data-design="bento"] #grid .sec-head h3,html[data-design="bento"] #grid .sec-head .pname{font-size:17px !important}
+/* 그룹 없는 계정: 프로필 사진 우하단에 매체 아이콘(위쪽 그룹 줄의 아이콘과 같은 모양) */
+html[data-design="bento"] .pav{position:relative}
+html[data-design="bento"] .pav .pbadge{position:absolute;right:-3px;bottom:-3px;display:flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.2);pointer-events:none}
+html[data-design="bento"] .pav .pbadge .pg,html[data-design="bento"] .pav .pbadge img{display:flex;align-items:center;justify-content:center;width:11px;height:11px;font-size:7px;line-height:1}
+
+/* ===== 그룹 줄 섬(다이나믹 아일랜드 모양): 글을 내리면 위쪽 가운데 알약으로 접고, 마우스를 올리면 펼침 (js/stories.js) ===== */
+/* 위에 붙는 것은 감싼 상자(.storywrap). 그룹 줄 자체는 그 안에 보통으로 놓임 */
+html[data-design="bento"] #grid > .storywrap{position:sticky;top:0;z-index:4;grid-column:1 / -1;margin:0 0 14px;flex-shrink:0}
+html[data-design="bento"] #grid > .storywrap > #storyBar{position:relative;top:auto;z-index:auto;margin:0 !important;
+  clip-path:inset(0 0 0 0 round 24px);transition:clip-path .2s cubic-bezier(.2,.9,.25,1),background-color .15s,border-color .15s}
+html[data-design="bento"] #grid > .storywrap > #storyBar > .story{transition:opacity .14s .03s}
+/* 접힘: 가운데 위 200×36 알약만 보이게 자름. 잘린 바깥은 마우스가 닿지 않아 아래 글을 그대로 누를 수 있음 */
+html[data-design="bento"] #grid > .storywrap.island{pointer-events:none}
+html[data-design="bento"] #grid > .storywrap.island > #storyBar{pointer-events:auto}
+/* 알약 위의 글(고른 그룹 · 안 읽은 글 점). 마우스는 통과 */
+html[data-design="bento"] #grid > .storywrap > .island{position:absolute;top:6px;left:50%;width:max-content;min-width:200px;max-width:calc(100% - 48px);height:36px;box-sizing:border-box;padding:0 16px;border-radius:18px;
+  display:flex;align-items:center;justify-content:center;gap:8px;color:#f2f2f2;font:600 12.5px/1 var(--font);pointer-events:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.22);opacity:0;transform:translateX(-50%) scale(.92);transition:opacity .12s,transform .2s cubic-bezier(.2,.9,.25,1)}
+html[data-design="bento"] #grid > .storywrap > .island .it{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.6;min-width:0}   /* 줄 높이 1이면 Noto Sans KR 글자 아래가 잘림 */
+html[data-design="bento"] #grid > .storywrap > .island .idot{display:none;flex:none;width:7px;height:7px;border-radius:50%;background:#ff3b30}
+html[data-design="bento"] #grid > .storywrap > .island.new .idot{display:block}
+@media (max-width:860px){
+  html[data-design="bento"] #grid > .storywrap{margin-bottom:10px}
+  html[data-design="bento"] #grid > .storywrap > #storyBar{clip-path:inset(0 0 0 0 round 20px)}
+}
+@media (prefers-reduced-motion:reduce){
+  html[data-design="bento"] #grid > .storywrap > #storyBar,html[data-design="bento"] #grid > .storywrap > .island,html[data-design="bento"] #grid > .storywrap > #storyBar > .story{transition:none !important}
+}
+/* 접힘 규칙: 마우스가 있는 기기는 올리면 펼침. 터치 기기는 누른 뒤 :hover가 남아 다시 접히지 않으므로 누르기(.open)로만. 키보드로 들어오면 펼침 */
+@media (hover:hover){
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:hover):not(:has(:focus-visible)) > #storyBar{
+  clip-path:inset(6px calc(50% - var(--iw,200px) / 2) calc(100% - 42px) calc(50% - var(--iw,200px) / 2) round 18px);background-color:#111 !important;border-color:transparent !important;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none !important;transition:clip-path .38s cubic-bezier(.2,.9,.25,1),background-color .25s,border-color .25s}
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:hover):not(:has(:focus-visible)) > #storyBar > .story{opacity:0;transition:opacity .1s}
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:hover):not(:has(:focus-visible)) > .island{opacity:1;transform:translateX(-50%);transition:opacity .18s .06s,transform .3s cubic-bezier(.2,.9,.25,1)}
+}
+@media (hover:none){
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:has(:focus-visible)) > #storyBar{
+  clip-path:inset(6px calc(50% - var(--iw,200px) / 2) calc(100% - 42px) calc(50% - var(--iw,200px) / 2) round 18px);background-color:#111 !important;border-color:transparent !important;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none !important;transition:clip-path .38s cubic-bezier(.2,.9,.25,1),background-color .25s,border-color .25s}
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:has(:focus-visible)) > #storyBar > .story{opacity:0;transition:opacity .1s}
+  html[data-design="bento"] #grid > .storywrap.island:not(.open):not(:has(:focus-visible)) > .island{opacity:1;transform:translateX(-50%);transition:opacity .18s .06s,transform .3s cubic-bezier(.2,.9,.25,1)}
+}

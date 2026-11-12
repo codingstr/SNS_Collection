@@ -136,9 +136,109 @@ function storyBar(d) {
   });
   enableDrag(bar);   // 마우스로 잡아 끌기(끈 경우에는 고르기로 치지 않음)
   bar.addEventListener("scroll", () => { storyScroll = bar.scrollLeft; }, { passive: true });
+  // 접힌 섬에 보일 글: 고른 그룹 이름(없으면 '전체 그룹'), 보고 있는 그룹에 안 읽은 글이 있으면 빨간 점
+  const onL = d.list.filter((s) => s.on);
+  const names = onL.map((s) => personLabel(s.p));
+  bar._island = { names, dot: (onL.length ? onL : d.list).some((s) => s.unread.length) };
   storySig = storySigOf(d);
   return bar;
 }
+
+/* ---------- 섬(다이나믹 아일랜드 모양) ----------
+   글을 아래로 내리면 위쪽 그룹 줄을 가운데 위의 작은 알약 모양으로 접고, 마우스를 올리면(휴대폰은 누르면) 원래 줄로 펼칩니다.
+   맨 위에서는 늘 펼쳐 둡니다. 그룹 줄은 감싼 상자(.storywrap)가 위에 붙어 있고, 접을 때는 그룹 줄을 알약 모양으로 잘라 보이게(clip-path)만 해서
+   레이아웃 높이가 그대로입니다(접고 펼칠 때 글 목록이 움직이지 않음). 잘린 바깥은 마우스가 닿지 않아 아래 글을 그대로 누를 수 있습니다. */
+let islandTop = 0;
+// 글이 얼마나 내려갔는지(px). 데스크톱은 글 영역이, 휴대폰은 페이지 전체가 스크롤됩니다
+function gridScrollPos() {
+  const g = $("grid");
+  return g ? Math.max(g.scrollTop, -g.getBoundingClientRect().top) : 0;
+}
+// 접기/펴기는 스크롤 방향을 봅니다(위로 올리는 도중에 접혔다 펴졌다 깜빡이지 않게).
+// - 내리는 중: 4px만 내려가도 접음
+// - 올리는 중: 그룹 줄 자리(줄 높이)가 보이기 시작하면 바로 펼침. 맨 위로 빠르게 올리면 도착하기 전에 이미 펼쳐져 있음
+// - 펼친 뒤 계속 올리는 동안은 다시 접지 않음
+function setIsland(w) {
+  w = w || document.querySelector("#grid > .storywrap");
+  if (!w) return;
+  const y = gridScrollPos(), last = w._y;
+  w._y = y;
+  const was = w.classList.contains("island");
+  let on;
+  if (y <= 4) on = false;
+  else if (last === undefined) on = y >= w.offsetHeight;      // 처음 그릴 때(다시 그려도 보던 위치가 깊으면 접힌 채로)
+  else if (y > last) on = was || y > 4;                         // 내리는 중
+  else if (y < last) on = was && y >= w.offsetHeight;           // 올리는 중
+  else on = was;
+  if (on === was) return;
+  w.classList.toggle("island", on);
+  if (!on) w.classList.remove("open");
+}
+// 섬 글: 고른 그룹을 " · "로 잇되, 섬이 화면 폭에 비례한 길이(PC는 글 영역의 절반, 휴대폰은 72%)를 넘으면
+// 넘는 만큼을 "외 n개"로 줄입니다(예: "뉴진스 · 아이브 외 5개"). 휴대폰은 하나만 고른 게 아니면 "첫 그룹 외 n개"
+const wideIsland = window.matchMedia ? window.matchMedia("(min-width: 861px)") : { matches: true };
+let islandCtx = null;
+function islandText(names, w, it) {
+  if (!names.length) return "전체 그룹";
+  if (names.length === 1) return names[0];
+  if (!wideIsland.matches) return names[0] + " 외 " + (names.length - 1) + "개";
+  const avail = Math.max(160, Math.round(w.clientWidth * 0.5)) - 48;   // 알약 좌우 여백·빨간 점 자리
+  islandCtx = islandCtx || document.createElement("canvas").getContext("2d");
+  const cs = getComputedStyle(it);
+  islandCtx.font = cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+  for (let k = names.length; k > 1; k--) {
+    const t = names.slice(0, k).join(" · ") + (k < names.length ? " 외 " + (names.length - k) + "개" : "");
+    if (islandCtx.measureText(t).width <= avail) return t;
+  }
+  return names[0] + " 외 " + (names.length - 1) + "개";
+}
+function paintIsland(bar) {
+  const w = bar && bar.parentElement;
+  if (!w || !w.classList.contains("storywrap") || !bar._island) return;
+  if (!w.isConnected) { requestAnimationFrame(() => { if (bar.parentElement === w && w.isConnected) paintIsland(bar); }); return; }   // 글꼴·폭을 재려면 화면에 붙은 뒤에
+  const isl = w.querySelector(".island"), it = isl.querySelector(".it");
+  isl.style.maxWidth = wideIsland.matches ? Math.max(200, Math.round(w.clientWidth * 0.5)) + "px" : "";
+  it.textContent = islandText(bar._island.names, w, it);
+  isl.classList.toggle("new", bar._island.dot);
+}
+if (wideIsland.addEventListener) wideIsland.addEventListener("change", () => paintIsland($("storyBar")));
+// 접혀 있는지(마우스가 올라가 있거나 눌러서 펼친 상태가 아님)
+const canHover = window.matchMedia ? window.matchMedia("(hover: hover)") : { matches: true };
+function islandFolded(w) { return !!w && w.classList.contains("island") && !w.classList.contains("open") && !(canHover.matches && w.matches(":hover")) && !w.querySelector(":focus-visible"); }
+function wrapStory(bar) {
+  const isl = el("div", { class: "island", "aria-hidden": "true" }, [el("i", { class: "idot" }), el("span", { class: "it" })]);
+  const w = el("div", { class: "storywrap" }, [bar, isl]);
+  // 섬 글 길이에 맞춰 알약 폭(--iw)을 맞춥니다(그룹 줄을 같은 폭으로 잘라 보이게)
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => { if (isl.offsetWidth) w.style.setProperty("--iw", isl.offsetWidth + "px"); }).observe(isl);
+    let lastW = 0;   // 글 영역 폭이 바뀌면(창 크기) 섬 글 길이를 다시 맞춤
+    new ResizeObserver(() => { if (w.clientWidth && w.clientWidth !== lastW) { lastW = w.clientWidth; paintIsland(bar.parentElement === w ? bar : w.querySelector("#storyBar")); } }).observe(w);
+  }
+  paintIsland(bar);
+  setIsland(w);
+  // 휴대폰·펜: 접힌 섬을 처음 누르면 펼치기만 합니다(그 아래 보이지 않던 그룹이 눌리지 않게)
+  let swallow = false;
+  w.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" || !w.classList.contains("island") || w.classList.contains("open")) return;
+    w.classList.add("open"); islandTop = window.scrollY + ($("grid") ? $("grid").scrollTop : 0); swallow = true;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+  w.addEventListener("click", (e) => { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+  return w;
+}
+// 스크롤할 때 접기/펴기. 눌러서 펼쳐 둔 섬은 조금 더 스크롤하면 다시 접습니다.
+document.addEventListener("scroll", (e) => {
+  const t = e.target;
+  if (t !== document && !(t && t.id === "grid")) return;
+  const w = document.querySelector("#grid > .storywrap");
+  if (!w) return;
+  setIsland(w);
+  if (w.classList.contains("open") && Math.abs(window.scrollY + $("grid").scrollTop - islandTop) > 40) w.classList.remove("open");
+}, true);
+document.addEventListener("pointerdown", (e) => {
+  const w = document.querySelector("#grid > .storywrap.open");
+  if (w && !w.contains(e.target)) w.classList.remove("open");
+}, true);
 
 // 글 목록은 그대로 두고 그룹 줄만 새로 그립니다(본 글·새 글이 바뀌었을 때). 바뀐 게 없으면 아무것도 하지 않습니다.
 function renderStories() {
@@ -153,6 +253,7 @@ function renderStories() {
   const nb = storyBar(d);
   cur.replaceWith(nb);
   nb.scrollLeft = storyScroll;
+  paintIsland(nb);
   if (hadFocus !== null) {
     const b = Array.from(nb.children).find((x) => (hadFocus ? x.dataset.name === hadFocus : !x.dataset.name));
     if (b) b.focus({ preventScroll: true });
