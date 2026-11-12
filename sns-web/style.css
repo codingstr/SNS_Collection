@@ -416,11 +416,11 @@ header .toolbar .refreshbtn,header .toolbar .refreshbtn:hover:not(:disabled){bac
 #viewer.vshort #vPrev{left:max(8px,calc(50% - var(--shortw) / 2 - 52px))}
 #viewer.vshort #vNext{right:max(8px,calc(50% - var(--shortw) / 2 - 52px))}
 /* 가로 스크롤바(js/ui.js): 그룹 줄·카드 줄을 옆으로 넘길 수 있을 때, 마우스를 올리거나 넘기는 동안만 보임 */
-#hbar{position:fixed;z-index:6;height:7px;border-radius:4px;background:rgba(125,122,118,.10);opacity:0;pointer-events:none;transition:opacity .2s;touch-action:none}
+#hbar{position:fixed;z-index:6;height:10px;background:transparent;opacity:0;pointer-events:none;transition:opacity .2s;touch-action:none}
 #hbar.on{opacity:1;pointer-events:auto}
-#hbar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:rgba(125,122,118,.38);cursor:grab;transition:background .15s}
-#hbar:hover i,#hbar.drag i{background:rgba(125,122,118,.65)}
+/* 손잡이만(바탕 없음): 가운데 글 영역 세로 막대(#vbar)와 같은 모양. 굵기 6px, 마우스를 올리거나 끌면 10px */
+#hbar i{position:absolute;left:0;top:2px;bottom:2px;border-radius:3px;background:rgba(125,122,118,.38);cursor:grab;transition:background .15s,top .15s,bottom .15s,border-radius .15s}
+#hbar:hover i,#hbar.drag i{top:0;bottom:0;border-radius:5px;background:rgba(125,122,118,.65)}
 #hbar.drag i{cursor:grabbing}
-[data-theme="dark"] #hbar{background:rgba(255,255,255,.05)}
 [data-theme="dark"] #hbar i{background:rgba(255,255,255,.24)}
 [data-theme="dark"] #hbar:hover i,[data-theme="dark"] #hbar.drag i{background:rgba(255,255,255,.45)}

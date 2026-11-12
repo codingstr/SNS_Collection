@@ -455,6 +455,71 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   update();
 })();
 
+/* ---------- 오른쪽 그룹 목록(#sidePeople)의 세로 스크롤바 ----------
+   머리글('모든 항목 n개')은 고정이고 그 아래 목록(.pbar)만 스크롤됩니다(bento.css).
+   가운데 글 영역 막대(#vbar)와 같은 모양(바탕 없이 손잡이만, 폭 6px·마우스를 올리면 10px)으로 목록 오른쪽 끝에 그립니다.
+   목록을 스크롤할 때만 보이고, 멈추면 잠시 뒤 사라집니다(막대 위에 마우스가 있거나 끄는 동안은 남음).
+   손잡이 길이는 보이는 비율만큼(짧은 목록이라 고정 길이보다 위치를 알기 쉬움). 목록은 다시 그릴 때마다 새로 만들어지므로 그때그때 찾습니다. */
+(() => {
+  const sp = document.getElementById("sidePeople");
+  if (!sp) return;
+  const bar = el("div", { id: "sbar", "aria-hidden": "true" }, [el("i")]);
+  const thumb = bar.firstChild;
+  document.body.appendChild(bar);
+  const INSET_Y = 6, BOTTOM = 14, W = 16, MIN = 36;
+  let drag = null, over = false, hideT = 0, raf = 0;
+  const list = () => sp.querySelector(":scope > .pbar");
+  const geom = () => {
+    const sc = list();
+    const ok = !!sc && window.innerWidth >= 861 && !sp.hidden && sp.offsetParent !== null && sc.scrollHeight > sc.clientHeight + 1;
+    sp.classList.toggle("hasbar", ok);   // 손잡이 자리만큼 오른쪽 안쪽 여백(bento.css)
+    if (!ok) { bar.classList.remove("on"); bar.hidden = true; return null; }
+    bar.hidden = false;
+    const r = sc.getBoundingClientRect(), pr = sp.getBoundingClientRect();
+    const top = r.top + INSET_Y, bh = Math.max(40, Math.min(r.bottom, pr.bottom - BOTTOM) - top);
+    const th = Math.max(MIN, Math.round(bh * sc.clientHeight / sc.scrollHeight)), room = bh - th, max = sc.scrollHeight - sc.clientHeight;
+    bar.style.left = pr.right - W + "px"; bar.style.top = top + "px"; bar.style.height = bh + "px";
+    thumb.style.height = th + "px";
+    thumb.style.transform = "translateY(" + (max > 0 ? room * sc.scrollTop / max : 0) + "px)";
+    return { sc, room, max };
+  };
+  const update = () => { raf = 0; geom(); };
+  const soon = () => { if (!raf) raf = requestAnimationFrame(update); };
+  const hideLater = () => { clearTimeout(hideT); hideT = setTimeout(() => { if (!over && !drag) bar.classList.remove("on"); }, 900); };
+  document.addEventListener("scroll", (e) => {
+    if (e.target === list()) { if (geom()) { bar.classList.add("on"); hideLater(); } }
+    else soon();   // 페이지가 움직이면 자리를 따라감
+  }, true);
+  bar.addEventListener("pointerenter", () => { over = true; clearTimeout(hideT); });
+  bar.addEventListener("pointerleave", () => { over = false; hideLater(); });
+  // 막대 위에서 돌린 휠도 목록을 스크롤
+  bar.addEventListener("wheel", (e) => { const sc = list(); if (!sc) return; e.preventDefault(); sc.scrollTop += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY; }, { passive: false });
+  thumb.addEventListener("pointerdown", (e) => {
+    const sc = list(); if (!sc) return;
+    e.preventDefault(); e.stopPropagation();
+    try { thumb.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
+    drag = { y: e.clientY, top: sc.scrollTop }; bar.classList.add("drag");
+  });
+  thumb.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const g = geom();
+    if (g && g.room > 0) g.sc.scrollTop = drag.top + (e.clientY - drag.y) * g.max / g.room;
+  });
+  const end = () => { if (!drag) return; drag = null; bar.classList.remove("drag"); hideLater(); };
+  thumb.addEventListener("pointerup", end); thumb.addEventListener("pointercancel", end); thumb.addEventListener("lostpointercapture", end);
+  // 손잡이 밖 띠를 누르면 그 자리로
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.target !== bar) return;
+    const g = geom(); if (!g || g.room <= 0) return;
+    const y = e.clientY - bar.getBoundingClientRect().top - thumb.offsetHeight / 2;
+    g.sc.scrollTo({ top: Math.max(0, Math.min(1, y / g.room)) * g.max, behavior: "smooth" });
+  });
+  window.addEventListener("resize", soon);
+  new MutationObserver(soon).observe(sp, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  setInterval(soon, 1000);   // 레이아웃이 바뀌는 다른 경우(오른쪽 열 높이 등)
+  soon();
+})();
+
 // 카드 줄: 왼쪽으로 넘겨진 상태면 왼쪽 끝에도 약한 흐림(.sl)
 (function () {
   const mark = (el) => { if (el && el.classList && el.classList.contains("row-cards")) el.classList.toggle("sl", el.scrollLeft > 2); };
@@ -653,14 +718,14 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
     // 그룹 줄은 화면 위쪽에 붙어 있어 안쪽 아래 여백에, 카드 줄은 줄 바로 아래 틈에 놓습니다(카드를 가리지 않게).
     const inside = cur.classList.contains("storybar");
     const left = rc.left + (inside ? 14 : 0), width = rc.width - (inside ? 28 : 0);
-    const top = inside ? rc.bottom - 9 : rc.bottom + 1;
+    const top = inside ? rc.bottom - 11 : rc.bottom - 1;   // 띠 10px, 손잡이는 그 가운데 6px(마우스를 올리면 10px)
     // 카드 줄 막대는 글 영역 안에서 보이는 부분에만: 위에 붙은 그룹 줄 뒤나 글 영역 밖으로 가면 숨김(막대가 그룹 줄을 뚫고 보이지 않게)
     if (!inside) {
       const g = cur.closest("#grid"), gr = g ? g.getBoundingClientRect() : null;
       // 그룹 줄이 접혀 섬이면 섬 아래(위에서 약 42px)까지만 가립니다
       const sb = wrap && wrap.offsetParent !== null ? wrap.getBoundingClientRect() : null;
       const clipTop = Math.max(gr ? gr.top : 0, sb ? (folded ? sb.top + 42 : sb.bottom) : 0);
-      if (top < clipTop || (gr && top + 7 > gr.bottom)) { bar.classList.remove("on"); return; }
+      if (top < clipTop || (gr && top + 10 > gr.bottom)) { bar.classList.remove("on"); return; }
     }
     bar.style.left = left + "px"; bar.style.width = width + "px";
     bar.style.top = top + "px";

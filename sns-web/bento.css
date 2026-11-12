@@ -1833,3 +1833,33 @@ html[data-design="bento"] #grid > .storywrap > .island.new .idot{display:block}
 html[data-design="bento"] #grid:not([data-tab="people"]) .card .badge{display:none !important}
 html[data-design="bento"] #grid:not([data-tab="people"]) .card .meta .who{display:none}
 html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(:has(> img)) > .body{padding-top:16px !important}
+
+/* 오른쪽 그룹 목록의 세로 스크롤바(js/ui.js): #vbar와 같은 손잡이만 있는 모양. 스크롤할 때만 보임 */
+#sbar{display:none}
+@media (min-width:861px){
+  html[data-design="bento"] #sbar{display:block;position:fixed;z-index:5;width:16px;opacity:0;pointer-events:none;transition:opacity .2s;touch-action:none}
+  html[data-design="bento"] #sbar[hidden]{display:none}
+  html[data-design="bento"] #sbar.on{opacity:1;pointer-events:auto}
+  html[data-design="bento"] #sbar i{position:absolute;top:0;right:5px;width:6px;border-radius:3px;background:rgba(125,122,118,.38);cursor:grab;transition:background .15s,right .15s,width .15s,border-radius .15s}
+  html[data-design="bento"] #sbar:hover i,html[data-design="bento"] #sbar.drag i{right:3px;width:10px;border-radius:5px;background:rgba(125,122,118,.65)}
+  html[data-design="bento"] #sbar.drag i{cursor:grabbing}
+  html[data-design="bento"][data-theme="dark"] #sbar i{background:rgba(255,255,255,.24)}
+  html[data-design="bento"][data-theme="dark"] #sbar:hover i,html[data-design="bento"][data-theme="dark"] #sbar.drag i{background:rgba(255,255,255,.45)}
+  /* 손잡이 자리만큼 목록 오른쪽 안쪽 여백(글자·버튼과 겹치지 않게) */
+  html[data-design="bento"] #sidePeople.hasbar{padding-right:20px !important}
+}
+/* 오른쪽 그룹 목록: 머리글('모든 항목 n개')은 고정, 그 아래 목록만 스크롤 */
+@media (min-width:861px){
+  html[data-design="bento"] #sidePeople:not([hidden]){display:flex !important;flex-direction:column;overflow:hidden !important}
+  html[data-design="bento"] #sidePeople > .pb-head{flex:none}
+  html[data-design="bento"] #sidePeople > .pbar{flex:1 1 auto;min-height:0;flex-wrap:nowrap !important;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+  html[data-design="bento"] #sidePeople > .pbar > button{flex:none}
+}
+/* 오른쪽 열 크기 고정: '현재 작업' 카드 높이가 상태(서버 연결 안 됨·진행 막대·긴 메시지·마지막 확인 줄)에 따라 112~232px로 바뀌어
+   그 위의 그룹 목록 칸이 커졌다 작아졌다 했습니다. 카드를 가장 긴 경우(진행 막대 + 2줄 메시지 + 4줄 표) 높이로 고정하고
+   메시지는 2줄까지만, 표는 카드 아래쪽에 붙입니다. → 목록·매체 탭 칸의 크기와 위치가 늘 같음 */
+@media (min-width:861px){
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) .workcard:not([hidden]){height:232px !important;min-height:232px !important;max-height:232px !important;box-sizing:border-box;display:flex !important;flex-direction:column;overflow:hidden}
+  html[data-design="bento"] .workcard .wk-msg{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;-webkit-line-clamp:2 !important;overflow:hidden}
+  html[data-design="bento"] .workcard .wk-list{margin-top:auto !important}
+}

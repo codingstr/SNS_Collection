@@ -672,7 +672,7 @@ function mediaRows(r, limit, onMore) {
 // 사람별 화면과 매체 탭이 같은 모양으로 씁니다(매체 탭의 글 수는 그 매체 글만). focusName: 한 그룹만 크게 보는 중이면 그 이름(이동 없음)
 function sidePeople(rows, sel, focusName, noJump) {
   const sp = $("sidePeople");
-  const head = el("div", { class: "pb-head" }, [el("b", { text: (sel.size ? "고른 그룹 " : "모든 그룹 ") + rows.length + "개" })]);
+  const head = el("div", { class: "pb-head" }, [el("b", { text: (sel.size ? "고른 항목 " : "모든 항목 ") + rows.length + "개" })]);
   if (sel.size) {
     const clr = el("button", { type: "button", class: "pb-clear", text: "선택 풀기" });
     clr.addEventListener("click", () => { storySel = new Set(); afterStorySelect(""); });
