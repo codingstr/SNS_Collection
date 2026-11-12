@@ -671,6 +671,7 @@ function renderList() {
     // 볼 사람은 위쪽 그룹 줄에서 고릅니다(여러 명 가능). 아무도 고르지 않으면 모두 보여 줍니다.
     const all = [...peopleMap().values()];
     const hint = (text) => { g.appendChild(el("p", { class: "hint", text })); $("empty").hidden = true; };
+    if (!all.length && sess && !connected) { hint(loadingText()); return; }   // 저장된 로그인으로 들어온 직후(서버에서 받기 전)
     if (!all.length) { hint("추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요. 같은 사람의 유튜브·X·인스타 계정에 같은 그룹 이름을 주면 여기서 한 사람으로 모아 봅니다."); return; }
     const vp = visiblePeople();
     if (!vp.length) {
@@ -866,6 +867,7 @@ function renderList() {
   const emptyMsg = q ? "“" + q + "”에 맞는 글이 없습니다. 검색창을 비우면 모든 글이 보입니다."
     : ytBar && ytMode !== "both" ? "이 기간에 모은 유튜브 " + (ytMode === "video" ? "영상" : "게시물") + "이 없습니다."
     : connected ? (tracked.length ? "이 기간에 모은 글이 없습니다. '지금 최신화'를 눌러 보세요." : "추적할 계정이 없습니다. 위쪽 검색창에 이름·@아이디·프로필 주소를 넣고 Enter로 계정을 찾아 추가하세요.")
+    : sess ? loadingText()
     : "아직 보여줄 글이 없습니다. 로그인하고 계정을 추가하면 설정한 기간(최대 60일)의 글이 여기에 모입니다.";
   if (ytBar && !list.length) {
     // 영상/게시물 선택 막대가 가려지지 않게, 빈 안내는 글 영역 안(막대 아래)에 둡니다.

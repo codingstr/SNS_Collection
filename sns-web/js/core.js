@@ -52,7 +52,7 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v403";
+const WEB_VERSION = "v405";
 const TEAM_NAME = "WebMonster";
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };
@@ -138,6 +138,8 @@ function unmarkSeen(ids) {
 const $ = (id) => document.getElementById(id);
 
 let refreshing = false; // '지금 최신화'를 요청하는 중
+let serverDown = false; // 저장된 로그인으로 들어왔는데 서버에 닿지 않음(홈 화면의 안내 문구를 '불러오는 중' 대신 '연결할 수 없음'으로)
+const loadingText = () => (serverDown ? "지금은 서버에 연결할 수 없습니다. 서버가 다시 켜지면 자동으로 이어집니다." : "글을 불러오는 중…");
 let trackedHold = 0; // 추적 계정을 서버에 저장하는 중이면, 그 사이 도착한 옛 목록이 화면 목록을 덮어쓰지 않게 막는 시각
 let winDays = 30, items = [], settings = {}, tracked = [], checkStatus = {}, nextAuto = 0;
 let selIds = []; // 계정 관리에서 고른 계정(누른 순서)

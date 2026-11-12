@@ -35,7 +35,11 @@ async function api(action, body) {
   return j;
 }
 function acctSay(t, isErr) { const m = $("acctMsg"); m.textContent = t || ""; m.hidden = !t; m.className = isErr ? "error" : "hint"; }
-function setSess(s) { sess = s || ""; try { if (sess) localStorage.setItem("snsSess", sess); else localStorage.removeItem("snsSess"); } catch (e) {} }
+function setSess(s) {
+  sess = s || "";
+  try { if (sess) localStorage.setItem("snsSess", sess); else localStorage.removeItem("snsSess"); } catch (e) {}
+  document.documentElement.classList.toggle("has-sess", !!sess);   // 로그인이 없으면 로그인 창이 보이게(style.css)
+}
 // 로그인되면 화면을 로그인 상태로 바꾸고 서버에 연결합니다(글·추적 계정은 서버에 있습니다).
 // 이 브라우저에 마지막으로 로그인했던 아이디와 다르면, 그 아이디의 저장값(본 글 기록·사진·즐겨찾기)을 쓰도록 한 번 다시 엽니다.
 async function afterLogin(uid, info) {
@@ -141,6 +145,8 @@ async function initAccount() {
         $("acctForm").hidden = true; $("acctUser").hidden = false; $("connAcct").hidden = false; $("connOut").textContent = "로그아웃";
         $("acctWho").textContent = (UID0 ? UID0 + " " : "") + "로그인됨 (지금은 서버에 연결할 수 없습니다. 다시 켜지면 자동으로 이어집니다)";
         if (UID0) setAvatarWho(UID0);
+        toast("지금은 서버에 연결할 수 없습니다. 서버가 다시 켜지면 자동으로 이어집니다.", "error");   // 로그인 창 대신 알림으로(홈 화면은 그대로)
+        serverDown = true; renderList();
         connect(false);
       } else { setSess(""); if (e && e.message) acctSay("로그인이 만료되었습니다. 다시 로그인해 주세요.", true); }
     }

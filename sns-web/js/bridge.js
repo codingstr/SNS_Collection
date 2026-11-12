@@ -51,6 +51,7 @@ function applyPage() {
 }
 function setConn(ok) {
   connected = ok;
+  if (ok) serverDown = false;
   if (!ok) { $("loginBar").hidden = true; }
   $("connectPanel").hidden = ok;
   $("connAcct").hidden = !ok && !sess;

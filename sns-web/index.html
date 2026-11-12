@@ -2,14 +2,16 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<script>document.documentElement.setAttribute("data-design","bento");try{if(localStorage.getItem("snsTheme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+<!-- 저장된 로그인(snsSess)이 있으면 html에 has-sess를 붙여, 새로고침 때 로그인 창 없이 바로 홈 화면을 그립니다(아래 style).
+     로그인이 만료되었거나 로그아웃하면 js/account.js의 setSess가 has-sess를 떼어 로그인 창이 다시 보입니다. -->
+<script>document.documentElement.setAttribute("data-design","bento");try{if(localStorage.getItem("snsTheme")==="dark")document.documentElement.setAttribute("data-theme","dark");if(localStorage.getItem("snsSess"))document.documentElement.classList.add("has-sess")}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>[hidden]{display:none!important}img{max-width:100%}</style>
+<style>[hidden]{display:none!important}img{max-width:100%}html.has-sess #connectPanel{display:none!important}</style>
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=403">
-<link rel="stylesheet" href="bento.css?v=403">
+<link rel="stylesheet" href="style.css?v=405">
+<link rel="stylesheet" href="bento.css?v=405">
 
 <header>
   <div id="infoCard2" class="infocard info2"></div>
@@ -228,14 +230,14 @@
   </main>
 </div>
 
-<script src="js/core.js?v=403"></script>
-<script src="js/bridge.js?v=403"></script>
-<script src="js/store.js?v=403"></script>
-<script src="js/list.js?v=403"></script>
-<script src="js/stories.js?v=403"></script>
-<script src="js/tracking.js?v=403"></script>
-<script src="js/manage.js?v=403"></script>
-<script src="js/admin.js?v=403"></script>
-<script src="js/account.js?v=403"></script>
-<script src="js/ui.js?v=403"></script>
+<script src="js/core.js?v=405"></script>
+<script src="js/bridge.js?v=405"></script>
+<script src="js/store.js?v=405"></script>
+<script src="js/list.js?v=405"></script>
+<script src="js/stories.js?v=405"></script>
+<script src="js/tracking.js?v=405"></script>
+<script src="js/manage.js?v=405"></script>
+<script src="js/admin.js?v=405"></script>
+<script src="js/account.js?v=405"></script>
+<script src="js/ui.js?v=405"></script>
 
