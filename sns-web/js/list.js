@@ -686,7 +686,7 @@ function renderList() {
     const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
     // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
     // 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
-    //   유튜브: 계정마다 [영상 | 게시물] 짝, X·인스타: 순서대로 [X | 인스타] 짝. 짝이 없는 줄은 한 줄을 다 씁니다.
+    //   줄은 모두 반 칸(한 줄에 두 개)이고, 개수가 홀수면 마지막 하나만 한 줄을 다 씁니다.
     const mediaRows = (r, limit, onMore) => {
       const box = el("div", { class: "sections media-grid" });
       const nAcc = {};   // 이 사람(그룹)의 매체별 계정 수
@@ -715,14 +715,13 @@ function renderList() {
         enableDrag(grid);
         box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(b.k) }, [head, grid]));
       };
-      // 짝 지어 놓기: 짝이 있으면 둘 다 반 칸, 없으면 한 줄 전체
-      const pairs = [];
+      // 놓는 순서: 유튜브는 계정마다 [영상, 게시물], 그다음 X, 인스타. 모두 반 칸씩 두 개가 한 줄이고,
+      // 개수가 홀수면 마지막 하나만 한 줄 전체를 씁니다(같은 매체 줄이 많아도 공간을 덜 차지하게).
+      const order = [];
       const vids = blocks("youtube-video"), posts = blocks("youtube-post");
-      vids.forEach((v) => { const i = posts.findIndex((p) => p.via === v.via); pairs.push(i >= 0 ? [v, posts.splice(i, 1)[0]] : [v]); });
-      posts.forEach((p) => pairs.push([p]));
-      const xs = blocks("x"), igs = blocks("instagram");
-      for (let i = 0; i < Math.max(xs.length, igs.length); i++) pairs.push([xs[i], igs[i]].filter(Boolean));
-      pairs.forEach((pr) => pr.forEach((b) => sec(b, pr.length === 1)));
+      vids.forEach((v) => { order.push(v); const i = posts.findIndex((p) => p.via === v.via); if (i >= 0) order.push(posts.splice(i, 1)[0]); });
+      order.push(...posts, ...blocks("x"), ...blocks("instagram"));
+      order.forEach((b, i) => sec(b, order.length % 2 === 1 && i === order.length - 1));
       if (!box.children.length) box.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
       return box;
     };
