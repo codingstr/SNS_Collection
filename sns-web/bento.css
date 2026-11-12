@@ -1759,3 +1759,24 @@ html[data-design="bento"] .ad-modal .modal input{height:40px;border:1px solid va
   html[data-design="bento"] #adminPanel .ad-tabs{margin-left:0;width:100%}
   html[data-design="bento"] #adminPanel .ad-accts,html[data-design="bento"] #adminPanel .ad-cards{grid-template-columns:1fr}
 }
+
+/* 사람별 화면의 매체 칸: 매체 색 상자 대신 무채색 상자로 통일. 매체는 머리글의 작은 아이콘으로만 구분 */
+html[data-design="bento"] #grid .media-grid > .sec[data-plat]{border:1px solid var(--line) !important;background:color-mix(in srgb,var(--fg) 3%,transparent) !important}
+html[data-design="bento"][data-theme="dark"] #grid .media-grid > .sec[data-plat]{background:color-mix(in srgb,var(--fg) 5%,transparent) !important}
+/* 글 상자: 작성자·게시·수집 정보를 상자 맨 아래에 고정 */
+html[data-design="bento"] #grid .media-grid .row-cards .card{display:flex !important;flex-direction:column}
+html[data-design="bento"] #grid .media-grid .row-cards .card > .body{flex:1 1 auto;display:flex !important;flex-direction:column}
+html[data-design="bento"] #grid .media-grid .row-cards .card > .body > .meta{margin-top:auto !important;padding-top:8px}
+/* 머리글: 건수를 계정명과 같은 높이로 */
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .slabel,html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{line-height:20px !important;height:20px;align-self:center;vertical-align:middle;top:auto !important;transform:none !important}
+html[data-design="bento"] #grid .media-grid > .sec[data-plat] > .sec-head .n{display:inline-flex !important;align-items:center}
+/* 매체 칸 글 상자: 계정명은 머리글에 있으므로 정보 줄에서 뺌 */
+html[data-design="bento"] #grid .media-grid .card .meta .who{display:none}
+/* 스크롤 떨림 방지: 매체 칸 글 상자 높이를 하나로 고정. 높이가 글마다 다르면 화면 밖 섹션의 자리 높이(sizeSections) 추정이 어긋나 스크롤이 튐 */
+html[data-design="bento"] #grid .media-grid .row-cards > .card{height:226px;min-height:226px;max-height:226px;overflow:hidden}
+html[data-design="bento"] #grid .media-grid .row-cards > .card > .body{min-height:0;overflow:hidden}
+/* 고정 높이(226px) 상자 안 배치: 사진 128px 고정, 제목은 남는 자리에 맞춰 줄 단위로 자름(사진 있으면 2줄, 없으면 7줄) → 글이 줄 중간에서 잘리지 않음 */
+html[data-design="bento"] #grid .media-grid .row-cards > .card > img{flex:none;height:128px !important;min-height:128px;max-height:128px;width:100%;object-fit:cover}
+html[data-design="bento"] #grid .media-grid .row-cards > .card .title{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:7;max-height:none}
+html[data-design="bento"] #grid .media-grid .row-cards > .card:has(> img) .title{-webkit-line-clamp:2}
+html[data-design="bento"] #grid .media-grid .row-cards > .card .meta{flex:none}

@@ -356,8 +356,10 @@ function card(it) {
     kids.push(img);
   }
   const pub = it.publishedAt ? relative(Date.parse(it.publishedAt)) : it.publishedText || "";
-  const meta = [it.author, pub ? "게시 " + pub : "", "수집 " + relative(it.collectedAt)].filter(Boolean).join(" · ");
-  kids.push(el("div", { class: "body" }, [el("span", { class: "badge", text: SRC_LABELS[it.source] || it.source }), el("div", { class: "title", text: it.title }), el("div", { class: "meta", text: meta })]));
+  // 작성자는 따로 감싸 둡니다. 사람별 화면의 매체 칸은 머리글에 계정명이 있어 CSS로 숨깁니다
+  const rest = [pub ? "게시 " + pub : "", "수집 " + relative(it.collectedAt)].filter(Boolean).join(" · ");
+  const meta = el("div", { class: "meta" }, [...(it.author ? [el("span", { class: "who", text: it.author + " · " })] : []), document.createTextNode(rest)]);
+  kids.push(el("div", { class: "body" }, [el("span", { class: "badge", text: SRC_LABELS[it.source] || it.source }), el("div", { class: "title", text: it.title }), meta]));
   const safe = /^https:\/\//.test(it.url || "") ? it.url : "#";
   // href를 달지 않아 브라우저가 마우스를 올렸을 때 왼쪽 아래에 주소 띠를 띄우지 않습니다. 열기는 클릭 처리로 대신합니다.
   const a = el("a", { class: "card", role: "link", tabindex: "0", "data-plat": tabOf(it.source), "data-src": it.source }, kids);
@@ -746,9 +748,12 @@ function renderList() {
         return [...by].map(([via, p]) => ({ k, via, part: p })).sort((a, b) => publishedMs(b.part[0]) - publishedMs(a.part[0]));
       };
       const sec = (b, full) => {
-        const t = b.via ? trackedOf(b.via) : null;
-        const who = b.via ? (b.part[0].author || (t && t.handle ? "@" + t.handle : (t && t.channelId) || "")) : "";
-        const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: SRC_LABELS[b.k] + (who ? " · " + who : "") }), el("span", { class: "n", text: b.part.length + "건" })]);
+        // 머리글: 매체 이름 대신 계정 이름(유튜브는 영상·게시물을 덧붙임). 매체는 앞의 아이콘으로 구분합니다
+        const via = b.via || [...(r.ids || [])].find((id) => id.split(":")[0] === tabOf(b.k)) || "";
+        const t = via ? trackedOf(via) : null;
+        const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : (t && t.channelId) || "") || b.part[0].author || "";
+        const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
+        const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: b.part.length + "건" })]);
         if (onMore && b.part.length > limit) {
           const more = el("button", { type: "button", text: "전체 보기" });
           more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
