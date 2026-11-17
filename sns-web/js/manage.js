@@ -12,6 +12,8 @@ const ICONS = {
   rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   shown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   hidden: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" opacity=".55"/><path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  // 일부만 숨김(유튜브 계정에서 일반 영상·쇼츠·게시물 중 일부를 끔): 숨김의 사선 대신 가로줄
+  part: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" opacity=".55"/><path d="M3 12h18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   fav: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   faved: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   ungroup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -62,9 +64,7 @@ function accChip(t, { group, person } = {}) {
     // 유튜브 계정의 눈 버튼은 일반 영상·쇼츠·게시물을 따로 정하는 창을 엽니다(ytHideBox)
     const part = !t.hidden && t.ytOff && t.ytOff.length;
     const lbl = name + " 유튜브 숨김 설정" + (t.hidden ? " (숨김)" : part ? " (" + t.ytOff.map((k) => YT_KIND_LABEL[k]).join("·") + " 숨김)" : "");
-    const eye = iconBtn(t.hidden ? "hidden" : "shown", lbl, "ey:" + t.id, () => ytHideBox(t));
-    if (part) eye.classList.add("mg-ib-part");
-    tools.push(eye);
+    tools.push(iconBtn(t.hidden ? "hidden" : part ? "part" : "shown", lbl, "ey:" + t.id, () => ytHideBox(t)));
     if (group) tools.push(iconBtn("out", name + " 계정을 ‘" + group + "’ 그룹에서 빼기", "x:" + t.id, () => removeFromGroup(t)));
     else if (person) { tools.push(favBtn(person.name, name)); tools.push(iconBtn("out", name + " 계정을 추적 목록에서 제거", "d:" + t.id, () => askRemoveOne(t))); }
   } else if (group) {
