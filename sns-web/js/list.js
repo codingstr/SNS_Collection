@@ -136,14 +136,16 @@ const imgObserver = new IntersectionObserver((entries) => {
   });
 }, { rootMargin: "1200px 0px" });
 
+// 유튜브 플레이어 주소 뒤에 붙이는 값. enablejsapi·origin: 이 화면에서 볼륨을 바꿀 수 있게(↑ ↓, 아래 ytVolume)
+const YT_PARAMS = () => "?autoplay=1&rel=0&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
 // 글 열기: 유튜브 영상·X·인스타그램 글은 이 페이지 안에서 바로 보고, 그 밖(유튜브 게시물 등)은 새 크롬 창으로 엽니다.
 function embedFor(it) {
   if (window.claude) return null; // claude.ai 안에서는 다른 사이트를 끼워 넣을 수 없습니다
   const u = it.url || "";
   let m;
-  if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "16 / 9" };
+  if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + YT_PARAMS(), ratio: "16 / 9", yt: true };
   // 쇼츠는 세로 화면(9:16)으로 보여 줍니다
-  if (it.source === "youtube-video" && (m = /youtube\.com\/shorts\/([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + "?autoplay=1&rel=0", ratio: "9 / 16", kind: "short" };
+  if (it.source === "youtube-video" && (m = /youtube\.com\/shorts\/([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + YT_PARAMS(), ratio: "9 / 16", kind: "short", yt: true };
   if (it.source === "x" && (m = /\/status\/(\d+)/.exec(u))) return { src: "https://platform.twitter.com/embed/Tweet.html?id=" + m[1] + "&dnt=true&lang=ko&theme=" + (document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"), h: 420, tweet: m[1] };
   if (it.source === "instagram" && (m = /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(u))) return { src: "https://www.instagram.com/" + m[1] + "/" + m[2] + "/embed", h: 700 };
   return null;
@@ -179,7 +181,7 @@ function navView(d) {
   viewIdx = n;
   openItem(viewCtx[n]);
 }
-function closeViewer() { $("viewer").hidden = true; $("vBody").textContent = ""; setViewerKind(""); }
+function closeViewer() { $("viewer").hidden = true; $("vBody").textContent = ""; setViewerKind(""); ytFrame = null; }
 // 보기 창 모양: X 글은 글 폭(최대 550px)에 맞춘 좁은 창, 쇼츠는 세로 영상 크기에 꼭 맞춘 창, 그 밖은 기본
 function setViewerKind(k) { const v = document.querySelector("#viewer .viewer"); v.classList.toggle("vx", k === "x"); v.classList.toggle("vig", k === "instagram"); v.classList.toggle("vshort", k === "short"); $("viewer").classList.toggle("vshort", k === "short"); }
 // X 공식 위젯(widgets.js): 글 내용 높이에 꼭 맞게 띄웁니다. 못 불러오면 iframe으로 대신합니다.
@@ -226,7 +228,7 @@ function renderPost(p, it) {
       box.appendChild(el("button", { type: "button", text: "▶ 첨부 영상 보기" + (p.video.title ? ": " + p.video.title : "") }));
       box.firstChild.addEventListener("click", () => openTab("https://www.youtube.com/watch?v=" + p.video.id));
     } else {
-      box.appendChild(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + p.video.id + "?rel=0", title: p.video.title || "첨부 영상", allow: "encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" }));
+      box.appendChild(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + p.video.id + "?rel=0", title: p.video.title || "첨부 영상", allow: "encrypted-media; picture-in-picture; fullscreen; clipboard-write", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" }));
     }
     wrap.appendChild(box);
   }
@@ -263,6 +265,7 @@ async function openPost(it) {
 }
 function openItem(it) {
   markSeen(it);
+  ytFrame = null;   // 다른 글로 넘어가면 볼륨 조절 대상도 풂(유튜브 영상이면 아래에서 다시 정함)
   if (it.source === "youtube-post" && /^https:\/\/www\.youtube\.com\/post\//.test(it.url || "")) { openPost(it); return; }
   const e = embedFor(it);
   if (!e) { openTab(it.url); return; }
@@ -274,7 +277,7 @@ function openItem(it) {
   body.textContent = "";
   $("viewer").hidden = false;
   const frame = () => {
-    const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
+    const f = el("iframe", { src: e.src, title: "글 보기", allow: "autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" });
     if (e.ratio) f.style.aspectRatio = e.ratio; else f.style.height = e.h + "px";
     return f;
   };
@@ -289,7 +292,9 @@ function openItem(it) {
       .catch(fallback);
     return;
   }
-  body.appendChild(frame());
+  const f = frame();
+  body.appendChild(f);
+  if (e.yt) ytWatch(f);
 }
 $("vClose").addEventListener("click", closeViewer);
 $("vPrev").addEventListener("click", () => navView(-1));
@@ -308,8 +313,49 @@ document.addEventListener("keydown", (e) => {
   if ($("viewer").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = (e.target && e.target.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
-  if (e.key === "ArrowLeft") navView(-1); else if (e.key === "ArrowRight") navView(1);
+  // 보기 창이 열려 있으면 ← →는 글 넘기기만: 뒤 화면(포커스가 남아 있는 카드 줄 등)이 같이 움직이지 않게 기본 동작을 막습니다.
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); navView(e.key === "ArrowLeft" ? -1 : 1); }
+  // ↑ ↓: 유튜브 영상이면 볼륨, 그 밖의 글은 보기 창 안의 내용 스크롤(뒤 화면은 움직이지 않음)
+  else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault(); e.stopPropagation();
+    const up = e.key === "ArrowUp";
+    if (ytFrame && ytFrame.isConnected) ytVolume(up ? 10 : -10);
+    else $("vBody").scrollBy({ top: up ? -80 : 80 });
+  }
+}, true);
+/* ---------- 유튜브 영상 볼륨(↑ ↓) ----------
+   유튜브 플레이어(iframe)와 postMessage로 주고받습니다(유튜브 IFrame API의 메시지 형식).
+   플레이어가 알려 주는 지금 볼륨(infoDelivery)을 기억해 두었다가 10씩 올리고 내립니다. */
+let ytFrame = null, ytVol = 100, ytMuted = false, ytVolTimer = 0;
+function ytSend(func, args) { if (ytFrame && ytFrame.contentWindow) ytFrame.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); }
+function ytWatch(f) {
+  ytFrame = f; ytVol = 100; ytMuted = false;
+  // 'listening'을 보내야 플레이어가 상태(볼륨 등)를 알려 줍니다. 로드 직후에는 못 받을 수 있어 몇 번 보냅니다.
+  const hello = () => { if (ytFrame === f && f.contentWindow) f.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*"); };
+  f.addEventListener("load", () => { hello(); setTimeout(hello, 500); setTimeout(hello, 1500); });
+}
+window.addEventListener("message", (ev) => {
+  if (!ytFrame || ev.source !== ytFrame.contentWindow || !/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(ev.origin)) return;
+  let d; try { d = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data; } catch (e) { return; }
+  const info = d && d.event === "infoDelivery" && d.info;
+  if (!info) return;
+  if (typeof info.volume === "number") ytVol = info.volume;
+  if (typeof info.muted === "boolean") ytMuted = info.muted;
 });
+function ytVolume(step) {
+  const v = Math.max(0, Math.min(100, Math.round(((ytMuted ? 0 : ytVol) + step) / 10) * 10));
+  ytVol = v; ytMuted = v === 0;
+  ytSend("setVolume", [v]);
+  ytSend(v === 0 ? "mute" : "unMute");
+  // 화면 가운데에 잠깐 지금 볼륨을 보여 줍니다
+  let b = $("vVol");
+  if (!b) { b = el("div", { id: "vVol", class: "vvol", role: "status", "aria-live": "polite" }); $("viewer").appendChild(b); }
+  b.textContent = (v === 0 ? "음소거" : "볼륨 " + v + "%");
+  b.style.setProperty("--v", v + "%");
+  b.hidden = false; b.classList.remove("out"); void b.offsetWidth; b.classList.add("show");
+  clearTimeout(ytVolTimer);
+  ytVolTimer = setTimeout(() => { b.classList.remove("show"); }, 900);
+}
 $("vTab").addEventListener("click", () => { openTab(viewerUrl); });
 $("vWin").addEventListener("click", () => { openWindow(viewerUrl); });
 $("viewer").addEventListener("click", (e) => { if (e.target === $("viewer")) closeViewer(); });

@@ -37,7 +37,7 @@ function applyPage() {
   if (!connected && (page === "manage" || page === "community")) page = "home";
   if ((!connected || !isAdmin) && page === "admin") page = "home";
   const manage = connected && page === "manage", adminOn = page === "admin", comm = connected && page === "community";
-  const wasAdmin = !$("adminPanel").hidden, wasComm = !$("communityPanel").hidden;
+  const wasAdmin = !$("adminPanel").hidden, wasComm = !$("communityPanel").hidden, wasManage = !$("trackPanel").hidden;
   $("trackPanel").hidden = !manage;
   $("adminPanel").hidden = !adminOn;
   $("communityPanel").hidden = !comm;
@@ -52,6 +52,8 @@ function applyPage() {
   $("navAdmin").classList.toggle("on", adminOn);
   if (adminOn !== wasAdmin && typeof adminShown === "function") adminShown(adminOn);
   if (comm !== wasComm && typeof cmShown === "function") cmShown(comm);
+  // 추적 계정 관리 화면을 떠나면 그 화면에서 고른 계정·그룹을 모두 풉니다(다시 들어오면 아무것도 안 고른 상태)
+  if (wasManage && !manage && selIds.length) { selIds = []; if (typeof renderTracked === "function") renderTracked(); }
 }
 function setConn(ok) {
   connected = ok;

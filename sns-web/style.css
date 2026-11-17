@@ -432,3 +432,7 @@ header .toolbar .refreshbtn,header .toolbar .refreshbtn:hover:not(:disabled){bac
 .pg.fb[data-p="instagram"]{background:linear-gradient(135deg,#f9a03f,#e1306c 55%,#833ab4)}
 /* 로그인 창 로고(크기만, 꾸밈은 bento.css) */
 .cp-logo{display:block;width:60px;height:60px;margin:0 auto 12px}
+/* 유튜브 영상 보기에서 ↑ ↓로 바꾼 볼륨을 화면 가운데에 잠깐 보여 줌(js/list.js의 ytVolume) */
+.vvol{position:fixed;left:50%;top:50%;z-index:32;transform:translate(-50%,-50%);min-width:150px;padding:12px 18px 14px;border-radius:16px;background:rgba(0,0,0,.72);color:#fff;font-size:14px;font-weight:600;text-align:center;pointer-events:none;opacity:0;transition:opacity .25s}
+.vvol::after{content:"";display:block;height:4px;margin-top:8px;border-radius:2px;background:linear-gradient(90deg,#fff var(--v,0%),rgba(255,255,255,.25) var(--v,0%))}
+.vvol.show{opacity:1;transition:none}
