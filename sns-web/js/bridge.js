@@ -68,8 +68,13 @@ function updateConnText() {
 
 /* ---------- 매체 아이콘 · 서버 테스트 계정 로그인 상태 ---------- */
 const LOGIN_PLATS = ["youtube", "x", "instagram"];
-const PGLYPH = { youtube: "▶", x: "X", instagram: "◎" };
-// 각 매체의 실제 아이콘(파비콘)을 불러옵니다. 못 불러오면 기호로 대신합니다.
+// 아이콘을 하나도 못 불러왔을 때 대신 그리는 흰 기호(바탕은 매체 색, style.css의 .pg.fb). 글자 기호는 글꼴마다 모양·크기가 달라 그림으로 둡니다.
+const PGLYPH = {
+  youtube: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 7.2v9.6l7.6-4.8z" fill="#fff"/></svg>',
+  x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="4" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="#fff" stroke-width="2"/><circle cx="15.6" cy="8.4" r="1" fill="#fff"/></svg>',
+};
+// 각 매체의 실제 아이콘(파비콘)을 불러옵니다. 못 불러오면 매체 색 동그라미 안의 기호로 대신합니다.
 const PLOCAL = { youtube: "img/youtube.png", x: "img/x.png", instagram: "img/instagram.png" };
 const PDOMAIN = { youtube: "youtube.com", x: "x.com", instagram: "instagram.com" };
 function pIcon(p) {
@@ -83,7 +88,7 @@ function pIcon(p) {
   ];
   let i = 0;
   const img = el("img", { alt: "", referrerpolicy: "no-referrer", draggable: "false" });
-  img.addEventListener("error", () => { if (++i < srcs.length) img.src = srcs[i]; else { img.remove(); wrap.textContent = PGLYPH[p]; } });
+  img.addEventListener("error", () => { if (++i < srcs.length) img.src = srcs[i]; else { img.remove(); wrap.classList.add("fb"); wrap.dataset.p = p; wrap.innerHTML = PGLYPH[p] || ""; } });
   img.src = srcs[0];
   wrap.appendChild(img);
   return wrap;

@@ -1,8 +1,10 @@
 /* ---------- 추적 계정 관리 화면 ----------
    그룹마다 카드 하나. 그룹 이름을 누르면 그 그룹의 계정이 한꺼번에 골라지고(다시 누르면 풀림), 계정을 누르면 하나씩 고릅니다.
    아래 막대에서 고른 계정에: 가져올 기간 적용 · 그룹화/그룹 해제 · 그룹 숨기기/보이기 · 제거.
-   그룹 카드 오른쪽: ✎ 이름 바꾸기, 눈 버튼 숨기기/보이기. 그룹화하지 않은 계정은 맨 아래 '그룹화하지 않은 계정' 카드에 모입니다.
-   (사람(그룹) 계산은 list.js의 peopleMap, 숨기기는 tracking.js의 setPeopleHidden) */
+   그룹 카드 오른쪽: ☆ 즐겨찾기, ✎ 이름 바꾸기, 눈 버튼 숨기기/보이기, 그룹 삭제(계정은 남음).
+   그룹 안 계정 옆: 눈 버튼(그 계정만 숨기기), ×(그 그룹에서 빼기).
+   그룹화하지 않은 계정은 맨 아래 '그룹화하지 않은 계정' 카드에 모이고, 계정 옆에 눈·☆·×(추적 목록에서 제거)가 붙습니다.
+   (사람(그룹) 계산은 list.js의 peopleMap) */
 
 const accName = (t) => (t.kind === "feed" ? FEED[t.platform] : t.handle ? "@" + t.handle : t.channelId || t.resolveUrl || "");
 const daysText = (d) => ({ 7: "1주", 14: "2주", 30: "1개월", 60: "2개월" })[d] || "기본";
@@ -10,6 +12,10 @@ const ICONS = {
   rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   shown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   hidden: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" opacity=".55"/><path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  fav: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  faved: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  ungroup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  out: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 function iconBtn(kind, label, key, fn) {
   const b = el("button", { type: "button", class: "mg-ib mg-ib-" + kind, "aria-label": label, title: label });
@@ -36,7 +42,14 @@ function selectedPeople() {
   return [...peopleMap().values()].filter((p) => [...p.ids].some((id) => set.has(id)));
 }
 
-function accChip(t, person) {
+// 즐겨찾기 버튼(☆/★). 즐겨찾기는 그룹(사람) 이름 단위입니다(list.js의 favs).
+function favBtn(name, label) {
+  const on = favs.has(name);
+  return iconBtn(on ? "faved" : "fav", label + " 즐겨찾기 " + (on ? "해제" : "추가"), "f:" + name, () => { toggleFav(name); renderTracked(); });
+}
+// 계정 하나. group: 그룹 안 계정이면 그 그룹 이름(옆에 '그 계정만 숨기기'·'그룹에서 빼기'),
+// person: 그룹화하지 않은 계정이면 그 계정의 사람(옆에 숨기기·즐겨찾기·'추적 목록에서 제거')
+function accChip(t, { group, person } = {}) {
   const on = selIds.includes(t.id);
   const b = el("button", {
     type: "button", class: "mg-acc" + (on ? " sel" : "") + (t.hidden ? " off" : ""), "aria-pressed": String(on),
@@ -44,16 +57,62 @@ function accChip(t, person) {
   }, [el("span", { class: "mg-pi" }, [pIcon(t.platform)]), el("span", { class: "mg-an", text: accName(t) }), el("span", { class: "mg-ad", text: daysText(t.days) })]);
   b.dataset.k = "a:" + t.id;
   b.addEventListener("click", () => toggleIds([t.id]));
-  if (!person) return b;
-  // 그룹화하지 않은 계정: 계정 하나가 한 그룹이라 옆에 숨기기 버튼을 둡니다
-  const eye = iconBtn(person.hidden ? "hidden" : "shown", accName(t) + (person.hidden ? " 다시 보이게 하기" : " 숨기기"), "e:" + person.name, () => setPeopleHidden([person.name], !person.hidden));
-  return el("span", { class: "mg-accwrap" + (person.hidden ? " off" : "") }, [b, eye]);
+  const name = accName(t), tools = [];
+  if (group) {
+    tools.push(iconBtn(t.hidden ? "hidden" : "shown", name + (t.hidden ? " 다시 보이게 하기" : " 숨기기(이 계정만)"), "ea:" + t.id, () => setAcctHidden(t, !t.hidden)));
+    tools.push(iconBtn("out", name + " 계정을 ‘" + group + "’ 그룹에서 빼기", "x:" + t.id, () => removeFromGroup(t)));
+  } else if (person) {
+    tools.push(iconBtn(person.hidden ? "hidden" : "shown", name + (person.hidden ? " 다시 보이게 하기" : " 숨기기"), "e:" + person.name, () => setPeopleHidden([person.name], !person.hidden)));
+    tools.push(favBtn(person.name, name));
+    tools.push(iconBtn("out", name + " 계정을 추적 목록에서 제거", "d:" + t.id, () => askRemoveOne(t)));
+  }
+  return el("span", { class: "mg-accwrap" + (t.hidden ? " off" : "") }, [b, ...tools]);
+}
+
+// 그룹 안의 계정 하나만 숨기기/보이기. 숨긴 계정은 홈에 안 나오고 서버도 모으지 않습니다.
+async function setAcctHidden(t, hide) {
+  const before = tracked;
+  tracked = tracked.map((x) => { if (x.id !== t.id) return x; const c = { ...x }; if (hide) c.hidden = true; else delete c.hidden; return c; });
+  renderTracked(); renderList();
+  try {
+    await saveTracked();
+    if (hide) toast(accName(t) + " 계정을 숨겼습니다. 홈에 나오지 않고, 숨긴 동안은 글도 모으지 않습니다.");
+    else { toast(accName(t) + " 계정을 다시 보이게 했습니다 · 숨긴 동안 못 모은 글을 모으는 중입니다."); await call("checkNow", { only: t.id }).catch(() => {}); }
+  } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
+}
+// 계정 하나를 그룹에서 뺍니다(추적은 계속, '그룹화하지 않은 계정'으로 옮겨 감).
+async function removeFromGroup(t) {
+  const group = t.group, before = tracked;
+  tracked = tracked.map((x) => { if (x.id !== t.id) return x; const c = { ...x }; delete c.group; return c; });
+  renderTracked(); renderList();
+  try { await saveTracked(); toast(accName(t) + " 계정을 ‘" + group + "’ 그룹에서 뺐습니다."); } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
+}
+// 그룹 삭제: 그룹만 없애고 계정은 '그룹화하지 않은 계정'으로 남깁니다. 즐겨찾기·고른 그룹·사진 고른 것도 정리합니다.
+async function deleteGroup(group) {
+  const n = tracked.filter((t) => t.group === group).length;
+  const ok = await confirmBox({ title: "그룹을 삭제할까요?", text: "‘" + group + "’ 그룹이 없어지고, 그 안의 계정 " + n + "개는 그룹화하지 않은 계정으로 추적 목록에 그대로 남습니다.", ok: "그룹 삭제", cls: "danger" });
+  if (!ok) return;
+  const before = tracked;
+  tracked = tracked.map((t) => { if (t.group !== group) return t; const c = { ...t }; delete c.group; return c; });
+  if (favs.has(group)) { favs.delete(group); saveFavs(); }
+  storySel.delete(group);
+  if (personFocus === group) { personFocus = ""; personPlat = ""; }
+  if (picPick[group]) { delete picPick[group]; savePics(); }
+  selIds = [];
+  renderTracked(); renderList();
+  try { await saveTracked(); toast("‘" + group + "’ 그룹을 삭제했습니다. 계정은 그대로 남아 있습니다."); } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
+}
+// 그룹화하지 않은 계정 옆 ×: 그 계정 하나를 추적 목록에서 지웁니다(확인 창).
+async function askRemoveOne(t) {
+  const ok = await confirmBox({ title: "계정을 제거할까요?", text: PLATFORM[t.platform] + " " + accName(t) + " 계정을 추적 목록에서 지웁니다. 이 계정으로 모은 글도 함께 지워집니다.", ok: "제거", cls: "danger" });
+  if (ok) await removeTrackedIds([t.id]);
 }
 
 function groupCard(p) {
-  const accs = personAccounts(p), ids = accs.map((t) => t.id), group = p.accs[0].group;
+  const accs = personAccounts(p, true), ids = accs.map((t) => t.id), group = p.accs[0].group;
   const nSel = ids.filter((id) => selIds.includes(id)).length, all = nSel === ids.length;
   const days = [...new Set(accs.map((t) => t.days || 0))];
+  const nOff = p.hidden ? 0 : accs.filter((t) => t.hidden).length;   // 그룹은 보이는데 따로 숨긴 계정 수
   const sel = el("button", {
     type: "button", class: "mg-gsel", "aria-pressed": String(all),
     "aria-label": "‘" + group + "’ 그룹의 계정 " + ids.length + "개 " + (all ? "모두 풀기" : "모두 고르기"),
@@ -62,16 +121,18 @@ function groupCard(p) {
     picFace(accs.find((t) => picMap[t.id]) || accs[0], group, "pface"),
     el("span", { class: "mg-gtext" }, [
       el("span", { class: "mg-gname", text: group }),
-      el("span", { class: "mg-gmeta", text: "계정 " + ids.length + " · " + (days.length === 1 ? daysText(days[0]) : "기간 섞임") }),
+      el("span", { class: "mg-gmeta", text: "계정 " + ids.length + (nOff ? " · 숨김 " + nOff : "") + " · " + (days.length === 1 ? daysText(days[0]) : "기간 섞임") }),
     ]),
   ]);
   sel.dataset.k = "g:" + p.name;
   sel.addEventListener("click", () => toggleIds(ids));
   const head = el("div", { class: "mg-ghead" }, [sel]);
   if (p.hidden) head.appendChild(el("span", { class: "mg-badge", text: "숨김 · 수집 안 함" }));
+  head.appendChild(favBtn(p.name, "‘" + group + "’"));
   head.appendChild(iconBtn("rename", "‘" + group + "’ 그룹 이름 바꾸기", "r:" + p.name, () => openRename(group)));
   head.appendChild(iconBtn(p.hidden ? "hidden" : "shown", "‘" + group + "’ 그룹 " + (p.hidden ? "다시 보이게 하기" : "숨기기"), "e:" + p.name, () => setPeopleHidden([p.name], !p.hidden)));
-  return el("section", { class: "mg-group" + (p.hidden ? " off" : "") + (nSel ? " has-sel" : "") }, [head, el("div", { class: "mg-accs" }, accs.map((t) => accChip(t)))]);
+  head.appendChild(iconBtn("ungroup", "‘" + group + "’ 그룹 삭제(계정은 남음)", "u:" + p.name, () => deleteGroup(group)));
+  return el("section", { class: "mg-group" + (p.hidden ? " off" : "") + (nSel ? " has-sel" : "") }, [head, el("div", { class: "mg-accs" }, accs.map((t) => accChip(t, { group })))]);
 }
 
 function singlesCard(singles) {
@@ -87,7 +148,7 @@ function singlesCard(singles) {
   const byId = new Map(singles.map((p) => [p.accs[0].id, p]));
   return el("section", { class: "mg-group mg-singles" + (nSel ? " has-sel" : "") }, [
     el("div", { class: "mg-ghead" }, [sel]),
-    el("div", { class: "mg-accs" }, accs.map((t) => accChip(t, byId.get(t.id)))),
+    el("div", { class: "mg-accs" }, accs.map((t) => accChip(t, { person: byId.get(t.id) }))),
   ]);
 }
 

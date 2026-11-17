@@ -424,3 +424,11 @@ header .toolbar .refreshbtn,header .toolbar .refreshbtn:hover:not(:disabled){bac
 #hbar.drag i{cursor:grabbing}
 [data-theme="dark"] #hbar i{background:rgba(255,255,255,.24)}
 [data-theme="dark"] #hbar:hover i,[data-theme="dark"] #hbar.drag i{background:rgba(255,255,255,.45)}
+/* 매체 아이콘을 하나도 못 불러왔을 때(js/bridge.js의 pIcon): 매체 색 동그라미 + 흰 기호 */
+.pg.fb[data-p]{display:flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;color:#fff}
+.pg.fb[data-p] svg{width:72%;height:72%;display:block}
+.pg.fb[data-p="youtube"]{background:linear-gradient(135deg,#ff7a63,#ee3a32 55%,#b81d2a)}
+.pg.fb[data-p="x"]{background:linear-gradient(135deg,#6a6764,#2a2928 55%,#121110)}
+.pg.fb[data-p="instagram"]{background:linear-gradient(135deg,#f9a03f,#e1306c 55%,#833ab4)}
+/* 로그인 창 로고(크기만, 꾸밈은 bento.css) */
+.cp-logo{display:block;width:60px;height:60px;margin:0 auto 12px}

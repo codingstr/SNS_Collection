@@ -238,6 +238,11 @@ html[data-design="bento"] #navFav{--ico:url("data:image/svg+xml,%3Csvg xmlns='ht
 /* 레일 맨 위: 로고 */
 html[data-design="bento"] .brand{display:block;position:fixed;left:22px;top:26px;z-index:3;width:56px;height:56px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;box-shadow:0 6px 16px rgba(35,34,32,.3)}
 html[data-design="bento"] .brand svg{display:block;width:100%;height:100%}
+/* 로고 정의만 담은 숨은 SVG(index.html). display:none이면 그라데이션이 안 그려져 크기 0으로 둡니다 */
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+/* 로고 색: 바탕은 테마 강조색(--accent), 뱀은 흰색에 가깝게. 다크 모드는 바탕을 어둡게 */
+html{--ouro-fg:#f9fcfa}
+html[data-theme="dark"]{--ouro-bg:#262523}
 @media (min-width:861px){html[data-design="bento"] .navbtns{top:92px}}
 @media (max-width:860px){html[data-design="bento"] .brand{display:none}}
 
@@ -370,7 +375,8 @@ html[data-design="bento"] #sidePeople .pbar button{border-radius:999px;padding:1
 
 /* 웹사이트 로그인 화면: 로그인 전(연결 패널이 보일 때)에는 화면 가운데 카드로 크게 보여 줌 */
 html[data-design="bento"] #connectPanel:not([hidden]){position:fixed;z-index:60;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,calc(100vw - 32px));box-sizing:border-box;padding:34px 30px 28px;border-radius:36px;display:flex;flex-direction:column;align-items:stretch;gap:6px;box-shadow:0 18px 50px rgba(40,38,35,.22),0 0 0 200vmax var(--bg);background:var(--card)}
-html[data-design="bento"] #connectPanel:not([hidden])::before{content:"";width:60px;height:60px;margin:0 auto 14px;border-radius:50%;background:#2a2928 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Ccircle cx='24' cy='25' r='9' fill='%23fff'/%3E%3Ccircle cx='37' cy='25' r='9' fill='%23fff' fill-opacity='.85'/%3E%3Ccircle cx='30.5' cy='36' r='9' fill='%23fff' fill-opacity='.6'/%3E%3C/svg%3E") center/100% no-repeat}
+/* 로그인 창 위의 로고(index.html의 .cp-logo, 로고 정의는 <symbol id="logo">) */
+html[data-design="bento"] #connectPanel .cp-logo{display:block;width:60px;height:60px;margin:0 auto 14px}
 html[data-design="bento"] #connectPanel h2{margin:0 0 14px;text-align:center;font-size:20px;font-weight:700}
 html[data-design="bento"] #connectPanel #acctForm{display:flex;flex-direction:column;gap:10px}
 html[data-design="bento"] #connectPanel #acctForm input{width:100%;box-sizing:border-box;height:48px;padding:0 20px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--fg);font-size:15px;outline:0}
@@ -572,9 +578,11 @@ html[data-design="bento"] #vbar{display:none}
   html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i{background:var(--line)}
 }
 
-/* 계정 찾기 버튼을 오른쪽 열 앞까지(빈 칸 없이) 늘림 */
+/* 계정 찾기 버튼을 오른쪽 열 앞까지(빈 칸 없이) 늘림.
+   검색창 밖으로 나간 거리(--sgo-out)는 계정 찾기 결과창도 같이 써서, 결과창 오른쪽 끝이 버튼 오른쪽 끝과 맞습니다(.sresults) */
 @media (min-width:861px){
-  html[data-design="bento"] header .sbox .sgo,html[data-design="bento"] header .sbox .sgo:hover{right:-164px;width:154px;min-width:154px}
+  html[data-design="bento"] header .sbox{--sgo-out:164px}
+  html[data-design="bento"] header .sbox .sgo,html[data-design="bento"] header .sbox .sgo:hover{right:calc(-1 * var(--sgo-out));width:154px;min-width:154px}
 }
 
 /* 알약과 작업 카드의 연결: 가운데는 뚫고, 양쪽 바깥을 이어 붙임 */
@@ -1303,9 +1311,10 @@ html[data-design="bento"] .sresults > .sr-head{flex:1 1 100%}
 html[data-design="bento"] .sresults > .sr-sec{flex:1 1 180px;min-width:0;display:flex;flex-direction:column}
 html[data-design="bento"] .sresults .sr-body{max-height:max(160px,calc(60vh - 110px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;-ms-overflow-style:none}
 html[data-design="bento"] .sresults .sr-body::-webkit-scrollbar{display:none}
-/* 중간 폭(861px 이상)에서는 검색창이 좁아도 결과창을 오른쪽으로 넓혀 세 칸이 유지되게 합니다 */
+/* 넓은 화면(861px 이상): 결과창 폭을 [검색창 + 계정 찾기 버튼] 줄과 똑같이 맞춥니다(왼쪽 끝 = 검색창, 오른쪽 끝 = 버튼).
+   다만 그 줄이 640px보다 좁으면(창 폭 약 1000px 미만) 매체 세 칸이 읽기 좋게 들어가도록 결과창만 오른쪽으로 더 넓힙니다. */
 @media (min-width:861px){
-  html[data-design="bento"] .sresults{right:auto;min-width:100%;width:min(760px,calc(100vw - 150px))}
+  html[data-design="bento"] .sresults{left:0;right:calc(-1 * var(--sgo-out,0px));width:auto;min-width:min(640px,calc(100vw - 150px))}
 }
 /* 칸이 위아래로 쌓이는 좁은 화면(약 600px 이하): 결과 상자 안의 스크롤바는 숨기고, 상자 바깥 오른쪽에 둥근 막대(.sr-rail, 앱의 #vbar와 같은 모양)를 둡니다. */
 .sr-rail{display:none}
@@ -1357,8 +1366,6 @@ html[data-design="bento"] .themeswitch{background:#9fcbee}
   html[data-design="bento"] .workcard .wk-msg{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;margin:0 0 2px !important}
 }
 
-/* 사용 설명 버튼(?) */
-html[data-design="bento"] #navHelp{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 9.2a3.1 3.1 0 1 1 4.6 2.7c-1 .6-1.6 1.2-1.6 2.4'/%3E%3Cpath d='M12 18v.1'/%3E%3C/svg%3E")}
 /* 처음 안내(화면을 어둡게 하고 말풍선으로 하나씩 설명) */
 #tour{position:fixed;inset:0;z-index:300}
 #tour[hidden]{display:none}
@@ -1424,7 +1431,35 @@ html[data-design="bento"] #storyBar .sring{position:relative;display:block;width
 html[data-design="bento"] #storyBar .story.on .sring{padding:3px;background:linear-gradient(45deg,#f9a03f,#f05c40 30%,#e1306c 55%,#c13584 75%,#833ab4)}
 html[data-design="bento"] #storyBar .sinner{display:block;width:100%;height:100%;padding:2px;border-radius:50%;box-sizing:border-box;background:var(--card)}
 html[data-design="bento"] #storyBar .sface{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;object-fit:cover;box-sizing:border-box;background:var(--soft);color:var(--fg);font-weight:700;font-size:20px;line-height:1;border:0;box-shadow:none}
-html[data-design="bento"] #storyBar .sall svg{width:80%;height:80%;color:var(--fg)}
+/* 그룹 줄 맨 앞 '보기 기준' 버튼(js/stories.js): 매체 모드면 그 매체 아이콘을 꽉 채워 보여 줌 */
+html[data-design="bento"] #storyBar .smode{overflow:hidden;background:transparent}
+html[data-design="bento"] #storyBar .smode .pg,html[data-design="bento"] #storyBar .smode img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:flex}
+html[data-design="bento"] #storyBar .speople svg,.modemenu .mi .speople svg{width:55%;height:55%}
+/* 이름 옆 작은 아래 화살표(메뉴가 열린다는 표시) */
+/* 맨 앞 칸(js/stories.js의 modeItem): 동그라미 = 전체 버튼, 아래 이름 = 보기 기준 메뉴 버튼. 칸 자체는 누르는 곳이 아님 */
+html[data-design="bento"] #storyBar .story.mode{cursor:default}
+html[data-design="bento"] #storyBar .story.mode > button{display:flex;flex-direction:column;align-items:center;padding:0;margin:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+html[data-design="bento"] #storyBar .story.mode > button:focus{outline:none}
+html[data-design="bento"] #storyBar .story.mode .smode-all:focus-visible .sring{outline:2px solid var(--accent);outline-offset:2px}
+html[data-design="bento"] #storyBar .story.mode .smode-pick{border-radius:8px;padding:1px 4px}
+html[data-design="bento"] #storyBar .story.mode .smode-pick:hover{background:var(--soft)}
+html[data-design="bento"] #storyBar .story.mode .smode-pick:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* 동그라미를 눌러야 커지게(이름 위에 마우스를 올렸을 때는 그대로) */
+html[data-design="bento"] #storyBar .story.mode:hover .sring{transform:none}
+html[data-design="bento"] #storyBar .story.mode .smode-all:hover .sring{transform:scale(1.05)}
+html[data-design="bento"] #storyBar .story.mode .smode-all:active .sring{transform:scale(.96)}
+html[data-design="bento"] #storyBar .story.mode .sname .st::after{content:"";display:inline-block;width:5px;height:5px;margin:0 0 2px 5px;border:solid var(--muted);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+/* 보기 기준 메뉴: 버튼 바로 아래에 뜨는 작은 목록 */
+.modemenu{position:fixed;z-index:60;display:flex;flex-direction:column;gap:2px;min-width:140px;padding:6px;border-radius:14px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.modemenu button{display:flex;align-items:center;gap:10px;padding:7px 10px;border:0;border-radius:10px;background:transparent;color:var(--fg);font:500 14px/1.2 inherit;text-align:left;cursor:pointer}
+.modemenu button:hover,.modemenu button:focus-visible{background:var(--soft);outline:none}
+.modemenu button.on{font-weight:700}
+.modemenu button.on::after{content:"✓";margin-left:auto;color:var(--muted)}
+.modemenu .mi{display:flex;width:24px;height:24px;flex:none}
+.modemenu .mi .sface{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;overflow:hidden;background:var(--soft);color:var(--fg)}
+.modemenu .mi .sface svg{width:80%;height:80%}
+.modemenu .mi .pg,.modemenu .mi img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:flex}
+.modemenu .mi .smode{background:transparent}
 html[data-design="bento"] #storyBar .sbadge{position:absolute;right:-1px;bottom:-1px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--card);box-shadow:0 1px 4px rgba(0,0,0,.18)}
 html[data-design="bento"] #storyBar .sbadge .pg,html[data-design="bento"] #storyBar .sbadge img{display:flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:9px;line-height:1}
 html[data-design="bento"] #storyBar .sname{position:relative;display:inline-block;max-width:70px;font-size:12px;line-height:1.25}
@@ -1538,6 +1573,9 @@ html[data-design="bento"] #trackPanel .mg-ib svg,
 html[data-design="bento"] #adminPanel .mg-ib svg{width:18px;height:18px}
 html[data-design="bento"] #trackPanel .mg-ib-hidden,
 html[data-design="bento"] #adminPanel .mg-ib-hidden{color:var(--fg)}
+/* 즐겨찾기한 그룹·계정의 별은 노란색, 그룹 삭제·빼기·제거는 마우스를 올리면 빨간색 */
+html[data-design="bento"] #trackPanel .mg-ib-faved{color:#e8a317}
+html[data-design="bento"] #trackPanel .mg-ib-ungroup:hover,html[data-design="bento"] #trackPanel .mg-ib-out:hover{color:#d93025}
 html[data-design="bento"] #trackPanel .mg-accs,
 html[data-design="bento"] #adminPanel .mg-accs{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px}
 html[data-design="bento"] #trackPanel .mg-acc,
@@ -1629,6 +1667,11 @@ html[data-design="bento"] #trackPanel .mg-head h2,
 html[data-design="bento"] #adminPanel .mg-head h2{font-size:20px;font-weight:700;letter-spacing:-.2px;color:var(--fg)}
 html[data-design="bento"] #trackPanel .mg-gtext,
 html[data-design="bento"] #adminPanel .mg-gtext{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
+/* 추적 계정 관리의 그룹 머리줄은 버튼(☆·✎·눈·삭제)이 많아, 넓은 화면에서도 이름 아래에 '계정 n · 기간'을 둡니다(이름이 잘리지 않게) */
+html[data-design="bento"] #trackPanel .mg-gtext{flex-direction:column;align-items:flex-start;gap:1px}
+html[data-design="bento"] #trackPanel .mg-gname{max-width:100%}
+html[data-design="bento"] #trackPanel .mg-gmeta{margin-left:0;padding-left:0;font-size:11.5px}
+html[data-design="bento"] #trackPanel .mg-ghead > .mg-ib{width:28px;height:28px}
 @media (max-width:860px){
   html[data-design="bento"] #trackPanel .mg-gtext,
   html[data-design="bento"] #adminPanel .mg-gtext{flex-direction:column;align-items:flex-start;gap:1px}

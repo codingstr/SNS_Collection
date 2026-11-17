@@ -48,7 +48,15 @@ document.addEventListener("wheel", (ev) => {
   // 끝에서 더 넘기려는 휠은 아무 일도 하지 않습니다(세로로 바뀌어 화면이 갑자기 내려가지 않게).
   const now = Date.now(), fresh = now - wheelLock.at > WHEEL_LATCH_MS;
   wheelLock.at = now;
-  if (fresh || !wheelLock.to || (wheelLock.to !== "v" && !wheelLock.to.isConnected)) {
+  // 잡고 있던 줄이 화면에서 사라졌으면(넘기는 도중 다른 탭으로 감) 그 동작은 끝난 것입니다. 남은 트랙패드 관성 이벤트가
+  // 새 화면의 줄을 밀지 않도록, 휠이 잠깐 멈출 때까지 모두 버립니다("gone"). 멈춘 뒤 새로 돌리는 휠은 평소처럼 대상을 잡습니다.
+  if (!fresh && wheelLock.to && wheelLock.to !== "v" && wheelLock.to !== "gone" && !wheelLock.to.isConnected) {
+    const st = wheelAnim.get(wheelLock.to);
+    if (st) { clearTimeout(st.settle); if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; } }
+    wheelLock.to = "gone";
+  }
+  if (wheelLock.to === "gone" && !fresh) return;
+  if (fresh || !wheelLock.to || wheelLock.to === "gone") {
     let r = ev.target.closest(".row-cards, .storybar");
     if (r && r.scrollWidth <= r.clientWidth + 1) r = null;
     if (r && r.classList.contains("storybar") && typeof islandFolded === "function" && islandFolded(r.parentElement)) r = null;   // 접힌 섬 위의 휠은 세로로
@@ -213,7 +221,7 @@ renderAll();
 (function () {
   const ALL = ["youtube", "x", "instagram"], btn = $("sScope"), menu = $("sMenu"), icons = $("sScopeIcons");
   // "전체" 아이콘: 왼쪽 위 로고(겹친 세 원)와 같은 그림
-  const allIcon = () => { const w = document.createElement("span"); w.className = "allico"; w.innerHTML = '<svg viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="28" fill="#2a2928"/><circle cx="21" cy="23" r="9" fill="#fff" fill-opacity=".95"/><circle cx="35" cy="23" r="9" fill="#fff" fill-opacity=".6"/><circle cx="28" cy="35" r="9" fill="#fff" fill-opacity=".35"/></svg>'; return w; };
+  const allIcon = () => { const w = document.createElement("span"); w.className = "allico"; w.innerHTML = LOGO_SVG; return w; };
   const save = () => { try { localStorage.setItem("snsSearchPlats", JSON.stringify(searchPlats)); } catch (e) {} };
   const render = () => {
     icons.textContent = "";
@@ -368,6 +376,18 @@ renderAll();
   // 바깥 클릭: 검색 중에는 닫지 않습니다(잘못 눌러 30초 넘게 걸린 검색이 취소되지 않게). 닫기(×)·Esc는 검색 중에도 닫고 취소합니다.
   document.addEventListener("click", (e) => { if (!cur && !e.composedPath().some((n) => n.classList && (n.classList.contains("sbox") || n.classList.contains("modal-back")))) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !box.hidden && !document.querySelector(".modal-back:not([hidden])")) close(); });
+  // Esc로 검색어 지우기: 닫을 것(글 보기 창·대화 상자·메뉴·계정 찾기 결과 등)이 없을 때만 동작합니다.
+  // 그런 것이 열려 있으면 이번 Esc는 그것을 닫는 데 쓰고, 다음 Esc에 검색어를 지웁니다. 검색창에 커서가 있으면 지운 뒤 검색창에서 나옵니다.
+  // 다른 입력칸(그룹 이름 등)에서 누른 Esc는 건드리지 않습니다. 이 처리는 다른 Esc 처리보다 먼저 돌아야 열린 것을 정확히 봅니다(capture).
+  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #acctMenu:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden])";
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing) return;
+    const a = document.activeElement, inQ = a === q;
+    if (!inQ && a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    if (!$("viewer").hidden || !$("setPanel").hidden || document.querySelector(OPEN)) return;
+    if (q.value) { q.value = ""; renderList(); }
+    if (inQ) q.blur();
+  }, true);
 })();
 
 /* ---------- 상단 홈 / 추적 계정 관리 버튼 ---------- */
@@ -382,7 +402,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
 /* ---------- 벤토 디자인: 계정 메뉴 항목을 '설정' 화면(별도 탭)으로 ---------- */
 (function () {
   const root = document.documentElement;
-  const ids = ["menuWho", "themeBtn", "menuSettings", "clear", "connOut"];
+  const ids = ["menuWho", "themeBtn", "menuSettings", "navHelp", "clear", "connOut"];
   const place = () => {
     const bento = root.getAttribute("data-design") === "bento";
     const dest = $(bento ? "setBody" : "acctMenu");
@@ -403,7 +423,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   $("setBack").addEventListener("click", () => setModal(false));
   $("setClose").addEventListener("click", () => setModal(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("setPanel").hidden) setModal(false); });
-  ["navHome", "navFav", "navManage", "navAdmin"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));
+  ["navHome", "navFav", "navManage", "navAdmin", "navHelp"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));   // 사용 설명: 설정 화면을 닫고 안내를 엶
   place();
 })();
 
@@ -583,7 +603,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
 })();
 
 
-// 처음 안내: 화면을 어둡게 하고 말풍선으로 하나씩 짚어 줍니다. 로그인 후 첫 화면에서 한 번 자동으로 열리고, 왼쪽 ? 버튼으로 다시 봅니다.
+// 처음 안내: 화면을 어둡게 하고 말풍선으로 하나씩 짚어 줍니다. 로그인 후 첫 화면에서 한 번 자동으로 열리고, 계정 메뉴(프로필 버튼)의 '사용 설명 다시 보기'로 다시 봅니다.
 (() => {
   const root = document.getElementById("tour"), btn = document.getElementById("navHelp");
   if (!root || !btn) return;
@@ -594,17 +614,16 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
     { sel: [".sbox"], t: "통합 검색창", d: "글 제목·내용·작성자·매체·그룹 이름으로 모아 둔 글을 바로 검색합니다. 왼쪽 동그라미는 '계정 찾기'에서 검색할 매체(인스타·X·유튜브)를 고르는 버튼이에요." },
     { sel: ["#sGo"], t: "계정 찾기", d: "검색창에 이름·@아이디·프로필 주소를 적고 누르면(Enter도 가능) 선택한 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
     { sel: ["#empty:not([hidden])", "#grid:not([hidden])"], t: "글이 모이는 곳", d: "추적 중인 계정의 새 글이 여기에 모입니다. 카드를 누르면 바로 열어 볼 수 있어요." },
-    { sel: ["#storyBar"], t: "그룹 고르기", d: "같은 사람의 인스타·X·유튜브 계정을 한 그룹으로 만들어 두면 한 사람으로 모아 봅니다. 동그라미를 눌러 보고 싶은 그룹을 여러 개 고를 수 있고, 아무것도 안 고르면 모두 보여요. 빨간 점은 안 읽은 글이 있다는 뜻이에요. 빠르게 두 번 누르면 안 읽은 글을 오래된 것부터 차례로 열고, 우클릭(휴대폰은 길게 누르기)하면 그 그룹의 글을 모두 읽음으로 표시해요(바로 되돌릴 수 있어요)." },
-    { sel: ["#sidePeople:not([hidden])"], t: "계정 목록", d: "매체 탭에서는 그 매체의 계정이 여기에 나와요. 하나를 고르면 그 계정 글만 볼 수 있어요." },
+    { sel: ["#storyBar"], t: "그룹 고르기", d: "같은 사람의 인스타·X·유튜브 계정을 한 그룹으로 만들어 두면 한 사람으로 모아 봅니다. 동그라미를 눌러 보고 싶은 그룹을 여러 개 고를 수 있어요. 맨 앞 칸은 동그라미를 누르면 고른 것을 모두 풀어 전체를 보고, 그 아래 이름을 누르면 보기 기준(사람별·유튜브·X·인스타)을 바꿔요. 빨간 점은 안 읽은 글이 있다는 뜻이에요. 빠르게 두 번 누르면 안 읽은 글을 오래된 것부터 차례로 열고, 우클릭(휴대폰은 길게 누르기)하면 그 그룹의 글을 모두 읽음으로 표시해요(바로 되돌릴 수 있어요)." },
+    { sel: ["#sidePeople:not([hidden])"], t: "그룹 목록", d: "지금 보이는 그룹과 글 수예요(매체 탭에서는 그 매체 글만 셉니다). 이름을 누르면 그 그룹 줄로 바로 내려가요." },
     { sel: ["#tabs"], t: "매체별 보기", d: "인스타·X·유튜브 버튼으로 매체별 글만 모아 볼 수 있습니다. 숫자는 글 개수예요." },
     { sel: ["#workCard", "header .toolbar"], t: "수집 켜기·최신화", d: "매체 아이콘을 누르면 그 매체 수집을 켜고 끕니다(회색이면 서버 테스트 계정 로그인이 필요해 관리자에게 알려 주세요). 동그란 버튼은 '지금 최신화'이고, 수집 중에 두 번 누르면 멈춥니다." },
     { sel: ["#brand"], t: "로고", d: "어느 화면에서든 로고를 누르면 처음 홈 화면(전체 글)으로 돌아옵니다." },
     { sel: ["#navHome"], t: "홈", d: "추적 중인 모든 계정의 글을 한꺼번에 보는 기본 화면이에요." },
     { sel: ["#navFav"], t: "즐겨찾기", d: "☆를 눌러 둔 사람의 글만 모아서 봅니다." },
     { sel: ["#navManage"], t: "추적 계정 관리", d: "그룹별 카드에서 계정을 골라 가져올 기간·그룹을 정하거나, 숨기거나 제거하는 화면이에요. 그룹 이름을 누르면 그 그룹의 계정이 한꺼번에 골라져요. 숨긴 그룹은 홈에 안 나오고 글도 모으지 않아요. 계정 추가는 위쪽 검색창에서 해요." },
-    { sel: ["#navHelp"], t: "사용 설명", d: "지금 보는 이 안내예요. 언제든 눌러서 다시 볼 수 있어요." },
     { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "눌러서 밝은 화면과 어두운 화면을 바꿀 수 있어요." },
-    { sel: ["#connAcct"], t: "계정 메뉴", d: "프로필 이미지 설정, 계정 관리, 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },
+    { sel: ["#connAcct"], t: "계정 메뉴", d: "프로필 이미지 설정, 계정 관리, 사용 설명 다시 보기(지금 보는 이 안내), 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },
   ];
   const KEY = "snsHelpSeen";
   let list = [], idx = 0;

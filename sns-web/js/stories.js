@@ -12,11 +12,12 @@ let storySig = "", storyScroll = 0;
 function storyData() {
   const vp = visiblePeople();
   if (!vp.length) return null;
-  const byVia = new Map();
+  const byVia = new Map(), hid = hiddenVias();
   for (const it of items) {
     if (!it.via || !inPeriod(it)) continue;
     const t = publishedMs(it);
-    viasOf(it).forEach((v) => {   // 공동 게시물은 이어진 계정마다
+    viasOf(it).forEach((v) => {   // 공동 게시물은 이어진 계정마다(따로 숨긴 계정은 빼고)
+      if (hid.has(v)) return;
       let e = byVia.get(v);
       if (!e) byVia.set(v, (e = { unread: [], latest: 0, plats: new Set() }));
       e.plats.add(tabOf(it.source));
@@ -51,11 +52,35 @@ function storyItem({ face, label, on, dot, badge, aria, name }) {
   if (name) b.dataset.name = name;
   return b;
 }
-function allFace() {
-  const s = el("span", { class: "sface sall", "aria-hidden": "true" });
-  s.innerHTML = '<svg viewBox="0 0 56 56"><circle cx="21" cy="23" r="9" fill="currentColor" fill-opacity=".95"/><circle cx="35" cy="23" r="9" fill="currentColor" fill-opacity=".6"/><circle cx="28" cy="35" r="9" fill="currentColor" fill-opacity=".35"/></svg>';
-  return s;
+
+// 보기 기준 버튼의 얼굴: 사람별은 사람 모양(오른쪽 '사람별' 탭과 같은 그림), 매체는 그 매체 아이콘
+const PEOPLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.7a3.5 3.5 0 010 6.6M18 14.8c2 .6 3.2 2.2 3.5 5.2"/></svg>';
+function modeFace(k) {
+  if (k === "people" || !PLATFORM[k]) { const s = el("span", { class: "sface speople", "aria-hidden": "true" }); s.innerHTML = PEOPLE_SVG; return s; }
+  return el("span", { class: "sface smode", "aria-hidden": "true" }, [pIcon(k)]);
 }
+// 보기 기준 메뉴: 맨 앞 칸의 이름(글자) 아래에 사람별·유튜브·X·인스타를 띄웁니다. 바깥을 누르거나 Esc·스크롤하면 닫힙니다.
+let modeMenu = null;
+function closeModeMenu() { if (modeMenu) { modeMenu.remove(); modeMenu = null; } }
+function openModeMenu(btn) {
+  if (modeMenu) { closeModeMenu(); return; }
+  const m = el("div", { class: "modemenu", role: "menu", "aria-label": "보기 기준" });
+  Object.keys(LABELS).forEach((k) => {
+    const on = k === activeTab;
+    const b = el("button", { type: "button", role: "menuitemradio", "aria-checked": String(on), class: on ? "on" : "" }, [el("span", { class: "mi" }, [modeFace(k)]), el("span", { text: LABELS[k] })]);
+    b.addEventListener("click", (e) => { e.stopPropagation(); closeModeMenu(); if (k !== activeTab) setTab(k); });
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(r.left + r.width / 2 - m.offsetWidth / 2, window.innerWidth - m.offsetWidth - 8)) + "px";   // 이름 가운데 아래
+  m.style.top = r.bottom + 6 + "px";
+  modeMenu = m;
+  const cur = m.querySelector(".on"); if (cur) cur.focus({ preventScroll: true });
+}
+document.addEventListener("pointerdown", (e) => { if (modeMenu && !e.target.closest(".modemenu, .story.mode .smode-pick")) closeModeMenu(); }, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modeMenu) { e.stopPropagation(); closeModeMenu(); } }, true);
+document.addEventListener("scroll", (e) => { if (modeMenu && !(e.target.closest && e.target.closest(".modemenu"))) closeModeMenu(); }, true);
 
 // 휴대폰: 길게 누르면 우클릭과 같게(아이폰 사파리는 우클릭 이벤트를 보내지 않음)
 function onLongPress(b, fn) {
@@ -74,13 +99,13 @@ function onLongPress(b, fn) {
 // 고른 그룹이 바뀐 뒤: 글 목록을 다시 그리고, 키보드로 고르던 중이면 같은 그룹에 포커스를 돌려줍니다.
 function afterStorySelect(name) {
   const hadFocus = !!(document.activeElement && document.activeElement.closest && document.activeElement.closest("#storyBar"));
-  personFocus = ""; personPlat = ""; backCtx = null;
+  personFocus = ""; personPlat = ""; backCtx = null; rowFocus = null;
   renderList();
   const g = $("grid");
   if (g) g.scrollTop = 0;
   if (hadFocus) {
     const bar = $("storyBar");
-    const b = bar && Array.from(bar.children).find((x) => (name ? x.dataset.name === name : !x.dataset.name));
+    const b = name ? bar && Array.from(bar.children).find((x) => x.dataset.name === name) : bar && bar.querySelector(".smode-all");
     if (b) b.focus({ preventScroll: true });
   }
 }
@@ -102,24 +127,36 @@ function storyClick(p) {
   const name = p.name;
   storyTap = { name, timer: setTimeout(() => { storyTap = null; toggleStory(name); }, STORY_TAP_MS) };
 }
+// 이 그룹의 글인지(따로 숨긴 계정의 글은 빼고). 안 읽은 글 이어 보기·모두 읽음에 씁니다.
+const groupHas = (p, it) => { const hid = hiddenVias(); return viasOf(it).some((v) => p.ids.has(v) && !hid.has(v)); };
 // 그룹의 안 읽은 글을 오래된 것부터 차례로 엽니다(인스타그램 스토리처럼). 글 보기 창의 이전/다음으로 넘깁니다.
 function playUnread(p) {
   const label = personLabel(p);
-  const list = items.filter((it) => viasOf(it).some((v) => p.ids.has(v)) && inPeriod(it) && !seen.has(it.id)).sort((a, b) => publishedMs(a) - publishedMs(b));
+  const list = items.filter((it) => groupHas(p, it) && inPeriod(it) && !seen.has(it.id)).sort((a, b) => publishedMs(a) - publishedMs(b));
   if (!list.length) { toast("‘" + label + "’에는 읽지 않은 글이 없습니다."); return; }
   viewCtx = list; viewIdx = 0;
   toast("‘" + label + "’의 안 읽은 글 " + list.length + "개를 오래된 것부터 엽니다. ‹ › 또는 ← →로 넘기세요.");
   openItem(list[0]);
 }
 
+// 맨 앞 칸: 지금 보기 기준(사람별·유튜브·X·인스타)의 아이콘과 이름. 두 부분이 따로 동작합니다.
+//  - 동그라미: '전체'. 고른 그룹을 모두 풀고 모든 그룹을 봅니다(아무것도 안 골랐으면 색 테두리).
+//  - 이름(글자): 보기 기준 메뉴를 엽니다. 오른쪽 탭과 같은 값을 바꿉니다.
+function modeItem(allOn) {
+  const label = LABELS[activeTab] || "사람별";
+  const ring = el("button", { type: "button", class: "smode-all", "aria-pressed": String(allOn), "aria-label": allOn ? "전체(모든 그룹을 보는 중)" : "전체: 고른 그룹을 모두 풀기" },
+    [el("span", { class: "sring" }, [el("span", { class: "sinner" }, [modeFace(activeTab)])])]);
+  ring.addEventListener("click", () => { if (!storySel.size) return; storySel = new Set(); afterStorySelect(""); });
+  const pick = el("button", { type: "button", class: "smode-pick", "aria-haspopup": "menu", "aria-label": "보기 기준 바꾸기(지금 " + label + ")" },
+    [el("span", { class: "sname" }, [el("span", { class: "st", text: label })])]);
+  pick.addEventListener("click", (e) => { e.stopPropagation(); openModeMenu(pick); });
+  return el("div", { class: "story mode" + (allOn ? " on" : ""), role: "group", "aria-label": "전체 · 보기 기준" }, [ring, pick]);
+}
 function storyBar(d) {
   d = d || storyData();
   if (!d) { storySig = ""; return null; }
   const bar = el("div", { id: "storyBar", class: "storybar", role: "toolbar", "aria-label": "볼 그룹 고르기(여러 개 가능). 사진을 우클릭하면 모두 읽음" });
-  const allOn = !d.sel.size;
-  const all = storyItem({ face: allFace(), label: "전체", on: allOn, aria: allOn ? "전체(모든 그룹을 보는 중)" : "전체: 고른 그룹을 모두 풀기" });
-  all.addEventListener("click", () => { if (!storySel.size) return; storySel = new Set(); afterStorySelect(""); });
-  bar.appendChild(all);
+  bar.appendChild(modeItem(!d.sel.size));
   d.list.forEach((s) => {
     const label = personLabel(s.p);
     const single = s.p.accs.length === 1 && !s.p.accs[0].group;   // 그룹화하지 않은 계정 하나: 어느 매체인지 작은 아이콘으로
@@ -249,13 +286,13 @@ function renderStories() {
   if (!d) { cur.remove(); storySig = ""; return; }
   if (storySigOf(d) === storySig) return;
   storyScroll = cur.scrollLeft;
-  const hadFocus = cur.contains(document.activeElement) ? document.activeElement.dataset.name || "" : null;
+  const fa = document.activeElement, hadFocus = cur.contains(fa) ? (fa.classList.contains("smode-pick") ? "*pick" : fa.dataset.name || "") : null;   // "": 전체 동그라미, "*pick": 보기 기준 이름
   const nb = storyBar(d);
   cur.replaceWith(nb);
   nb.scrollLeft = storyScroll;
   paintIsland(nb);
   if (hadFocus !== null) {
-    const b = Array.from(nb.children).find((x) => (hadFocus ? x.dataset.name === hadFocus : !x.dataset.name));
+    const b = hadFocus === "*pick" ? nb.querySelector(".smode-pick") : hadFocus ? Array.from(nb.children).find((x) => x.dataset.name === hadFocus) : nb.querySelector(".smode-all");
     if (b) b.focus({ preventScroll: true });
   }
 }
@@ -293,7 +330,7 @@ function confirmBox({ title, text, ok, cls }) {
 async function askReadAll(p) {
   if (document.querySelector(".modal-back.readall")) return;   // 길게 누르기와 우클릭이 함께 와도 한 번만
   const label = personLabel(p);
-  const ids = items.filter((it) => viasOf(it).some((v) => p.ids.has(v)) && inPeriod(it) && !seen.has(it.id)).map((it) => it.id);
+  const ids = items.filter((it) => groupHas(p, it) && inPeriod(it) && !seen.has(it.id)).map((it) => it.id);
   if (!ids.length) { toast("‘" + label + "’에는 읽지 않은 글이 없습니다."); return; }
   const ok = await confirmBox({ title: "모두 읽음으로 표시할까요?", text: "‘" + label + "’의 읽지 않은 글 " + ids.length + "개를 읽은 글로 표시합니다. 바로 뒤에 뜨는 알림에서 잠시 동안 되돌릴 수 있습니다.", ok: "모두 읽음", cls: "readall" });
   if (!ok) return;
