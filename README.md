@@ -175,6 +175,7 @@ X·인스타는 자동 수집을 막을 수 있어서 테스트 계정이 잠길
 | `auth.py` | `/api/auth` 가입·로그인·로그아웃·비밀번호 변경·계정 삭제. 비밀번호는 scrypt 해시, 세션 30일. 로그인하면 자동 수집 요청(`collect_on_login`) |
 | `api_call.py` | `/api/call` 글 목록(`get`)·추적 계정 저장(`set`)·수집 요청/멈춤(`checkNow`/`cancelCheck`)·이름 검색/취소(`searchAccount`/`cancelSearch`)·게시물 자세히 보기(`fetchPost`: DB에 저장한 내용을 바로, 없으면 수집 창에서 읽어 와 저장)·계정 사진(`avatars`) |
 | `sync.py` | `/api/sync` 본 글 기록(흐리게 표시)을 기기끼리 맞춤. `delSeen`은 '모두 읽음' 되돌리기 |
+| `community.py` | `/api/community` 커뮤니티: 커뮤니티 목록 요약(`summary`)·글 목록(`list`, 30개씩·분류·검색)·댓글(`comments`)·글쓰기(`write`)·지우기(`delete`)·좋아요(`like`)·댓글/답글(`comment`/`delComment`). 이미지는 `GET /api/community/img/{열쇠}` |
 | `admin.py` | `/api/admin` 관리자 전용(관리 탭): 사용자 목록·상세·고치기·비밀번호 초기화·삭제, SNS 계정 상태, 서버 상태. 관리자가 아니면 403 |
 | `admin_setup.py` | 관리자 계정 만들기·정하기·해제(서버 PC에서만) |
 | `db.py` | SQLite 테이블 정의와 예전 DB 변환 |
@@ -200,7 +201,9 @@ X·인스타는 자동 수집을 막을 수 있어서 테스트 계정이 잠길
 | `avatars` | 검색할 때 받은 계정 프로필 사진 |
 | `seen` | 본 글 기록(사용자당 최근 5,000개) |
 | `kv` | 서버 전체 값(테스트 계정 로그인 상태, 마지막 자동 수집 시각) |
-| `rate_limits` | 로그인·가입 시도 횟수 제한 |
+| `rate_limits` | 로그인·가입 시도, 커뮤니티 글(시간당 20개)·댓글(시간당 90개) 횟수 제한 |
+| `cm_posts`, `cm_tags` | 커뮤니티 글(분류·제목·본문·태그·링크·이미지 열쇠)과 글 ↔ 태그한 SNS 계정 ID. 그룹 커뮤니티는 그 그룹 계정 중 하나라도 태그된 글 |
+| `cm_comments`, `cm_likes`, `cm_images` | 댓글·답글(한 단계, 답글 달린 댓글은 지워도 자리 남김), 좋아요(사용자당 한 번), 글에 붙인 이미지(BLOB). 글을 지우면 같이 지워지고, 사용자를 지우면 그 사람의 글·댓글·좋아요도 지워집니다 |
 
 ### `sns-web/`
 
@@ -215,11 +218,12 @@ X·인스타는 자동 수집을 막을 수 있어서 테스트 계정이 잠길
 | `js/stories.js` | 글 영역 위쪽 그룹 줄(인스타 스토리 모양): 여러 개 고르기, 안 읽은 글 빨간 점, 두 번 눌러 안 읽은 글 이어 보기, 우클릭·길게 눌러 모두 읽음(되돌리기 가능) |
 | `js/tracking.js` | 계정 입력 해석, 계정 추가·삭제, 지금 최신화·멈추기 |
 | `js/manage.js` | 추적 계정 관리 화면: 그룹 카드(그룹 이름을 누르면 그 그룹 계정 모두 고르기), 기간·그룹화·숨기기·제거, 그룹 이름 바꾸기 |
+| `js/community.js` | 커뮤니티 화면: 커뮤니티(그룹) 카드 목록, 분류·검색·더 보기, 글 펼치기(사진·링크·태그·좋아요·댓글·답글), 글쓰기(사진은 긴 변 1280px로 줄여 보냄: 보통 JPEG, 투명 배경은 WebP/PNG), 사진 크게 보기. 홈 그룹 머리줄의 말풍선 버튼(`cmBtn`) |
 | `js/admin.js` | 관리 탭(관리자만): 사용자·SNS 계정 상태·서버. 보이는 동안 15초마다 새로 읽음 |
 | `js/account.js` | 로그인·가입·계정 관리, 비밀번호가 초기화된 계정은 로그인 때 바꾸라고 안내 |
 | `js/ui.js` | 휠 스크롤, 위쪽 검색창(계정 찾기·바로 추가), 처음 안내, 시작 코드 |
 
-`js/` 파일은 전역 변수를 서로 공유하는 일반 스크립트입니다. `index.html`에 적힌 순서(core → bridge → store → list → stories → tracking → manage → admin → account → ui)를 바꾸면 안 됩니다.
+`js/` 파일은 전역 변수를 서로 공유하는 일반 스크립트입니다. `index.html`에 적힌 순서(core → bridge → store → list → stories → tracking → manage → admin → community → account → ui)를 바꾸면 안 됩니다.
 
 ---
 

@@ -715,6 +715,8 @@ function sidePeople(rows, sel, focusName, noJump) {
 }
 // 사람별 화면의 그룹 머리줄: 우클릭(휴대폰은 길게 누르기)하면 모두 읽음, 빈 곳을 두 번 누르면 안 읽은 글 이어 보기.
 // 위쪽 그룹 줄의 동그라미와 같은 동작입니다(stories.js의 askReadAll·playUnread). 이름·별·매체 링크 같은 버튼 위에서는 그 버튼 동작만 합니다.
+// 그룹 머리줄의 커뮤니티 버튼(js/community.js). 그 파일이 없으면 버튼도 없습니다.
+const cmBtnFor = (r) => (typeof cmBtn === "function" && connected ? [cmBtn(r)] : []);
 function personHead(head, r) {
   const onBtn = (e) => !!e.target.closest("button, a, [role=button]");
   head.addEventListener("contextmenu", (e) => { if (onBtn(e)) return; e.preventDefault(); askReadAll(r); });
@@ -819,7 +821,7 @@ function renderList() {
         body.appendChild(grid);
       } else {
         body.appendChild(el("section", { class: "sec" }, [
-          personHead(el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: dispName(r) }), favStar(r.name), platMeta(r)]), r),
+          personHead(el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: dispName(r) }), ...cmBtnFor(r), favStar(r.name), platMeta(r)]), r),
           mediaRows(r, 30, (k) => { backCtx = null; personFocus = r.name; personPlat = k; renderList(); }),
         ]));
       }
@@ -830,7 +832,7 @@ function renderList() {
         const go = () => { storySel = new Set([r.name]); personFocus = ""; personPlat = ""; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
         nameBtn.addEventListener("click", go);
         nameBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-        const head = personHead(el("div", { class: "sec-head" }, [personAvatar(r), nameBtn, favStar(r.name), platMeta(r)]), r);
+        const head = personHead(el("div", { class: "sec-head" }, [personAvatar(r), nameBtn, ...cmBtnFor(r), favStar(r.name), platMeta(r)]), r);
         const sec = el("section", { class: "sec" }, [head, mediaRows(r, 20, null)]);
         sec._person = r.name;
         body.appendChild(sec);

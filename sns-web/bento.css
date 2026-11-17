@@ -370,7 +370,7 @@ html[data-design="bento"] #sidePeople .pbar button{border-radius:999px;padding:1
 
 /* 설정·추적 계정 관리 화면도 홈처럼 아래 끝까지 채우고, 넘치면 안에서 스크롤 */
 @media (min-width:861px){
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){height:calc(100vh - 84px);min-height:0;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(125,122,118,.5) transparent}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){height:calc(100vh - 84px);min-height:0;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(125,122,118,.5) transparent}
 }
 
 /* 웹사이트 로그인 화면: 로그인 전(연결 패널이 보일 때)에는 화면 가운데 카드로 크게 보여 줌 */
@@ -388,7 +388,7 @@ html[data-design="bento"] #connectPanel #acctMsg{text-align:center;margin:8px 0 
 
 /* 설정·관리 화면: 바깥 aside가 그림자를 잘라 모서리 색이 달라 보이던 문제 → 잘림 해제(스크롤은 카드 안에서) */
 @media (min-width:861px){
-  html[data-design="bento"] aside:has(> #setPanel:not([hidden])),html[data-design="bento"] aside:has(> #trackPanel:not([hidden])),html[data-design="bento"] aside:has(> #adminPanel:not([hidden])){overflow:visible;max-height:none}
+  html[data-design="bento"] aside:has(> #setPanel:not([hidden])),html[data-design="bento"] aside:has(> #trackPanel:not([hidden])),html[data-design="bento"] aside:has(> #adminPanel:not([hidden])),html[data-design="bento"] aside:has(> #communityPanel:not([hidden])){overflow:visible;max-height:none}
 }
 html[data-design="bento"] #connectPanel #acctForm{flex-wrap:nowrap;align-items:stretch}
 html[data-design="bento"] #connectPanel #acctForm > *{flex:none;width:100%;box-sizing:border-box}
@@ -439,7 +439,7 @@ html[data-design="bento"] .wk-p.nl{border-color:var(--line);opacity:.45;filter:g
   
   html[data-design="bento"] header .sbox .sgo,html[data-design="bento"] header .sbox .sgo:hover{height:64px;border-radius:32px;font-size:15px}
   html[data-design="bento"] header .sbox .sgo::after{font-size:15px}
-  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){height:calc(100vh - 94px)}
+  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){height:calc(100vh - 94px)}
   html[data-design="bento"] aside{max-height:calc(100vh - 94px)}
   html[data-design="bento"] #sidePeople{max-height:calc(100vh - 600px)}
 }
@@ -478,7 +478,7 @@ html[data-design="bento"] header .sbox .sscope,html[data-design="bento"] header 
 /* ===== 오른쪽 열 순서: 현재 작업(위) → 사람 목록(가운데, 남는 높이를 채움) → 탭(아래) ===== */
 @media (min-width:861px){
   html[data-design="bento"] .layout{grid-template-rows:auto minmax(0,1fr) auto;height:calc(100vh - 94px);align-items:stretch}
-  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){grid-row:1 / -1;height:100%}
+  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){grid-row:1 / -1;height:100%}
   html[data-design="bento"] .workcard:not([hidden]){position:static;grid-column:2;grid-row:1;width:auto;right:auto;bottom:auto;margin:0;align-self:start}
   html[data-design="bento"] .workcard .wk-list{margin-top:6px}
   html[data-design="bento"] #sidePeople{grid-column:2;grid-row:2;max-height:none;min-height:0;overflow-y:auto;align-self:stretch}
@@ -519,8 +519,8 @@ html[data-design="bento"] #vbar{display:none}
   html[data-design="bento"] #vbar i{position:absolute;left:3px;right:3px;top:0;border-radius:3px;background:rgba(125,122,118,.45);cursor:grab;transition:background .15s,left .15s,right .15s}
   html[data-design="bento"] #vbar:hover i,html[data-design="bento"] #vbar.drag i{background:rgba(125,122,118,.8);left:2px;right:2px}
   html[data-design="bento"] #vbar.drag i{cursor:grabbing}
-  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel,html[data-design="bento"] #trackPanel,html[data-design="bento"] #adminPanel{scrollbar-width:none}
-  html[data-design="bento"] #grid::-webkit-scrollbar,html[data-design="bento"] #setPanel::-webkit-scrollbar,html[data-design="bento"] #trackPanel::-webkit-scrollbar,html[data-design="bento"] #adminPanel::-webkit-scrollbar{display:none}
+  html[data-design="bento"] #grid,html[data-design="bento"] #setPanel,html[data-design="bento"] #trackPanel,html[data-design="bento"] #adminPanel,html[data-design="bento"] #communityPanel{scrollbar-width:none}
+  html[data-design="bento"] #grid::-webkit-scrollbar,html[data-design="bento"] #setPanel::-webkit-scrollbar,html[data-design="bento"] #trackPanel::-webkit-scrollbar,html[data-design="bento"] #adminPanel::-webkit-scrollbar,html[data-design="bento"] #communityPanel::-webkit-scrollbar{display:none}
 }
 
 /* 왼쪽 레일·글 박스 가로를 조금 줄이고, 그 사이 스크롤바 칸을 넓힘 */
@@ -649,7 +649,7 @@ html[data-design="bento"] #vbar{display:none}
   html[data-design="bento"] #vbar.idle i{pointer-events:none;cursor:default}
 }
 @media (min-width:861px){
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:24px;box-sizing:border-box}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){padding-right:24px;box-sizing:border-box}
 }
 @media (min-width:861px){
   html[data-design="bento"] #vbar.inpanel::before{background:var(--soft);box-shadow:none}
@@ -1086,8 +1086,8 @@ html[data-design="bento"] .infocard .gh{order:-1}
   
   
 
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding:26px 32px 32px 34px;border-radius:28px;gap:0}
-  html[data-design="bento"] #setPanel > h2,html[data-design="bento"] #trackPanel > h2,html[data-design="bento"] #adminPanel > h2{font-size:20px;font-weight:700;letter-spacing:-.2px;margin:0 0 18px;color:var(--fg)}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){padding:26px 32px 32px 34px;border-radius:28px;gap:0}
+  html[data-design="bento"] #setPanel > h2,html[data-design="bento"] #trackPanel > h2,html[data-design="bento"] #adminPanel > h2,html[data-design="bento"] #communityPanel > h2{font-size:20px;font-weight:700;letter-spacing:-.2px;margin:0 0 18px;color:var(--fg)}
   html[data-design="bento"] #trackPanel #tracked,
   html[data-design="bento"] #adminPanel #tracked{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
   html[data-design="bento"] #trackPanel #tracked .chip,
@@ -1114,7 +1114,7 @@ html[data-design="bento"] .infocard .gh{order:-1}
   html[data-design="bento"] #adminPanel .hint{margin-top:18px;font-size:12px;line-height:1.6;color:var(--muted)}
 }
 @media (min-width:861px){
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:64px}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){padding-right:64px}
   html[data-design="bento"] #trackPanel #tracked.chips,
   html[data-design="bento"] #adminPanel #tracked.chips{flex-direction:row;flex-wrap:wrap;align-items:center;max-height:none;overflow:visible;padding:0}
   html[data-design="bento"] #trackPanel .row button.danger,
@@ -1176,7 +1176,8 @@ html[data-design="bento"] #themeBtn{display:none !important}
 html[data-design="bento"] .infocard.info2{display:none}
 @media (min-width:861px){
   html[data-design="bento"] body:has(#trackPanel:not([hidden])) .infocard.info2,
-  html[data-design="bento"] body:has(#adminPanel:not([hidden])) .infocard.info2{display:flex;position:absolute;top:10px;right:10px;width:230px;grid-column:auto;grid-row:auto;margin:0;z-index:3}
+  html[data-design="bento"] body:has(#adminPanel:not([hidden])) .infocard.info2,
+  html[data-design="bento"] body:has(#communityPanel:not([hidden])) .infocard.info2{display:flex;position:absolute;top:10px;right:10px;width:230px;grid-column:auto;grid-row:auto;margin:0;z-index:3}
   
 }
 
@@ -1215,7 +1216,7 @@ html[data-design="bento"][data-theme="dark"] .themeswitch{background:#1b1b1a !im
 
 /* 모든 계정 카드: 창이 충분히 높아 현재 작업 카드가 더 안 늘어날 때는, 남는 세로 공간을 모든 계정 카드가 채워 빈 여백이 없게 */
 @media (min-width:861px) and (min-height:980px){
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:auto minmax(272px,1fr) 222px !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))){grid-template-rows:auto minmax(272px,1fr) 222px !important}
   html[data-design="bento"] #sidePeople:not([hidden]){align-self:stretch !important;max-height:none !important}
 }
 
@@ -1330,18 +1331,18 @@ html[data-design="bento"] .sresults .sr-body::-webkit-scrollbar{display:none}
 /* 오른쪽 열 순서: 사람 목록 → 매체 탭 → (맨 아래) 상단 버튼 줄 + 현재 작업 카드.
    상단 버튼 줄(.toolbar)은 카드 바로 위에 붙어 보이도록 js/ui.js가 위치를 맞춥니다. */
 @media (min-width:861px){
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) 222px auto !important}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople{grid-row:1 !important;align-self:stretch !important;max-height:none !important;min-height:0 !important}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #tabs{grid-row:2 !important;align-self:end !important}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) .workcard:not([hidden]){grid-row:3 !important;align-self:end !important;margin-top:64px !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) 222px auto !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #sidePeople{grid-row:1 !important;align-self:stretch !important;max-height:none !important;min-height:0 !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #tabs{grid-row:2 !important;align-self:end !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) .workcard:not([hidden]){grid-row:3 !important;align-self:end !important;margin-top:64px !important}
   /* "글이 없습니다" 안내문이 오른쪽 열과 같은 줄을 쓰도록(따로 줄을 차지하면 오른쪽 카드가 눌려 겹칩니다) */
   /* 글이 없어도 왼쪽 큰 카드(메인 박스)는 그대로 두고, 안내문은 그 안 가운데에 표시 */
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #empty:not([hidden]){grid-row:1 / span 3 !important;align-self:stretch !important;height:calc(100vh - 94px);box-sizing:border-box;margin:0;padding:22px 40px;display:flex;align-items:center;justify-content:center;text-align:center;background:var(--card);border-radius:32px;box-shadow:var(--shadow);color:var(--muted,#8a8782);line-height:1.6}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #empty:not([hidden]){grid-row:1 / span 3 !important;align-self:stretch !important;height:calc(100vh - 94px);box-sizing:border-box;margin:0;padding:22px 40px;display:flex;align-items:center;justify-content:center;text-align:center;background:var(--card);border-radius:32px;box-shadow:var(--shadow);color:var(--muted,#8a8782);line-height:1.6}
   html[data-design="bento"] .workcard .wk-msg{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):has(#sidePeople[hidden]) .workcard{grid-row:3 !important;align-self:end !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))):has(#sidePeople[hidden]) .workcard{grid-row:3 !important;align-self:end !important}
   /* 사람 목록이 없는 화면(검색 중 등)에도 사람 목록 칸은 없어지지 않고 빈 상자로 남습니다 */
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople[hidden]{display:block !important;grid-row:1 !important;align-self:stretch !important;max-height:none !important;min-height:0 !important}
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) #sidePeople[hidden]::before{content:"그룹 목록이 없습니다";display:block;padding:12px 10px;font-size:12.5px;color:var(--muted)}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #sidePeople[hidden]{display:block !important;grid-row:1 !important;align-self:stretch !important;max-height:none !important;min-height:0 !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #sidePeople[hidden]::before{content:"그룹 목록이 없습니다";display:block;padding:12px 10px;font-size:12.5px;color:var(--muted)}
 }
 
 /* 상단 점 안의 표시: 인스타 = 가운데 빈 흰 원, X = 흰 X, 유튜브 = 흰 재생 세모(유튜브 재생 버튼 비율, 무게중심을 가운데로) */
@@ -1358,7 +1359,7 @@ html[data-design="bento"] .themeswitch{background:#9fcbee}
 
 /* 창 높이가 낮을 때(약 700px 이하): 오른쪽 열이 서로 겹치지 않게 매체 탭·현재 작업 카드를 낮추고, 남는 높이는 그룹 목록이 쓰도록 합니다 */
 @media (min-width:861px) and (max-height:700px){
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) auto auto !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) auto auto !important}
   html[data-design="bento"] #tabs{padding:8px !important;gap:6px !important}
   html[data-design="bento"] #tabs button{height:34px !important;min-height:0 !important;padding-top:4px !important;padding-bottom:4px !important}
   html[data-design="bento"] .workcard:not([hidden]){padding:10px 18px !important}
@@ -1395,7 +1396,7 @@ html[data-design="bento"] .themeswitch{background:#9fcbee}
 
 /* 노트북 트랙패드 가로 스와이프로 브라우저가 뒤로/앞으로 가기를 하거나 화면이 출렁이지 않게 */
 html,body{overscroll-behavior-x:none}
-html[data-design="bento"] #grid,html[data-design="bento"] #setPanel,html[data-design="bento"] #trackPanel,html[data-design="bento"] #adminPanel{overscroll-behavior:contain}
+html[data-design="bento"] #grid,html[data-design="bento"] #setPanel,html[data-design="bento"] #trackPanel,html[data-design="bento"] #adminPanel,html[data-design="bento"] #communityPanel{overscroll-behavior:contain}
 
 /* ===== 매체 구분(유튜브·X·인스타): 매체 색 이름표, 사람별 화면의 매체 칸은 매체 색 테두리·바탕 ===== */
 html[data-design="bento"] [data-plat="youtube"]{--mc:#ff0033;--mcg:#ff0033}
@@ -1504,11 +1505,14 @@ html[data-design="bento"] #sidePeople .pbar button.new .nm::after{content:"";pos
 
 /* ===== 추적 계정 관리: 제목 줄 ===== */
 html[data-design="bento"] #trackPanel .mg-head,
-html[data-design="bento"] #adminPanel .mg-head{display:flex;align-items:center;gap:10px;margin:0 0 14px;min-height:46px}
+html[data-design="bento"] #adminPanel .mg-head,
+html[data-design="bento"] #communityPanel .mg-head{display:flex;align-items:center;gap:10px;margin:0 0 14px;min-height:46px}
 html[data-design="bento"] #trackPanel .mg-head h2,
-html[data-design="bento"] #adminPanel .mg-head h2{margin:0 !important}
+html[data-design="bento"] #adminPanel .mg-head h2,
+html[data-design="bento"] #communityPanel .mg-head h2{margin:0 !important}
 html[data-design="bento"] #trackPanel .mg-count,
-html[data-design="bento"] #adminPanel .mg-count{font-size:12.5px;color:var(--muted)}
+html[data-design="bento"] #adminPanel .mg-count,
+html[data-design="bento"] #communityPanel .mg-count{font-size:12.5px;color:var(--muted)}
 /* 추적 계정 관리 화면(넓은 화면)에서는 상단 버튼 줄(매체 점·지금 최신화)을 보이지 않습니다(js/ui.js가 .inpanel을 붙임) */
 @media (min-width:861px){
   html[data-design="bento"] header .toolbar.inpanel{display:none !important}
@@ -1664,7 +1668,8 @@ html[data-design="bento"] #adminPanel .mg-act .gsuggest{bottom:calc(100% + 8px);
   html[data-design="bento"] #adminPanel .mg-act select{max-width:150px}
 }
 html[data-design="bento"] #trackPanel .mg-head h2,
-html[data-design="bento"] #adminPanel .mg-head h2{font-size:20px;font-weight:700;letter-spacing:-.2px;color:var(--fg)}
+html[data-design="bento"] #adminPanel .mg-head h2,
+html[data-design="bento"] #communityPanel .mg-head h2{font-size:20px;font-weight:700;letter-spacing:-.2px;color:var(--fg)}
 html[data-design="bento"] #trackPanel .mg-gtext,
 html[data-design="bento"] #adminPanel .mg-gtext{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
 /* 추적 계정 관리의 그룹 머리줄은 버튼(☆·✎·눈·삭제)이 많아, 넓은 화면에서도 이름 아래에 '계정 n · 기간'을 둡니다(이름이 잘리지 않게) */
@@ -1718,7 +1723,8 @@ html[data-design="bento"] #trackPanel .mg-ghead > .mg-ib{width:28px;height:28px}
 /* ===== 관리(관리자 전용, js/admin.js) ===== */
 /* 레일 아이콘: 방패 */
 html[data-design="bento"] #navAdmin{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7.5 3v5.5c0 4.6-3.2 8.4-7.5 9.5-4.3-1.1-7.5-4.9-7.5-9.5V6z'/%3E%3Cpath d='M8.8 12.2l2.2 2.2 4.4-4.6'/%3E%3C/svg%3E")}
-html[data-design="bento"] #adminPanel .mg-head{flex-wrap:wrap;row-gap:10px}
+html[data-design="bento"] #adminPanel .mg-head,
+html[data-design="bento"] #communityPanel .mg-head{flex-wrap:wrap;row-gap:10px}
 html[data-design="bento"] #adminPanel .ad-tabs{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
 html[data-design="bento"] #adminPanel .ad-tab{height:36px;padding:0 16px;border:0;border-radius:18px;background:var(--soft);color:var(--fg);font-weight:600;font-size:13px;cursor:pointer}
 html[data-design="bento"] #adminPanel .ad-tab:hover:not(.on){background:var(--line)}
@@ -1902,7 +1908,7 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
    그 위의 그룹 목록 칸이 커졌다 작아졌다 했습니다. 카드를 가장 긴 경우(진행 막대 + 2줄 메시지 + 4줄 표) 높이로 고정하고
    메시지는 2줄까지만, 표는 카드 아래쪽에 붙입니다. → 목록·매체 탭 칸의 크기와 위치가 늘 같음 */
 @media (min-width:861px){
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))) .workcard:not([hidden]){height:232px !important;min-height:232px !important;max-height:232px !important;box-sizing:border-box;display:flex !important;flex-direction:column;overflow:hidden}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) .workcard:not([hidden]){height:232px !important;min-height:232px !important;max-height:232px !important;box-sizing:border-box;display:flex !important;flex-direction:column;overflow:hidden}
   html[data-design="bento"] .workcard .wk-msg{flex:none;display:-webkit-box !important;-webkit-box-orient:vertical;-webkit-line-clamp:2 !important;overflow:hidden}
   html[data-design="bento"] .workcard .wk-list{margin-top:auto !important}
 }
@@ -1914,7 +1920,7 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
    값은 js/ui.js의 VBAR_W·#sbar W(14)와 맞춥니다. */
 @media (min-width:861px){
   html[data-design="bento"] #grid{padding:14px !important}
-  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]){padding-right:14px}
+  html[data-design="bento"] #setPanel:not([hidden]),html[data-design="bento"] #trackPanel:not([hidden]),html[data-design="bento"] #adminPanel:not([hidden]),html[data-design="bento"] #communityPanel:not([hidden]){padding-right:14px}
   html[data-design="bento"] #grid > .storywrap{margin-bottom:12px}
   html[data-design="bento"] #grid > .storywrap #storyBar{margin-bottom:0}
   html[data-design="bento"] #grid .sections{gap:12px}
@@ -1938,7 +1944,7 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
 }
 /* 간격 정리(이어서): 매체 탭 박스는 안쪽 여백 14px만큼 키 230px, 카드 사이 8px에 맞춘 카드 폭 */
 @media (min-width:861px){
-  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) 230px auto !important}
+  html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) 230px auto !important}
   html[data-design="bento"] #grid > .sections > .sec > .sec-head{margin-bottom:8px !important}
   html[data-design="bento"] #grid .media-grid .row-cards > .card,html[data-design="bento"] #grid .media-grid .row-cards > .cstack{flex-basis:100cqw}
   @container (min-width:440px){
@@ -1966,3 +1972,162 @@ html[data-design="bento"] #grid:not([data-tab="people"]) .row-cards > .card:not(
 }
 html[data-design="bento"] #hbar i,html[data-design="bento"] #hbar:hover i,html[data-design="bento"] #hbar.drag i{top:2px;bottom:2px;border-radius:3px;background:rgba(125,122,118,.55)}
 html[data-design="bento"][data-theme="dark"] #hbar i,html[data-design="bento"][data-theme="dark"] #hbar:hover i,html[data-design="bento"][data-theme="dark"] #hbar.drag i{background:rgba(255,255,255,.38)}
+
+/* ---------- 커뮤니티 (js/community.js) ---------- */
+html[data-design="bento"] #communityPanel .cm-headrow{flex-wrap:wrap;row-gap:10px}
+html[data-design="bento"] #communityPanel #cmTitle{min-width:0;max-width:min(460px,60%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-design="bento"] #communityPanel .cm-back{flex:none;width:38px;height:38px;padding:0;border:0;border-radius:50%;background:var(--soft);color:var(--fg);font-size:18px;line-height:1}
+html[data-design="bento"] #communityPanel .cm-back:hover{background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-find{margin-left:auto;width:min(300px,100%);height:38px;border:0;border-radius:19px;background:var(--soft);color:var(--fg);padding:0 16px;font-size:13px;box-sizing:border-box}
+html[data-design="bento"] #communityPanel .cm-find:focus,html[data-design="bento"] #communityPanel .cm-form input:focus,html[data-design="bento"] #communityPanel .cm-form select:focus,html[data-design="bento"] #communityPanel .cm-form textarea:focus,html[data-design="bento"] #communityPanel .cm-cform input:focus{outline:2px solid var(--accent);outline-offset:-2px}
+html[data-design="bento"] #communityPanel .cm-new{flex:none;height:38px;padding:0 18px;border:0;border-radius:19px;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:13px}
+html[data-design="bento"] #communityPanel .cm-new.on{background:var(--soft);color:var(--fg)}
+html[data-design="bento"] #communityPanel .cm-cats{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+html[data-design="bento"] #communityPanel .cm-cat{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:17px;background:var(--soft);color:var(--fg);font-weight:600;font-size:13px}
+html[data-design="bento"] #communityPanel .cm-cat .n{font-size:11.5px;font-weight:600;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-cat:hover:not(.on){background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-cat.on{background:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #communityPanel .cm-cat.on .n{color:inherit;opacity:.75}
+html[data-design="bento"] #communityPanel .cm-list{display:flex;flex-direction:column;gap:8px}
+html[data-design="bento"] #communityPanel .cm-list.cm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-content:start}
+html[data-design="bento"] #communityPanel .cm-comm{display:flex;align-items:center;gap:14px;min-width:0;padding:14px 16px;margin:0;border:1px solid transparent;border-radius:20px;background:var(--soft);color:var(--fg);text-align:left}
+html[data-design="bento"] #communityPanel .cm-comm:hover{border-color:var(--line);background:var(--card)}
+html[data-design="bento"] #communityPanel .cm-comm:focus-visible,html[data-design="bento"] #communityPanel .cm-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+html[data-design="bento"] #communityPanel .cm-cface{flex:none;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--card)}
+html[data-design="bento"] #communityPanel .cm-cface .pface{width:48px;height:48px;border:0;box-shadow:none;font-size:18px}
+html[data-design="bento"] #communityPanel .cm-cface.all svg{width:48px;height:48px;display:block}
+html[data-design="bento"] #communityPanel .cm-cinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+html[data-design="bento"] #communityPanel .cm-ctop{display:flex;align-items:center;gap:6px;min-width:0}
+html[data-design="bento"] #communityPanel .cm-cname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:700}
+html[data-design="bento"] #communityPanel .cm-gtag{flex:none;padding:2px 7px;border-radius:999px;background:var(--card);color:var(--muted);font-style:normal;font-size:10.5px;font-weight:700}
+html[data-design="bento"] #communityPanel .cm-cmeta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-cplats{display:inline-flex;gap:3px}
+html[data-design="bento"] #communityPanel .cm-cplats .pg,html[data-design="bento"] #communityPanel .cm-chip .pg,html[data-design="bento"] #communityPanel .cm-link .pg{display:inline-flex;flex:none;width:14px;height:14px}
+html[data-design="bento"] #communityPanel .cm-chip .pg{width:16px;height:16px}
+html[data-design="bento"] #communityPanel .cm-cplats .pg img,html[data-design="bento"] #communityPanel .cm-chip .pg img,html[data-design="bento"] #communityPanel .cm-link .pg img{width:100%;height:100%;border-radius:4px;display:block}
+html[data-design="bento"] #communityPanel .cm-clast{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;opacity:.8}
+html[data-design="bento"] #communityPanel .cm-post{border-radius:18px;background:var(--soft)}
+html[data-design="bento"] #communityPanel .cm-post.notice{background:color-mix(in srgb,var(--accent) 9%,var(--soft))}
+html[data-design="bento"] #communityPanel .cm-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;cursor:pointer}
+html[data-design="bento"] #communityPanel .cm-head:hover{background:color-mix(in srgb,var(--line) 45%,transparent)}
+html[data-design="bento"] #communityPanel .cm-post.open .cm-head{border-radius:18px 18px 0 0}
+html[data-design="bento"] #communityPanel .cm-tag{min-width:30px;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--muted);text-align:center;font-size:11.5px;font-weight:700;white-space:nowrap}
+html[data-design="bento"] #communityPanel .cm-post.notice .cm-tag{background:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #communityPanel .cm-post.hot .cm-tag{background:color-mix(in srgb,var(--warn) 28%,var(--card));color:var(--fg)}
+html[data-design="bento"] #communityPanel .cm-ttl{display:flex;align-items:center;gap:6px;min-width:0}
+html[data-design="bento"] #communityPanel .cm-ttl .cm-chip{flex:0 4 auto;min-width:0}
+html[data-design="bento"] #communityPanel .cm-ttl b{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px;font-weight:700}
+html[data-design="bento"] #communityPanel .cm-meta,html[data-design="bento"] #communityPanel .cm-nums{font-size:12px;color:var(--muted);white-space:nowrap}
+html[data-design="bento"] #communityPanel .cm-nums{display:flex;gap:10px}
+html[data-design="bento"] #communityPanel .cm-lk.on{color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-chip{display:inline-flex;align-items:center;gap:5px;flex:none;max-width:220px;height:26px;padding:0 10px 0 6px;margin:0;border:0;border-radius:13px;background:var(--card);color:var(--fg);font-size:12px;font-weight:600}
+html[data-design="bento"] #communityPanel .cm-chip > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-design="bento"] #communityPanel .cm-chip.go{cursor:pointer}
+html[data-design="bento"] #communityPanel .cm-chip.go:hover{background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-chip.sm{height:22px;padding:0 8px 0 4px;font-size:11px}
+html[data-design="bento"] #communityPanel .cm-chip.sm .pg{width:14px;height:14px}
+html[data-design="bento"] #communityPanel .cm-chip.more{padding:0 8px;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-chip.lock{box-shadow:inset 0 0 0 1.5px var(--line)}
+html[data-design="bento"] #communityPanel .cm-sep{height:1px;margin:4px 10px;background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-open{display:flex;flex-direction:column;gap:12px;padding:4px 18px 16px}
+html[data-design="bento"] #communityPanel .cm-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}
+/* 첨부 사진: 자르지 않고 원래 비율 그대로 작은 크기로(누르면 크게 보기). 투명 배경은 그대로 비침 */
+html[data-design="bento"] #communityPanel .cm-imgs{display:flex;flex-wrap:wrap;gap:8px}
+html[data-design="bento"] #communityPanel .cm-imgs .cm-im{display:block;max-width:100%;padding:0;margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);cursor:zoom-in}
+html[data-design="bento"] #communityPanel .cm-imgs .cm-im:hover{border-color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-imgs .cm-im:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+html[data-design="bento"] #communityPanel .cm-imgs img{display:block;width:auto;height:auto;max-width:min(220px,100%);max-height:160px;object-fit:contain}
+html[data-design="bento"] #communityPanel .cm-imgs .cm-im:only-child img{max-width:min(320px,100%);max-height:240px}
+html[data-design="bento"] #communityPanel .cm-links{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+html[data-design="bento"] #communityPanel .cm-yt{position:relative;display:block;width:min(420px,100%);aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000}
+html[data-design="bento"] #communityPanel .cm-yt img{display:block;width:100%;height:100%;object-fit:cover}
+html[data-design="bento"] #communityPanel .cm-play{position:absolute;left:50%;top:50%;width:58px;height:40px;margin:-20px 0 0 -29px;border-radius:12px;background:rgba(230,30,30,.9)}
+html[data-design="bento"] #communityPanel .cm-play::after{content:"";position:absolute;left:23px;top:12px;border-style:solid;border-width:8px 0 8px 14px;border-color:transparent transparent transparent #fff}
+html[data-design="bento"] #communityPanel .cm-ytl{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:600}
+html[data-design="bento"] #communityPanel .cm-link{display:flex;align-items:center;gap:8px;min-width:0;max-width:min(520px,100%);padding:10px 14px;border-radius:14px;background:var(--card);color:var(--fg);text-decoration:none;box-sizing:border-box}
+html[data-design="bento"] #communityPanel .cm-link:hover{background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-link b{flex:none;font-size:13px}
+html[data-design="bento"] #communityPanel .cm-link span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-tags{display:flex;flex-wrap:wrap;gap:6px}
+html[data-design="bento"] #communityPanel .cm-acts{display:flex;align-items:center;gap:8px}
+html[data-design="bento"] #communityPanel .cm-like,html[data-design="bento"] #communityPanel .cm-del{height:34px;padding:0 14px;margin:0;border:0;border-radius:17px;background:var(--card);color:var(--fg);font-size:13px;font-weight:600}
+html[data-design="bento"] #communityPanel .cm-like.on{color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-like:hover:not(:disabled){background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-del{margin-left:auto;color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-del:hover{background:var(--danger);color:#fff}
+html[data-design="bento"] #communityPanel .cm-cmts{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+html[data-design="bento"] #communityPanel .cm-cmt{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 8px;font-size:13px;line-height:1.55}
+html[data-design="bento"] #communityPanel .cm-cmt b{font-weight:700}
+html[data-design="bento"] #communityPanel .cm-cbody{overflow-wrap:anywhere}
+html[data-design="bento"] #communityPanel .cm-cmt em{font-style:normal;font-size:11.5px;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-cmt.gone .cm-cbody{color:var(--muted);font-style:italic}
+html[data-design="bento"] #communityPanel .cm-rbtn{height:auto;padding:0 2px;margin:0;border:0;background:none;color:var(--muted);font-size:11.5px}
+html[data-design="bento"] #communityPanel .cm-rbtn:hover{color:var(--fg);text-decoration:underline}
+html[data-design="bento"] #communityPanel .cm-rbtn.danger:hover{color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-replies{display:flex;flex-direction:column;gap:6px;margin:6px 0 0 6px;padding-left:12px;border-left:2px solid var(--line)}
+html[data-design="bento"] #communityPanel .cm-cform{display:flex;gap:6px}
+html[data-design="bento"] #communityPanel .cm-cform input{flex:1;min-width:0;height:38px;padding:0 14px;border:0;border-radius:19px;background:var(--card);color:var(--fg);font-size:13px}
+html[data-design="bento"] #communityPanel .cm-cform button{flex:none;height:38px;padding:0 16px;margin:0;border:0;border-radius:19px;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700}
+html[data-design="bento"] #communityPanel .cm-cform .cm-x{background:var(--card);color:var(--fg)}
+html[data-design="bento"] #communityPanel .cm-more{align-self:center;height:38px;padding:0 22px;margin:6px 0 0;border:0;border-radius:19px;background:var(--soft);color:var(--fg);font-weight:600}
+html[data-design="bento"] #communityPanel .cm-more:hover{background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-empty{margin:24px 4px;color:var(--muted);font-size:13.5px;line-height:1.6}
+html[data-design="bento"] #communityPanel .cm-empty.sm{margin:0;font-size:12.5px}
+html[data-design="bento"] #communityPanel .cm-write{margin:0 0 14px}
+html[data-design="bento"] #communityPanel .cm-form{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:20px;background:var(--soft)}
+html[data-design="bento"] #communityPanel .cm-frow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+html[data-design="bento"] #communityPanel .cm-frow.end{justify-content:flex-end}
+html[data-design="bento"] #communityPanel .cm-form input[type=text],html[data-design="bento"] #communityPanel .cm-form select,html[data-design="bento"] #communityPanel .cm-form textarea{height:42px;padding:0 14px;margin:0;border:0;border-radius:14px;background:var(--card);color:var(--fg);font-size:13.5px;box-sizing:border-box}
+html[data-design="bento"] #communityPanel .cm-form textarea{height:auto;min-height:130px;padding:12px 14px;resize:vertical;line-height:1.6}
+html[data-design="bento"] #communityPanel #cmWTitle{flex:1;min-width:160px}
+html[data-design="bento"] #communityPanel .cm-form button{height:38px;padding:0 16px;margin:0;border:0;border-radius:19px;background:var(--card);color:var(--fg);font-size:13px;font-weight:600}
+html[data-design="bento"] #communityPanel .cm-form button.primary{background:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #communityPanel .cm-form .error{margin:0;font-size:12.5px;color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-thumbs{display:flex;flex-wrap:wrap;gap:8px}
+html[data-design="bento"] #communityPanel .cm-th{position:relative}
+html[data-design="bento"] #communityPanel .cm-th img{display:block;width:56px;height:56px;border-radius:10px;object-fit:cover}
+html[data-design="bento"] #communityPanel .cm-form .cm-th .cm-tx{position:absolute;top:-6px;right:-6px;width:20px;height:20px;padding:0;border-radius:50%;background:var(--accent);color:var(--accent-fg);font-size:13px;line-height:1}
+html[data-design="bento"] #communityPanel .cm-form .cm-chip .cm-tx{width:18px;height:18px;padding:0;margin-left:2px;border-radius:50%;background:none;color:var(--muted);font-size:15px;line-height:1}
+html[data-design="bento"] #communityPanel .cm-form .cm-chip .cm-tx:hover{color:var(--danger)}
+html[data-design="bento"] #communityPanel .cm-wtags{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+html[data-design="bento"] #communityPanel .cm-wl{margin-right:2px;font-size:12.5px;font-weight:700}
+html[data-design="bento"] #communityPanel .cm-wnone{font-size:12px;color:var(--muted)}
+html[data-design="bento"] #communityPanel .cm-form .cm-wtags select{height:30px;padding:0 10px;border-radius:15px;font-size:12px}
+/* 왼쪽 레일의 커뮤니티 버튼 아이콘(말풍선) */
+html[data-design="bento"] #navCommunity{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M5 5h14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 17h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 5z'/%3E%3C/svg%3E")}
+/* 커뮤니티 사진 크게 보기(글 보기 창과 같은 틀). ‹ › 와 ← →로 넘기고 Esc·×·바깥을 누르면 닫힘 */
+html:has(.cm-lb),body:has(.cm-lb){overflow:hidden}
+.cm-lb .viewer.cm-lbv{width:auto;max-width:100%;min-width:min(440px,100%)}
+.cm-lb .cm-lbv .vh{gap:10px}
+.cm-lb .cm-lbv .vh b{min-width:120px}
+.cm-lb .cm-lbv .vb{align-items:center;background:var(--bg)}
+.cm-lb .cm-lbimg{display:block;max-width:min(1200px,calc(100vw - 34px));max-height:calc(100vh - 34px - 56px);max-height:calc(100dvh - 34px - 56px);object-fit:contain}
+.cm-lb .cm-lbprev{left:max(8px,calc(50% - 650px))}
+.cm-lb .cm-lbnext{right:max(8px,calc(50% - 650px))}
+.cm-lb .vnav[hidden]{display:none}
+html[data-design="bento"] .cm-lb .viewer{border-radius:20px}
+/* 홈 그룹 머리줄의 커뮤니티(말풍선) 버튼: ☆ 바로 왼쪽 */
+html[data-design="bento"] .pcomm{display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;padding:0;margin:0;border:0;border-radius:50%;background:none;color:var(--muted);cursor:pointer}
+html[data-design="bento"] .pcomm svg{width:21px;height:21px}
+html[data-design="bento"] .pcomm:hover{color:var(--fg);background:var(--soft)}
+html[data-design="bento"] #grid .sec-head .pcomm{order:98;margin-left:auto}
+html[data-design="bento"] #grid .sec-head:has(.pcomm) .pstar{margin-left:0}
+/* 커뮤니티에서는 수집 버튼 묶음(매체 아이콘·지금 최신화)을 숨김(글 수집과 상관없는 화면) */
+html[data-design="bento"] body:has(#communityPanel:not([hidden])) header .toolbar{display:none !important}
+/* 넓은 화면: 추적 계정 관리처럼 패널은 고정하고 글 목록만 안에서 스크롤(큰 스크롤바 대신 목록의 얇은 스크롤바) */
+@media (min-width:861px){
+  html[data-design="bento"] body:has(#communityPanel:not([hidden])) #vbar{display:none !important}
+  html[data-design="bento"] #communityPanel:not([hidden]){display:flex;flex-direction:column;overflow:hidden;padding-right:34px;padding-bottom:20px}
+  html[data-design="bento"] #communityPanel .cm-write{flex:none;max-height:60%;overflow-y:auto;scrollbar-width:thin}
+  html[data-design="bento"] #communityPanel .cm-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:2px}
+}
+@media (max-width:860px){
+  html[data-design="bento"] #communityPanel .cm-find{order:5;width:100%;margin-left:0}
+  html[data-design="bento"] #communityPanel .cm-new{margin-left:auto}
+  html[data-design="bento"] #communityPanel .cm-head{grid-template-columns:auto minmax(0,1fr);row-gap:4px;padding:12px 14px}
+  html[data-design="bento"] #communityPanel .cm-meta{grid-column:2;overflow:hidden;text-overflow:ellipsis}
+  html[data-design="bento"] #communityPanel .cm-nums{grid-column:2}
+  html[data-design="bento"] #communityPanel .cm-open{padding:4px 14px 14px}
+  html[data-design="bento"] #communityPanel .cm-list.cm-grid{grid-template-columns:minmax(0,1fr)}
+  html[data-design="bento"] #communityPanel .cm-ttl .cm-chip{display:none}
+}

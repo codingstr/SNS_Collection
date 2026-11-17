@@ -31,23 +31,27 @@ function sessionLost(used) {
   return er;
 }
 
-// 화면 전환: 홈(글 모아보기) ↔ 추적 계정 관리 ↔ 관리(관리자만) — 관리 화면들은 따로 분리된 화면
+// 화면 전환: 홈(글 모아보기) ↔ 커뮤니티 ↔ 추적 계정 관리 ↔ 관리(관리자만) — 홈 말고는 따로 분리된 화면
 let page = "home";
 function applyPage() {
-  if (!connected && page === "manage") page = "home";
+  if (!connected && (page === "manage" || page === "community")) page = "home";
   if ((!connected || !isAdmin) && page === "admin") page = "home";
-  const manage = connected && page === "manage", adminOn = page === "admin";
-  const wasAdmin = !$("adminPanel").hidden;
+  const manage = connected && page === "manage", adminOn = page === "admin", comm = connected && page === "community";
+  const wasAdmin = !$("adminPanel").hidden, wasComm = !$("communityPanel").hidden;
   $("trackPanel").hidden = !manage;
   $("adminPanel").hidden = !adminOn;
-  document.querySelector(".layout main").hidden = manage || adminOn;
+  $("communityPanel").hidden = !comm;
+  document.querySelector(".layout main").hidden = manage || adminOn || comm;
   $("navManage").hidden = !connected;
+  $("navCommunity").hidden = !connected;
   $("navAdmin").hidden = !(connected && isAdmin);
-  $("navHome").classList.toggle("on", !manage && !adminOn && page !== "fav");
+  $("navHome").classList.toggle("on", !manage && !adminOn && !comm && page !== "fav");
+  $("navCommunity").classList.toggle("on", comm);
   $("navFav").classList.toggle("on", page === "fav");
   $("navManage").classList.toggle("on", manage);
   $("navAdmin").classList.toggle("on", adminOn);
   if (adminOn !== wasAdmin && typeof adminShown === "function") adminShown(adminOn);
+  if (comm !== wasComm && typeof cmShown === "function") cmShown(comm);
 }
 function setConn(ok) {
   connected = ok;

@@ -10,8 +10,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=424">
-<link rel="stylesheet" href="bento.css?v=424">
+<link rel="stylesheet" href="style.css?v=425">
+<link rel="stylesheet" href="bento.css?v=425">
 
 <!-- 로고(꼬리를 문 뱀). 한 번만 정의하고 브랜드 버튼·로그인 창·검색 매체 메뉴에서 <use href="#logo">로 씁니다.
      색은 --ouro-bg(바탕)·--ouro-fg(뱀)로 바꿀 수 있고, 없으면 테마의 --accent·--accent-fg를 씁니다. -->
@@ -39,6 +39,7 @@
   <nav class="navbtns" aria-label="화면 이동">
     <button id="navHome" class="navbtn on" type="button">홈</button>
     <button id="navFav" class="navbtn" type="button" title="즐겨찾기한 사람만 보기">즐겨찾기</button>
+    <button id="navCommunity" class="navbtn" type="button" title="모든 사용자가 같이 보는 게시판" hidden>커뮤니티</button>
     <button id="navManage" class="navbtn" type="button" hidden>추적 계정 관리</button>
     <button id="navAdmin" class="navbtn" type="button" title="관리(관리자 전용)" aria-label="관리" hidden>관리</button>
   </nav>
@@ -93,7 +94,7 @@
     </form>
     <div class="amsec">
       <b>계정 삭제</b>
-      <p class="hint">이 아이디와 서버에 저장된 추적 계정·설정·본 글 기록이 지워집니다. 되돌릴 수 없습니다.</p>
+      <p class="hint">이 아이디와 서버에 저장된 추적 계정·설정·본 글 기록, 커뮤니티에 쓴 글·댓글이 지워집니다. 되돌릴 수 없습니다.</p>
       <input id="delPw" type="password" placeholder="비밀번호 확인" aria-label="비밀번호 확인" autocomplete="current-password">
       <button id="delBtn" class="danger" type="button">계정 삭제</button>
       <p id="delMsg" class="hint" hidden></p>
@@ -196,6 +197,18 @@
       </div>
     </section>
 
+    <section class="panel" id="communityPanel" hidden>
+      <div class="mg-head cm-headrow">
+        <button type="button" id="cmBack" class="cm-back" aria-label="커뮤니티 목록으로" title="커뮤니티 목록으로" hidden>←</button>
+        <h2 id="cmTitle">커뮤니티</h2><span id="cmCount" class="mg-count"></span>
+        <input id="cmFind" class="cm-find" type="search" placeholder="커뮤니티 찾기" aria-label="커뮤니티 찾기" autocomplete="off">
+        <button type="button" id="cmNew" class="cm-new" hidden>글쓰기</button>
+      </div>
+      <div id="cmCats" class="cm-cats" role="tablist" aria-label="분류" hidden></div>
+      <div id="cmWrite" class="cm-write" hidden></div>
+      <div id="cmList" class="cm-list"></div>
+    </section>
+
     <section class="panel" id="adminPanel" hidden>
       <div class="mg-head"><h2>관리</h2><span id="adCount" class="mg-count"></span>
         <div class="ad-tabs" role="tablist" aria-label="관리 화면">
@@ -236,14 +249,15 @@
   </main>
 </div>
 
-<script src="js/core.js?v=424"></script>
-<script src="js/bridge.js?v=424"></script>
-<script src="js/store.js?v=424"></script>
-<script src="js/list.js?v=424"></script>
-<script src="js/stories.js?v=424"></script>
-<script src="js/tracking.js?v=424"></script>
-<script src="js/manage.js?v=424"></script>
-<script src="js/admin.js?v=424"></script>
-<script src="js/account.js?v=424"></script>
-<script src="js/ui.js?v=424"></script>
+<script src="js/core.js?v=425"></script>
+<script src="js/bridge.js?v=425"></script>
+<script src="js/store.js?v=425"></script>
+<script src="js/list.js?v=425"></script>
+<script src="js/stories.js?v=425"></script>
+<script src="js/tracking.js?v=425"></script>
+<script src="js/manage.js?v=425"></script>
+<script src="js/admin.js?v=425"></script>
+<script src="js/community.js?v=425"></script>
+<script src="js/account.js?v=425"></script>
+<script src="js/ui.js?v=425"></script>
 

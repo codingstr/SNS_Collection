@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import admin
 import api_call
 import auth
+import community
 import sync
 from collector import collector
 from db import init_db
@@ -48,6 +49,7 @@ app.include_router(auth.router)      # /api/auth  로그인·가입·비밀번�
 app.include_router(api_call.router)  # /api/call  글 목록·추적 계정·수집 요청
 app.include_router(sync.router)      # /api/sync  본 글 기록
 app.include_router(admin.router)     # /api/admin 관리자 전용(관리 탭)
+app.include_router(community.router) # /api/community 커뮤니티(글·댓글·좋아요·이미지)
 
 
 # ---------- 웹 화면 ----------

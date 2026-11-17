@@ -98,6 +98,49 @@ CREATE TABLE IF NOT EXISTS page_log (
   error       TEXT NOT NULL DEFAULT '',    -- 실패했으면 그 이유
   ok_at       INTEGER NOT NULL DEFAULT 0   -- 마지막으로 성공한 시각(밀리초)
 );
+-- 커뮤니티(community.py). 모든 사용자가 같이 봅니다. 사용자를 지우면 그 사람의 글·댓글·좋아요도 지워집니다.
+CREATE TABLE IF NOT EXISTS cm_posts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  author      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  cat         TEXT NOT NULL,               -- 질문 / 팁 / 건의 / 잡담 / 공지(관리자만)
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  tags        TEXT NOT NULL DEFAULT '[]',  -- 태그한 SNS 계정(JSON: [{id, platform, label}]). 거르기는 cm_tags로
+  links       TEXT NOT NULL DEFAULT '[]',  -- 링크 주소(JSON)
+  imgs        TEXT NOT NULL DEFAULT '[]',  -- 첨부 이미지 열쇠(JSON). 내용은 cm_images
+  created_at  INTEGER NOT NULL             -- 밀리초
+);
+-- 글 ↔ 태그한 계정(예: x:handle). 그룹 커뮤니티는 그 그룹 계정 중 하나라도 태그된 글을 보여 줍니다.
+CREATE TABLE IF NOT EXISTS cm_tags (
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  tag         TEXT NOT NULL,
+  PRIMARY KEY (post_id, tag)
+);
+CREATE INDEX IF NOT EXISTS cm_tags_tag ON cm_tags(tag);
+-- 댓글. parent_id가 있으면 답글(한 단계만). 답글이 달린 댓글을 지우면 내용만 지우고 자리는 남깁니다(deleted).
+CREATE TABLE IF NOT EXISTS cm_comments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  parent_id   INTEGER REFERENCES cm_comments(id) ON DELETE CASCADE,
+  author      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body        TEXT NOT NULL,
+  deleted     INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_comments_post ON cm_comments(post_id);
+CREATE TABLE IF NOT EXISTS cm_likes (
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, user_id)
+);
+-- 글에 붙인 이미지(브라우저가 줄여서 보낸 JPEG 등). 주소는 /api/community/img/열쇠
+CREATE TABLE IF NOT EXISTS cm_images (
+  key         TEXT PRIMARY KEY,            -- 추측할 수 없는 임의 문자열
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  mime        TEXT NOT NULL,
+  data        BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_images_post ON cm_images(post_id);
 """
 SCHEMA_VERSION = 2   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
 

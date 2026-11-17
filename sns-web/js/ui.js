@@ -379,7 +379,7 @@ renderAll();
   // Esc로 검색어 지우기: 닫을 것(글 보기 창·대화 상자·메뉴·계정 찾기 결과 등)이 없을 때만 동작합니다.
   // 그런 것이 열려 있으면 이번 Esc는 그것을 닫는 데 쓰고, 다음 Esc에 검색어를 지웁니다. 검색창에 커서가 있으면 지운 뒤 검색창에서 나옵니다.
   // 다른 입력칸(그룹 이름 등)에서 누른 Esc는 건드리지 않습니다. 이 처리는 다른 Esc 처리보다 먼저 돌아야 열린 것을 정확히 봅니다(capture).
-  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #acctMenu:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden])";
+  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #acctMenu:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden]), .cm-lb";
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || e.isComposing) return;
     const a = document.activeElement, inQ = a === q;
@@ -423,7 +423,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   $("setBack").addEventListener("click", () => setModal(false));
   $("setClose").addEventListener("click", () => setModal(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("setPanel").hidden) setModal(false); });
-  ["navHome", "navFav", "navManage", "navAdmin", "navHelp"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));   // 사용 설명: 설정 화면을 닫고 안내를 엶
+  ["navHome", "navFav", "navCommunity", "navManage", "navAdmin", "navHelp"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));   // 사용 설명: 설정 화면을 닫고 안내를 엶
   place();
 })();
 
@@ -621,6 +621,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
     { sel: ["#brand"], t: "로고", d: "어느 화면에서든 로고를 누르면 처음 홈 화면(전체 글)으로 돌아옵니다." },
     { sel: ["#navHome"], t: "홈", d: "추적 중인 모든 계정의 글을 한꺼번에 보는 기본 화면이에요." },
     { sel: ["#navFav"], t: "즐겨찾기", d: "☆를 눌러 둔 사람의 글만 모아서 봅니다." },
+    { sel: ["#navCommunity"], t: "커뮤니티", d: "모든 사용자가 같이 쓰는 게시판이에요. 그룹마다 커뮤니티가 있고, 글에 계정을 태그하면 그 계정을 추적하는 사람들의 그룹 커뮤니티에 함께 보입니다. 홈의 그룹 이름 옆 말풍선 버튼으로도 갈 수 있어요." },
     { sel: ["#navManage"], t: "추적 계정 관리", d: "그룹별 카드에서 계정을 골라 가져올 기간·그룹을 정하거나, 숨기거나 제거하는 화면이에요. 그룹 이름을 누르면 그 그룹의 계정이 한꺼번에 골라져요. 숨긴 그룹은 홈에 안 나오고 글도 모으지 않아요. 계정 추가는 위쪽 검색창에서 해요." },
     { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "눌러서 밝은 화면과 어두운 화면을 바꿀 수 있어요." },
     { sel: ["#connAcct"], t: "계정 메뉴", d: "프로필 이미지 설정, 계정 관리, 사용 설명 다시 보기(지금 보는 이 안내), 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },

@@ -52,7 +52,7 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v424";
+const WEB_VERSION = "v425";
 const TEAM_NAME = "WebMonster";
 // 로고 그림(index.html의 <symbol id="logo">). 검색 매체 메뉴의 '전체'에 씁니다.
 const LOGO_SVG = '<svg viewBox="0 0 128 128" aria-hidden="true"><use href="#logo"/></svg>';
