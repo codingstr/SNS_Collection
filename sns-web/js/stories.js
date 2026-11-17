@@ -17,7 +17,7 @@ function storyData() {
     if (!it.via || !inPeriod(it)) continue;
     const t = publishedMs(it);
     viasOf(it).forEach((v) => {   // 공동 게시물은 이어진 계정마다(따로 숨긴 계정은 빼고)
-      if (hid.has(v)) return;
+      if (hid.has(v) || !viaShows(v, it)) return;
       let e = byVia.get(v);
       if (!e) byVia.set(v, (e = { unread: [], latest: 0, plats: new Set() }));
       e.plats.add(tabOf(it.source));
@@ -128,7 +128,7 @@ function storyClick(p) {
   storyTap = { name, timer: setTimeout(() => { storyTap = null; toggleStory(name); }, STORY_TAP_MS) };
 }
 // 이 그룹의 글인지(따로 숨긴 계정의 글은 빼고). 안 읽은 글 이어 보기·모두 읽음에 씁니다.
-const groupHas = (p, it) => { const hid = hiddenVias(); return viasOf(it).some((v) => p.ids.has(v) && !hid.has(v)); };
+const groupHas = (p, it) => { const hid = hiddenVias(); return viasOf(it).some((v) => p.ids.has(v) && !hid.has(v) && viaShows(v, it)); };
 // 그룹의 안 읽은 글을 오래된 것부터 차례로 엽니다(인스타그램 스토리처럼). 글 보기 창의 이전/다음으로 넘깁니다.
 function playUnread(p) {
   const label = personLabel(p);

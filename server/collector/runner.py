@@ -567,7 +567,8 @@ def reset_running():
 
 # ---------- 방문할 주소 ----------
 def page_urls(t: dict) -> list:
-    """방문할 주소. 유튜브 채널은 영상·쇼츠·게시물 탭 세 곳입니다(쇼츠는 영상 탭에 나오지 않아 따로 모음)."""
+    """방문할 주소. 유튜브 채널은 영상·쇼츠·게시물 탭 세 곳입니다(쇼츠는 영상 탭에 나오지 않아 따로 모음).
+    사용자가 그 계정에서 끈 종류(ytOff: video·short·post)의 탭은 방문하지 않습니다."""
     p = t.get("platform")
     if t.get("kind") == "feed":
         return []  # "내 피드"는 지원하지 않습니다(서버 테스트 계정의 피드가 되기 때문)
@@ -578,7 +579,9 @@ def page_urls(t: dict) -> list:
     h = quote(handle, safe="")
     if p == "youtube":
         base = ("https://www.youtube.com/@" + h) if handle else ("https://www.youtube.com/channel/" + cid) if CHANNEL_OK.match(cid) else legacy
-        return [base + "/videos", base + "/shorts", base + "/posts"] if base else []
+        off = t.get("ytOff") if isinstance(t.get("ytOff"), list) else []
+        tabs = [("video", "/videos"), ("short", "/shorts"), ("post", "/posts")]
+        return [base + path for k, path in tabs if k not in off] if base else []
     if p == "x":
         return ["https://x.com/" + h]
     if p == "instagram":

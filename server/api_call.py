@@ -28,6 +28,7 @@ router = APIRouter()
 log = logging.getLogger("api_call")
 
 PLATFORMS = ("youtube", "x", "instagram")
+YT_KINDS = ("video", "short", "post")   # 유튜브 채널의 일반 영상 / 쇼츠 / 게시물 탭
 MAX_TRACKED = 30
 MAX_ITEMS = 5000
 DAYS_OK = (7, 14, 30, 60)
@@ -90,6 +91,11 @@ def clean_tracked(lst) -> list:
             c["days"] = t["days"]
         if t.get("hidden") is True:
             c["hidden"] = True   # 홈 화면·그룹 줄에서 숨김(표시만 숨기고 수집은 계속)
+        if t["platform"] == "youtube" and isinstance(t.get("ytOff"), list):
+            # 유튜브 채널에서 끈 종류(일반 영상 video·쇼츠 short·게시물 post): 홈에 안 보이고 그 탭은 수집하지 않음
+            off = [k for k in YT_KINDS if k in t["ytOff"]]
+            if off:
+                c["ytOff"] = off
         out.append(c)
     return out
 

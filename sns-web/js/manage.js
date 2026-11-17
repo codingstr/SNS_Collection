@@ -58,7 +58,16 @@ function accChip(t, { group, person } = {}) {
   b.dataset.k = "a:" + t.id;
   b.addEventListener("click", () => toggleIds([t.id]));
   const name = accName(t), tools = [];
-  if (group) {
+  if (t.platform === "youtube") {
+    // 유튜브 계정의 눈 버튼은 일반 영상·쇼츠·게시물을 따로 정하는 창을 엽니다(ytHideBox)
+    const part = !t.hidden && t.ytOff && t.ytOff.length;
+    const lbl = name + " 유튜브 숨김 설정" + (t.hidden ? " (숨김)" : part ? " (" + t.ytOff.map((k) => YT_KIND_LABEL[k]).join("·") + " 숨김)" : "");
+    const eye = iconBtn(t.hidden ? "hidden" : "shown", lbl, "ey:" + t.id, () => ytHideBox(t));
+    if (part) eye.classList.add("mg-ib-part");
+    tools.push(eye);
+    if (group) tools.push(iconBtn("out", name + " 계정을 ‘" + group + "’ 그룹에서 빼기", "x:" + t.id, () => removeFromGroup(t)));
+    else if (person) { tools.push(favBtn(person.name, name)); tools.push(iconBtn("out", name + " 계정을 추적 목록에서 제거", "d:" + t.id, () => askRemoveOne(t))); }
+  } else if (group) {
     tools.push(iconBtn(t.hidden ? "hidden" : "shown", name + (t.hidden ? " 다시 보이게 하기" : " 숨기기(이 계정만)"), "ea:" + t.id, () => setAcctHidden(t, !t.hidden)));
     tools.push(iconBtn("out", name + " 계정을 ‘" + group + "’ 그룹에서 빼기", "x:" + t.id, () => removeFromGroup(t)));
   } else if (person) {
@@ -79,6 +88,65 @@ async function setAcctHidden(t, hide) {
     if (hide) toast(accName(t) + " 계정을 숨겼습니다. 홈에 나오지 않고, 숨긴 동안은 글도 모으지 않습니다.");
     else { toast(accName(t) + " 계정을 다시 보이게 했습니다 · 숨긴 동안 못 모은 글을 모으는 중입니다."); await call("checkNow", { only: t.id }).catch(() => {}); }
   } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
+}
+// 유튜브 계정 숨김 설정 창: 일반 영상·쇼츠·게시물을 따로 켜고 끕니다.
+// 끈 종류는 홈에 나오지 않고 서버도 그 탭을 모으지 않습니다(추적 계정의 ytOff). 셋 다 끄면 계정을 숨긴 것과 같습니다(hidden).
+function ytHideBox(t) {
+  if (document.querySelector(".modal-back.ythide")) return;
+  const prev = document.activeElement;
+  const was = new Set(t.hidden ? ["video", "short", "post"] : t.ytOff || []);
+  const KINDS = [["video", "일반 영상", "채널의 동영상 탭"], ["short", "쇼츠", "세로 짧은 영상"], ["post", "게시물", "커뮤니티 게시물(사진·글·투표)"]];
+  const boxes = {};
+  const rows = KINDS.map(([k, label, desc]) => {
+    const cb = el("input", { type: "checkbox", role: "switch", "aria-label": label + " 보이기·수집" });
+    cb.checked = !was.has(k); boxes[k] = cb;
+    return el("label", { class: "yh-row" }, [el("span", { class: "yh-t" }, [el("b", { text: label }), el("small", { text: desc })]), cb]);
+  });
+  const note = el("p", { class: "hint yh-note" });
+  const sync = () => {
+    const n = KINDS.filter(([k]) => boxes[k].checked).length;
+    note.textContent = n ? "켠 종류만 홈에 보이고 서버가 모읍니다. 끈 종류는 숨기고 모으지 않습니다." : "모두 끄면 이 계정을 숨긴 것과 같습니다(홈에 안 나오고 글도 모으지 않음).";
+  };
+  Object.values(boxes).forEach((cb) => cb.addEventListener("change", sync));
+  sync();
+  const x = el("button", { type: "button", class: "x", text: "×", "aria-label": "닫기" });
+  const no = el("button", { type: "button", text: "취소" });
+  const ok = el("button", { type: "button", class: "primary", text: "저장" });
+  const box = el("div", { class: "modal" }, [x, el("h2", { text: accName(t) + " 숨김 설정" }), el("p", { class: "hint", text: "유튜브 채널에서 볼 종류를 고르세요." }), el("div", { class: "yh-rows" }, rows), note, el("div", { class: "foot" }, [no, ok])]);
+  const back = el("div", { class: "modal-back ythide", role: "dialog", "aria-modal": "true", "aria-label": accName(t) + " 숨김 설정" }, [box]);
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); if (prev && prev.isConnected && prev.focus) prev.focus({ preventScroll: true }); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  x.addEventListener("click", close); no.addEventListener("click", close);
+  back.addEventListener("click", (e) => { if (e.target === back) close(); });
+  ok.addEventListener("click", async () => {
+    const off = KINDS.map(([k]) => k).filter((k) => !boxes[k].checked);
+    const hide = off.length === KINDS.length;
+    close();
+    const cur = trackedOf(t.id);
+    if (!cur) return;
+    const now = new Set(cur.hidden ? KINDS.map(([k]) => k) : cur.ytOff || []);
+    if (off.length === now.size && off.every((k) => now.has(k))) return;   // 바뀐 것 없음
+    const turnedOn = [...now].filter((k) => !off.includes(k));
+    const before = tracked;
+    tracked = tracked.map((y) => {
+      if (y.id !== t.id) return y;
+      const c = { ...y };
+      delete c.ytOff;
+      if (hide) c.hidden = true; else { delete c.hidden; if (off.length) c.ytOff = off; }
+      return c;
+    });
+    renderTracked(); renderList();
+    try {
+      await saveTracked();
+      const name = accName(t);
+      if (hide) toast(name + " 계정을 숨겼습니다. 홈에 나오지 않고, 숨긴 동안은 글도 모으지 않습니다.");
+      else toast(name + ": " + (off.length ? off.map((k) => YT_KIND_LABEL[k]).join("·") + "은(는) 숨기고 모으지 않습니다." : "모든 종류를 보이고 모읍니다.") + (turnedOn.length ? " 다시 켠 종류를 모으는 중입니다." : ""));
+      if (turnedOn.length && !hide) await call("checkNow", { only: t.id }).catch(() => {});
+    } catch (e) { tracked = before; renderTracked(); renderList(); showErr(e); }
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(back);
+  ok.focus();
 }
 // 계정 하나를 그룹에서 뺍니다(추적은 계속, '그룹화하지 않은 계정'으로 옮겨 감).
 async function removeFromGroup(t) {

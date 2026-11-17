@@ -17,6 +17,11 @@ function trackedOf(id) {
 }
 // 글이 이어진 이 사용자의 모든 추적 계정. 인스타 공동 게시물처럼 한 글이 두 계정에 올라오면 둘 다(서버의 vias). 예전 형식은 via 하나.
 const viasOf = (it) => (it.vias && it.vias.length ? it.vias : it.via ? [it.via] : []);
+// 유튜브 글의 종류: video(일반 영상) / short(쇼츠) / post(게시물). 다른 매체는 ""
+const ytKind = (it) => (it.source === "youtube-post" ? "post" : it.source === "youtube-video" ? (/\/shorts\//.test(it.url || "") ? "short" : "video") : "");
+const YT_KIND_LABEL = { video: "일반 영상", short: "쇼츠", post: "게시물" };
+// 이 계정(v)으로 이 글을 보여 줄지: 계정에서 끈 유튜브 종류(추적 계정의 ytOff)의 글은 뺍니다(추적 계정 관리의 유튜브 숨김 설정)
+const viaShows = (v, it) => { const t = trackedOf(v); return !(t && t.ytOff && t.ytOff.length && t.ytOff.includes(ytKind(it))); };
 // 계정별 기간이 있으면 그 계정의 글은 그 기간으로, 없으면 맨 위 기간으로 거릅니다.
 const inPeriod = (it) => {
   const t = it.via ? trackedOf(it.via) : null;
@@ -552,7 +557,7 @@ function selectedVias() {
 // 홈에 보일 글: 기간 안 + 숨긴 그룹 제외 + 고른 그룹만(고른 게 있으면)
 function homeItems() {
   const hid = hiddenVias(), sel = selectedVias();
-  return items.filter((it) => inPeriod(it) && viasOf(it).some((v) => !hid.has(v) && (!sel || sel.has(v))));
+  return items.filter((it) => inPeriod(it) && viasOf(it).some((v) => !hid.has(v) && (!sel || sel.has(v)) && viaShows(v, it)));
 }
 // 홈에 보일 추적 계정(매체 탭의 계정 목록·그룹 줄에 씀)
 function homeAccounts() {
