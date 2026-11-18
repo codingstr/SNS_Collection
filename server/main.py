@@ -38,6 +38,18 @@ app = FastAPI(title="SNS Collector", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # 응답 압축: ngrok 무료 데이터 한도(월 1GB) 절약
 
 
+@app.middleware("http")
+async def html_no_cache(request, call_next):
+    """화면 뼈대(index.html)는 브라우저가 열 때마다 바뀌었는지 서버에 확인하게 합니다(안 바뀌었으면 304라 가볍습니다).
+    캐시 지시가 없으면 브라우저가 예전 index.html을 한동안 그대로 써서, 새 JS와 짝이 안 맞아 화면이 비는 일이 생깁니다.
+    JS·CSS는 index.html이 ?v=버전을 붙여 부르므로, 뼈대만 새것이면 새 파일을 받습니다."""
+    res = await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/") and (path.endswith("/") or path.endswith(".html")):
+        res.headers["Cache-Control"] = "no-cache"
+    return res
+
+
 # ---------- API ----------
 @app.get("/api/health")
 def health():

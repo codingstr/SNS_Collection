@@ -52,7 +52,15 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v431";
+const WEB_VERSION = "v432";
+// 브라우저가 예전 index.html(예전 ?v=)을 쓰고 있으면 화면 뼈대와 새 JS가 짝이 안 맞아 일부 화면이 빕니다.
+// 이 파일이 예전 버전 주소로 불렸으면 한 번만 새로고침해서 새 index.html을 받습니다(같은 버전으로는 다시 하지 않음).
+(() => {
+  const s = document.currentScript;
+  if (!s || !s.src || new URL(s.src, location.href).searchParams.get("v") === WEB_VERSION.slice(1)) return;
+  try { if (sessionStorage.getItem("snsReloadFor") === WEB_VERSION) return; sessionStorage.setItem("snsReloadFor", WEB_VERSION); } catch (e) { return; }
+  location.reload();
+})();
 const TEAM_NAME = "WebMonster";
 // 로고 그림(index.html의 <symbol id="logo">). 검색 매체 메뉴의 '전체'에 씁니다.
 const LOGO_SVG = '<svg viewBox="0 0 128 128" aria-hidden="true"><use href="#logo"/></svg>';
