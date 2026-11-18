@@ -249,7 +249,7 @@
             },
           });
           if (api) {
-            diag = { why: (stoppedKnown ? "이미 모은 글 도달(데이터 요청)" : api.why) + " · 요청 " + api.pages + "회", scrolls: api.pages, api: true };
+            diag = { why: (stoppedKnown ? "이미 모은 글 도달(데이터 요청)" : api.why) + " · 요청 " + api.pages + "회", scrolls: api.pages, api: true, channelId: api.channelId || "" };
             return;
           }
         }
@@ -329,7 +329,7 @@
         diag = { why: why + " · 위치 " + Math.round((document.scrollingElement || document.documentElement).scrollTop || 0) + "px", scrolls };
       } finally {
         try {
-          chrome.runtime.sendMessage({ type: "autoDone", found, sent: sentCount, oldest, vis: diag.api ? "visible" : document.visibilityState, why: diag.why || "중단", scrolls: diag.scrolls || 0 });
+          chrome.runtime.sendMessage({ type: "autoDone", found, sent: sentCount, oldest, vis: diag.api ? "visible" : document.visibilityState, why: diag.why || "중단", scrolls: diag.scrolls || 0, channelId: diag.channelId || "" });
         } catch (e) {
           /* 연결 끊김 */
         }

@@ -150,14 +150,16 @@
       }
       out.push({ handle, channelId, name, desc, avatar });
     });
-    // 보이지 않는 탭에서는 아래쪽 결과의 사진이 아직 불러와지지 않으므로, 같은 검색 주소의 데이터에서 사진 주소를 보충합니다.
-    if (out.some((r) => !r.avatar)) {
+    // 같은 검색 주소의 데이터에서 채널 ID와 사진 주소를 보충합니다.
+    //  · 채널 ID: 화면 링크는 대개 /@핸들이라 채널 ID가 안 보입니다. 계정에 같이 적어 두면 핸들이 바뀌어도 계속 모으고, 같은 채널을 두 번 추가하지 않게 막습니다.
+    //  · 사진: 보이지 않는 탭에서는 아래쪽 결과의 사진이 아직 불러와지지 않습니다.
+    if (out.some((r) => !r.avatar || !r.channelId)) {
       try {
         const res = await fetch(location.href, { credentials: "include" });
         const html = await res.text();
         const mm = /var ytInitialData\s*=\s*(\{.*?\});<\/script>/s.exec(html);
         if (mm) {
-          const map = {};
+          const map = {}, cids = {};
           const walk = (o, d) => {
             if (!o || typeof o !== "object" || d > 60) return;
             if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1)); return; }
@@ -166,11 +168,12 @@
               const th = (c.thumbnail && c.thumbnail.thumbnails) || [];
               let u = (th[th.length - 1] || {}).url || "";
               if (u.startsWith("//")) u = "https:" + u;
+              const base = (c.navigationEndpoint && c.navigationEndpoint.browseEndpoint && c.navigationEndpoint.browseEndpoint.canonicalBaseUrl) || "";
+              let hd = /^\/@/.test(base) ? base.slice(2) : "";
+              try { hd = decodeURIComponent(hd); } catch (e) { /* 그대로 */ }
+              if (hd && /^UC[\w-]{22}$/.test(c.channelId || "")) cids["@" + hd.toLowerCase()] = c.channelId;
               if (/^https:\/\//.test(u)) {
                 if (c.channelId) map[c.channelId] = u;
-                const base = (c.navigationEndpoint && c.navigationEndpoint.browseEndpoint && c.navigationEndpoint.browseEndpoint.canonicalBaseUrl) || "";
-                let hd = base.replace(/^\/@?/, "");
-                try { hd = decodeURIComponent(hd); } catch (e) { /* 그대로 */ }
                 if (hd) map["@" + hd.toLowerCase()] = u;
               }
             }
@@ -178,11 +181,12 @@
           };
           walk(JSON.parse(mm[1]), 0);
           out.forEach((r) => {
+            if (!r.channelId && r.handle) r.channelId = cids["@" + r.handle.toLowerCase()] || "";
             if (r.avatar) return;
             r.avatar = (r.channelId && map[r.channelId]) || (r.handle && map["@" + r.handle.toLowerCase()]) || "";
           });
         }
-      } catch (e) { /* 사진 없이 진행 */ }
+      } catch (e) { /* 채널 ID·사진 없이 진행 */ }
     }
     return out.slice(0, 8);
   }
@@ -327,6 +331,13 @@
     return out;
   }
 
+  // 이 채널 페이지에서 읽은 채널 ID(UC…). 서버가 계정에 적어 두고 다음부터 /channel/ 주소로 모읍니다(@핸들이 바뀌어도 계속 모으게).
+  let seenChannelId = "";
+  async function collectApiWithId(o) {
+    const r = await collectApi(o);
+    return r && { ...r, channelId: seenChannelId };
+  }
+
   async function collectApi({ maxPages, emit, timeUp, since, isKnown }) {
     const pm = /^\/(@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(videos|shorts|posts|community)\/?$/.exec(location.pathname);
     if (!pm) return null;
@@ -341,6 +352,7 @@
       if (!key || !ver || !mm) return fail("페이지 데이터 없음");
       const data = JSON.parse(mm[1]);
       const chMeta = (data.metadata || {}).channelMetadataRenderer || {};
+      if (/^UC[\w-]{22}$/.test(chMeta.externalId || "")) seenChannelId = chMeta.externalId;
       const author = clip(chMeta.title, 80);
       const runsText = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
       const rss = isShorts ? await shortsDates(chMeta.externalId) : null;
@@ -561,5 +573,5 @@
     }
   }
 
-  start({ source: "youtube", scan, login, search, post, collectApi });
+  start({ source: "youtube", scan, login, search, post, collectApi: collectApiWithId });
 })();

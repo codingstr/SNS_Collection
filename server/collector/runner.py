@@ -411,6 +411,42 @@ def link_vias(src_via: str, extra_vias):
             db.execute("INSERT OR IGNORE INTO item_via(item_id, via) SELECT item_id, ? FROM item_via WHERE via = ?", (v, src_via))
 
 
+def remember_channel(url: str, vias, cid: str) -> str:
+    """유튜브 채널 페이지(@핸들·옛 /c/ 주소)에서 읽은 채널 ID(UC…)를, 그 페이지를 추적하는 모든 사용자의 계정(vias)에 적어 둡니다.
+    다음 수집부터 page_urls가 /channel/ 주소로 모으므로, 채널이 @핸들을 바꿔도 계속 모이고
+    같은 채널을 @핸들·채널 주소로 따로 추가한 계정도 한 페이지로 모입니다.
+    이 페이지의 '이미 모은 범위'·수집 기록도 새 주소로 옮겨, 주소가 바뀌었다고 처음부터 다시 모으지 않게 합니다.
+    새 주소를 돌려줍니다(적을 것이 없으면 "")."""
+    if not CHANNEL_OK.match(cid or "") or "/channel/" in url:
+        return ""
+    vias = set(vias)
+    hit = False
+    with get_db() as db:
+        for row in db.execute("SELECT user_id, tracked FROM user_state").fetchall():
+            try:
+                lst = json.loads(row["tracked"])
+            except ValueError:
+                continue
+            changed = False
+            for t in lst:
+                if isinstance(t, dict) and t.get("platform") == "youtube" and t.get("id") in vias:
+                    if not t.get("channelId"):
+                        t["channelId"] = cid
+                        changed = True
+                    # 이미 적혀 있어도(같은 채널의 다른 탭이 먼저 적음) 이 탭의 기록은 새 주소로 옮깁니다
+                    hit = hit or t["channelId"] == cid
+            if changed:
+                db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?", (json.dumps(lst, ensure_ascii=False), row["user_id"]))
+        if not hit:
+            return ""
+        new_url = "https://www.youtube.com/channel/" + cid + "/" + url.rstrip("/").rsplit("/", 1)[-1]
+        db.execute("INSERT OR IGNORE INTO coverage(url, data, at) SELECT ?, data, at FROM coverage WHERE url = ?", (new_url, url))
+        db.execute("""INSERT OR IGNORE INTO page_log(url, at, mode, why, found, added, error, ok_at)
+                      SELECT ?, at, mode, why, found, added, error, ok_at FROM page_log WHERE url = ?""", (new_url, url))
+    log.info("채널 ID 기억: %s → %s", url, new_url)
+    return new_url
+
+
 # ---------- 이미 모은 글에서 멈추기 ----------
 # '지금 최신화'와 자동 수집 모두, 맨 위(최신 글)부터 보다가 이미 모은 글이 연달아 나오면 거기서 멈춥니다.
 # 처음부터 기간 끝까지 다시 모으는 경우(멈추지 않음):
@@ -578,7 +614,9 @@ def page_urls(t: dict) -> list:
         return []
     h = quote(handle, safe="")
     if p == "youtube":
-        base = ("https://www.youtube.com/@" + h) if handle else ("https://www.youtube.com/channel/" + cid) if CHANNEL_OK.match(cid) else legacy
+        # 채널 ID를 알면 /channel/ 주소로 모읍니다(@핸들은 채널이 바꿀 수 있음). 모르면 @핸들, 그것도 없으면 옛 /c/·/user/ 주소.
+        # 채널 ID는 추가할 때(검색 결과·채널 주소) 받거나, 처음 모을 때 채널 페이지에서 읽어 적어 둡니다(remember_channel).
+        base = ("https://www.youtube.com/channel/" + cid) if CHANNEL_OK.match(cid) else ("https://www.youtube.com/@" + h) if handle else legacy
         off = t.get("ytOff") if isinstance(t.get("ytOff"), list) else []
         tabs = [("video", "/videos"), ("short", "/shorts"), ("post", "/posts")]
         return [base + path for k, path in tabs if k not in off] if base else []
@@ -1363,6 +1401,16 @@ class Collector:
         platform = lane.split(".", 1)[0]
         return random.uniform(1.5, 3.0) if platform == "instagram" else random.uniform(1.0, 2.0) if platform == "x" else random.uniform(0.4, 0.8)
 
+    def _remember_channel(self, url, vias, res):
+        """수집 스크립트가 알려 준 채널 ID를 계정에 적어 둡니다(remember_channel). 새 주소도 '방금 모음'으로 표시합니다."""
+        try:
+            cid = str(((res or {}).get("done") or {}).get("channelId") or "")
+            new_url = remember_channel(url, vias, cid)
+            if new_url and url in self.recent:
+                self.recent.setdefault(new_url, self.recent[url])
+        except Exception:
+            log.exception("채널 ID 기억 오류: %s", url)
+
     def _begin(self, platform, url, cfg, via, save):
         """페이지를 열고 수집 스크립트를 넣기만 합니다(끝날 때까지 기다리지 않음). 기다리기는 _run_lanes가 합니다.
         수집은 수집용 프로필(collect)의 그 페이지 창에서 합니다(유튜브는 영상·쇼츠·게시물 탭마다 창이 따로)."""
@@ -1689,6 +1737,8 @@ class Collector:
                     others = sorted({o["via"] for o in t["owners"]} - {t["via"]})
                     if others:   # 같은 페이지를 다른 계정 ID로 추적하는 사용자에게도 글을 연결합니다
                         link_vias(t["via"], others)
+                    if t["p"] == "youtube":
+                        self._remember_channel(t["url"], {t["via"], *others}, res)
             for o in t["owners"]:
                 account(o, res)
 
@@ -1850,6 +1900,8 @@ class Collector:
             if len(t["vias"]) > 1:   # 같은 계정을 다른 ID로 추적하는 사용자에게도 글을 연결합니다
                 link_vias(t["vias"][0], t["vias"][1:])
             self.recent[t["url"]] = (now_ms(), "shallow", t["days"])
+            if t["p"] == "youtube":
+                self._remember_channel(t["url"], t["vias"], res)
             done["n"] += 1
 
         self._run_lanes(tasks, SHALLOW_WAIT, on_done, yield_to_users=True)

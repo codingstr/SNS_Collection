@@ -160,10 +160,16 @@ def handle(db, uid: str, op: str, p: dict):
         return res
 
     if op == "set":
-        load_state(db, uid)  # 행이 없으면 만듭니다
+        old = load_state(db, uid)  # 행이 없으면 만듭니다
         if "tracked" in p:
+            lst = clean_tracked(p["tracked"])
+            # 수집기가 적어 둔 유튜브 채널 ID는, 화면이 그 사실을 받기 전의 목록으로 저장해도 지워지지 않게 이어 붙입니다.
+            known = {t["id"]: t["channelId"] for t in old["tracked"] if t.get("channelId")}
+            for t in lst:
+                if t["platform"] == "youtube" and not t.get("channelId") and t["id"] in known:
+                    t["channelId"] = known[t["id"]]
             db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?",
-                       (json.dumps(clean_tracked(p["tracked"]), ensure_ascii=False), uid))
+                       (json.dumps(lst, ensure_ascii=False), uid))
         if isinstance(p.get("settings"), dict):
             s = {k: p["settings"][k] for k in PLATFORMS if isinstance(p["settings"].get(k), bool)}
             db.execute("UPDATE user_state SET settings = ? WHERE user_id = ?", (json.dumps(s), uid))

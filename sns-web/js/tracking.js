@@ -92,9 +92,12 @@ async function saveTracked() {
   try { return await call("set", { tracked }); } finally { trackedHold = Date.now() + 4000; }
 }
 /* ---------- 계정 추가 ---------- */
+// 이미 추적 중인 같은 계정: 계정 ID가 같거나, 유튜브는 채널 ID(UC…)가 같으면 같은 채널입니다(@핸들·채널 주소로 따로 넣은 경우).
+const findTracked = (a) => tracked.find((t) => t.id === a.id || (!!a.channelId && t.platform === a.platform && t.channelId === a.channelId));
 // 추가하면 그 계정의 글을 바로 한 번 모읍니다(다른 수집이 진행 중이면 끝난 뒤 이어서).
 function addAccount(acc) {
-  if (tracked.some((t) => t.id === acc.id)) { toast("이미 추가된 계정입니다.", "error"); return Promise.resolve(false); }
+  const dup = findTracked(acc);
+  if (dup) { toast(dup.id === acc.id ? "이미 추가된 계정입니다." : "같은 채널을 이미 " + accName(dup) + "(으)로 추가해 두었습니다.", "error"); return Promise.resolve(false); }
   if (tracked.length >= MAX_TRACKED) { toast("계정은 최대 " + MAX_TRACKED + "개까지 추가할 수 있습니다.", "error"); return Promise.resolve(false); }
   if (!acc.days) acc.days = 30; // 이 계정만의 가져올 기간
   // 숨긴 그룹에 넣으면 이 계정도 숨김(안 그러면 그룹 전체가 다시 보이게 됨)
@@ -179,14 +182,15 @@ function fillResults(box, platform, list) {
     const add = el("button", { type: "button", text: "추가" });
     // 이미 추적 중인 계정이면 "제거", 아니면 "추가"로 보여 줍니다(누를 때마다 바뀜).
     let armed = 0;
-    const paint = () => { const on = tracked.some((t) => t.id === acc.id); add.textContent = on ? "제거" : "추가"; add.classList.toggle("rm", on); add.disabled = false; };
+    const paint = () => { const on = !!findTracked(acc); add.textContent = on ? "제거" : "추가"; add.classList.toggle("rm", on); add.disabled = false; };
     paint();
     add.addEventListener("click", async () => {
-      if (tracked.some((t) => t.id === acc.id)) {
+      const had = findTracked(acc);
+      if (had) {
         // 제거: 모아 둔 글도 함께 지워지므로 한 번 더 눌러야 제거합니다
         if (!armed) { add.textContent = "정말 제거?"; armed = setTimeout(() => { armed = 0; paint(); }, 4000); return; }
         clearTimeout(armed); armed = 0; add.disabled = true;
-        await removeTrackedIds([acc.id]); paint(); return;
+        await removeTrackedIds([had.id]); paint(); return;
       }
       const pk = await pickPeriod(); if (!pk) return;
       const a = { ...acc, days: pk.days }; if (pk.group) a.group = pk.group;
