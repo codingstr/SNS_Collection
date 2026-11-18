@@ -331,11 +331,13 @@
     return out;
   }
 
-  // 이 채널 페이지에서 읽은 채널 ID(UC…). 서버가 계정에 적어 두고 다음부터 /channel/ 주소로 모읍니다(@핸들이 바뀌어도 계속 모으게).
-  let seenChannelId = "";
+  // 이 채널 페이지에서 읽은 채널 ID(UC…)와 지금의 @핸들. 서버가 계정에 적어 둡니다.
+  //  · 채널 ID: 다음부터 /channel/ 주소로 모읍니다(@핸들이 바뀌어도 계속 모으게).
+  //  · @핸들: 채널 주소로 추가해 핸들을 몰랐거나 채널이 핸들을 바꿨을 때 화면에 지금 핸들이 보이게.
+  let seenChannelId = "", seenHandle = "";
   async function collectApiWithId(o) {
     const r = await collectApi(o);
-    return r && { ...r, channelId: seenChannelId };
+    return r && { ...r, channelId: seenChannelId, channelHandle: seenHandle };
   }
 
   async function collectApi({ maxPages, emit, timeUp, since, isKnown }) {
@@ -353,6 +355,10 @@
       const data = JSON.parse(mm[1]);
       const chMeta = (data.metadata || {}).channelMetadataRenderer || {};
       if (/^UC[\w-]{22}$/.test(chMeta.externalId || "")) seenChannelId = chMeta.externalId;
+      {
+        const hm = /^https?:\/\/(?:www\.)?youtube\.com\/@([^/?#]+)/.exec(chMeta.vanityChannelUrl || "");
+        if (hm) { try { seenHandle = decodeURIComponent(hm[1]); } catch (e) { seenHandle = hm[1]; } }
+      }
       const author = clip(chMeta.title, 80);
       const runsText = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
       const rss = isShorts ? await shortsDates(chMeta.externalId) : null;

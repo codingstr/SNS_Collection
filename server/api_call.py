@@ -163,11 +163,15 @@ def handle(db, uid: str, op: str, p: dict):
         old = load_state(db, uid)  # 행이 없으면 만듭니다
         if "tracked" in p:
             lst = clean_tracked(p["tracked"])
-            # 수집기가 적어 둔 유튜브 채널 ID는, 화면이 그 사실을 받기 전의 목록으로 저장해도 지워지지 않게 이어 붙입니다.
-            known = {t["id"]: t["channelId"] for t in old["tracked"] if t.get("channelId")}
+            # 수집기가 적어 둔 유튜브 채널 ID·지금 @핸들은, 화면이 그 사실을 받기 전의 목록으로 저장해도 되돌아가지 않게 서버 값을 씁니다.
+            # (사용자는 핸들·채널 ID를 직접 고치지 않습니다. 계정 ID가 같으면 같은 채널입니다.)
+            known = {t["id"]: t for t in old["tracked"] if isinstance(t, dict) and t.get("platform") == "youtube" and t.get("channelId")}
             for t in lst:
-                if t["platform"] == "youtube" and not t.get("channelId") and t["id"] in known:
-                    t["channelId"] = known[t["id"]]
+                k = known.get(t["id"]) if t["platform"] == "youtube" else None
+                if k and t.get("channelId", k["channelId"]) == k["channelId"]:
+                    t["channelId"] = k["channelId"]
+                    if isinstance(k.get("handle"), str) and HANDLE_OK.match(k["handle"]):
+                        t["handle"] = k["handle"]
             db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?",
                        (json.dumps(lst, ensure_ascii=False), uid))
         if isinstance(p.get("settings"), dict):

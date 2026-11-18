@@ -411,14 +411,17 @@ def link_vias(src_via: str, extra_vias):
             db.execute("INSERT OR IGNORE INTO item_via(item_id, via) SELECT item_id, ? FROM item_via WHERE via = ?", (v, src_via))
 
 
-def remember_channel(url: str, vias, cid: str) -> str:
-    """유튜브 채널 페이지(@핸들·옛 /c/ 주소)에서 읽은 채널 ID(UC…)를, 그 페이지를 추적하는 모든 사용자의 계정(vias)에 적어 둡니다.
-    다음 수집부터 page_urls가 /channel/ 주소로 모으므로, 채널이 @핸들을 바꿔도 계속 모이고
-    같은 채널을 @핸들·채널 주소로 따로 추가한 계정도 한 페이지로 모입니다.
-    이 페이지의 '이미 모은 범위'·수집 기록도 새 주소로 옮겨, 주소가 바뀌었다고 처음부터 다시 모으지 않게 합니다.
-    새 주소를 돌려줍니다(적을 것이 없으면 "")."""
-    if not CHANNEL_OK.match(cid or "") or "/channel/" in url:
+def remember_channel(url: str, vias, cid: str, handle: str = "") -> str:
+    """유튜브 채널 페이지에서 읽은 채널 ID(UC…)와 지금의 @핸들을, 그 페이지를 추적하는 모든 사용자의 계정(vias)에 적어 둡니다.
+    · 채널 ID: 다음 수집부터 page_urls가 /channel/ 주소로 모으므로, 채널이 @핸들을 바꿔도 계속 모이고
+      같은 채널을 @핸들·채널 주소로 따로 추가한 계정도 한 페이지로 모입니다.
+    · @핸들: 채널 주소로 추가해 핸들이 비어 있거나 채널이 핸들을 바꿨으면 지금 핸들로 고칩니다(화면에 보이는 이름).
+      계정 ID는 그대로 둡니다(모은 글·그룹·사진이 계정 ID에 이어져 있음).
+    @핸들·옛 /c/ 주소로 모은 페이지면 '이미 모은 범위'·수집 기록도 새 /channel/ 주소로 옮겨, 처음부터 다시 모으지 않게 합니다.
+    옮긴 새 주소를 돌려줍니다(옮길 것이 없으면 "")."""
+    if not CHANNEL_OK.match(cid or ""):
         return ""
+    handle = handle if HANDLE_OK.match(handle or "") else ""
     vias = set(vias)
     hit = False
     with get_db() as db:
@@ -429,15 +432,21 @@ def remember_channel(url: str, vias, cid: str) -> str:
                 continue
             changed = False
             for t in lst:
-                if isinstance(t, dict) and t.get("platform") == "youtube" and t.get("id") in vias:
-                    if not t.get("channelId"):
-                        t["channelId"] = cid
-                        changed = True
-                    # 이미 적혀 있어도(같은 채널의 다른 탭이 먼저 적음) 이 탭의 기록은 새 주소로 옮깁니다
-                    hit = hit or t["channelId"] == cid
+                if not (isinstance(t, dict) and t.get("platform") == "youtube" and t.get("id") in vias):
+                    continue
+                if not t.get("channelId"):
+                    t["channelId"] = cid
+                    changed = True
+                if t["channelId"] != cid:
+                    continue   # 다른 채널로 적혀 있는 계정은 건드리지 않음
+                hit = True     # 이미 적혀 있어도(같은 채널의 다른 탭이 먼저 적음) 이 탭의 기록은 새 주소로 옮깁니다
+                if handle and t.get("handle") != handle:
+                    log.info("유튜브 핸들 갱신: %s @%s → @%s", t["id"], t.get("handle") or "(없음)", handle)
+                    t["handle"] = handle
+                    changed = True
             if changed:
                 db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?", (json.dumps(lst, ensure_ascii=False), row["user_id"]))
-        if not hit:
+        if not hit or "/channel/" in url:
             return ""
         new_url = "https://www.youtube.com/channel/" + cid + "/" + url.rstrip("/").rsplit("/", 1)[-1]
         db.execute("INSERT OR IGNORE INTO coverage(url, data, at) SELECT ?, data, at FROM coverage WHERE url = ?", (new_url, url))
@@ -1402,10 +1411,10 @@ class Collector:
         return random.uniform(1.5, 3.0) if platform == "instagram" else random.uniform(1.0, 2.0) if platform == "x" else random.uniform(0.4, 0.8)
 
     def _remember_channel(self, url, vias, res):
-        """수집 스크립트가 알려 준 채널 ID를 계정에 적어 둡니다(remember_channel). 새 주소도 '방금 모음'으로 표시합니다."""
+        """수집 스크립트가 알려 준 채널 ID·지금 @핸들을 계정에 적어 둡니다(remember_channel). 옮긴 새 주소도 '방금 모음'으로 표시합니다."""
         try:
-            cid = str(((res or {}).get("done") or {}).get("channelId") or "")
-            new_url = remember_channel(url, vias, cid)
+            d = (res or {}).get("done") or {}
+            new_url = remember_channel(url, vias, str(d.get("channelId") or ""), str(d.get("channelHandle") or ""))
             if new_url and url in self.recent:
                 self.recent.setdefault(new_url, self.recent[url])
         except Exception:
