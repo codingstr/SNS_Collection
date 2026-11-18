@@ -1,4 +1,4 @@
-/* ---------- 관리(관리자 전용) : 사용자 · SNS 계정 상태 · 서버 ----------
+/* ---------- 관리(관리자 전용) : 사용자 · SNS 계정 상태 · 커뮤니티 · 서버 ----------
    서버의 /api/admin(server/admin.py)을 부릅니다. 관리자가 아니면 서버가 거절하므로 화면은 탭만 숨깁니다. */
 const AD_RESET_PW = "000000"; // server/admin.py의 RESET_PW와 같은 값(안내 문구용)
 const AD_STATE = {
@@ -8,7 +8,9 @@ const AD_STATE = {
 const AD_STATE_ORDER = ["error", "login", "stale", "never", "running", "ok", "off"];
 const AD_ACCT_NAME = { youtube: "유튜브", x: "X 수집용", instagram: "인스타 수집용", "x-search": "X 검색용", "instagram-search": "인스타 검색용" };
 
-let adTab = "users", adUsers = [], adUid = "", adDetail = null, adSel = new Set(), adAccts = [], adServer = null, adTimer = 0, adGen = 0;
+let adTab = "users", adUsers = [], adUid = "", adDetail = null, adSel = new Set(), adAccts = [], adServer = null, adComm = null, adTimer = 0, adGen = 0;
+const AD_TABS = [["users", "adTabUsers", "adUsers"], ["accts", "adTabAccts", "adAccts"], ["comm", "adTabComm", "adComm"], ["server", "adTabServer", "adServer"]];
+try { const t = localStorage.getItem("snsAdminTab"); if (AD_TABS.some((x) => x[0] === t)) adTab = t; } catch (e) {}   // 마지막으로 본 탭
 
 async function adminCall(action, body, ms) {
   const used = sess;
@@ -25,6 +27,7 @@ function setAdmin(on) { isAdmin = !!on; applyPage(); }
 function adminShown(on) {
   clearInterval(adTimer); adTimer = 0;
   if (!on) return;
+  adTabUI();
   adLoad();
   adTimer = setInterval(() => {
     if (document.hidden || $("adminPanel").hidden || document.querySelector(".ad-modal") || (document.activeElement && document.activeElement.closest && document.activeElement.closest("#adminPanel input, #adminPanel select"))) return;
@@ -90,12 +93,25 @@ function adAsk({ title, text, ok = "확인", danger = false, input = null, place
 }
 
 /* ----- 탭 ----- */
+function adTabUI() {
+  AD_TABS.forEach(([k, b, v]) => { $(b).classList.toggle("on", k === adTab); $(b).setAttribute("aria-selected", String(k === adTab)); $(v).hidden = k !== adTab; });
+  // 사용자 탭에서만 쓰는 '사용자 n명' 같은 글자는 탭을 바꾸면 그 탭 것으로 다시 씁니다
+  $("adCount").textContent = "";
+}
 function adSetTab(t) {
+  const changed = adTab !== t;
   adTab = t;
-  [["users", "adTabUsers", "adUsers"], ["accts", "adTabAccts", "adAccts"], ["server", "adTabServer", "adServer"]].forEach(([k, b, v]) => {
-    $(b).classList.toggle("on", k === t); $(b).setAttribute("aria-selected", String(k === t)); $(v).hidden = k !== t;
-  });
+  try { localStorage.setItem("snsAdminTab", t); } catch (e) {}
+  adTabUI();
+  if (changed) $("adminPanel").scrollTop = 0;   // 다른 탭으로 가면 맨 위부터
   adLoad();
+}
+// 탭 단추에 처리할 신고 수(커뮤니티 표시와 같이 30초마다 맞춤)
+function adPaintCommTab() {
+  const n = adComm ? adComm.counts.reports : (typeof cmBadge !== "undefined" ? cmBadge.reports : 0);
+  const b = $("adTabComm");
+  b.querySelector(".n").textContent = n ? " · 신고 " + n : "";
+  b.classList.toggle("alert", n > 0);
 }
 async function adLoad(quiet) {
   const gen = ++adGen;
@@ -110,6 +126,10 @@ async function adLoad(quiet) {
       const list = await adminCall("accounts", {}, 20000);
       if (gen !== adGen) return;
       adAccts = list; renderAdAccts();
+    } else if (adTab === "comm") {
+      const c = await adminCall("community", {}, 20000);
+      if (gen !== adGen) return;
+      adComm = c; renderAdComm();
     } else {
       const s = await adminCall("server");
       if (gen !== adGen) return;
@@ -368,6 +388,113 @@ function renderAdAccts() {
   });
 }
 
+/* ----- 커뮤니티 ----- */
+function adBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + "B";
+  if (n < 1048576) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + "KB";
+  if (n < 1073741824) return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + "MB";
+  return (n / 1073741824).toFixed(2) + "GB";
+}
+// 커뮤니티 글로 가기(그 글을 펼친 화면, 댓글이면 그 댓글)
+function adGoPost(pid, cid) { if (typeof cmGoPost === "function") cmGoPost(pid, cid || 0); }
+const adPostLink = (id, title, cid) => { const b = el("button", { type: "button", class: "ad-plink", title: "커뮤니티에서 이 글 보기", text: title || "(지운 글)" }); b.addEventListener("click", () => adGoPost(id, cid)); return b; };
+async function adCmDel(kind, id, what) {
+  if (!(await adAsk({ title: (kind === "post" ? "글" : "댓글") + "을 지울까요?", text: what + " · " + (kind === "post" ? "댓글·사진·신고도 모두 지워집니다." : "답글이 달린 댓글은 ‘지운 댓글’로 자리만 남습니다.") + " 되돌릴 수 없습니다.", ok: "지우기", danger: true }))) return;
+  await adminCall(kind === "post" ? "cmDelPost" : "cmDelComment", { id });
+  toast((kind === "post" ? "글" : "댓글") + "을 지웠습니다.");
+  await adLoad(true);
+}
+function renderAdComm() {
+  const s = adComm, box = $("adComm");
+  box.textContent = "";
+  if (!s) return;
+  const c = s.counts;
+  $("adCount").textContent = "글 " + c.posts + " · 댓글 " + c.comments;
+  // 왼쪽 '관리' 버튼의 신고 수도 바로 맞춤(평소에는 30초마다)
+  if (typeof cmBadge !== "undefined" && cmBadge.reports !== c.reports) { cmBadge.reports = c.reports; cmPaintBadges(); }
+  adPaintCommTab();
+  const row = (k, v) => el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: k }), typeof v === "string" ? el("span", { text: v }) : v]);
+  // 요약 · DB 정리
+  const sumCard = el("section", { class: "ad-card" }, [el("h3", { text: "요약" }),
+    row("글 · 댓글", c.posts + "개 · " + c.comments + "개"),
+    row("사진", c.imgs + "장 · " + adBytes(c.imgBytes)),
+    row("DB 파일", adBytes(c.dbBytes) + (c.dbBytes ? " (사진 " + Math.round((c.imgBytes / c.dbBytes) * 100) + "%)" : "")),
+    row("스크랩", c.scraps + "개"),
+    row("처리할 신고", c.reports ? adBadge(c.reports + "건", "bad") : adBadge("없음", "ok")),
+    el("p", { class: "hint", text: "사진은 DB 파일 안에 저장됩니다. 글을 지운 뒤 ‘DB 정리’를 하면 지운 사진이 차지하던 공간이 파일에서 빠집니다(수집 중이면 잠시 기다렸다가 합니다)." }),
+    el("div", { class: "ad-acts" }, [adBtn("DB 정리", async () => {
+      if (!(await adAsk({ title: "DB 파일을 정리할까요?", text: "지운 글·사진이 차지하던 빈 공간을 돌려줍니다. DB가 크면 몇 초 걸리고, 그동안 다른 요청이 잠깐 기다립니다.", ok: "정리" }))) return;
+      const r = await adminCall("vacuum", {}, 120000);
+      toast("DB를 정리했습니다: " + adBytes(r.before) + " → " + adBytes(r.after));
+      await adLoad(true);
+    }, "", "지운 글·사진이 차지하던 공간을 파일에서 비웁니다")]),
+  ]);
+  box.append(el("div", { class: "ad-cards" }, [sumCard]));
+
+  // 신고: 대상(글·댓글)별로. 보기 · 지우기 · 기각
+  const rep = el("section", { class: "ad-sec" }, [el("h3", { text: "신고 " + s.reports.length + "건" }), el("p", { class: "hint", text: "자동으로 숨기지 않습니다. 내용을 보고 지우거나, 문제가 없으면 기각(신고만 지움)하세요." })]);
+  if (!s.reports.length) rep.append(el("p", { class: "ad-none", text: "처리할 신고가 없습니다." }));
+  s.reports.forEach((t) => {
+    const isC = !!t.comment;
+    const reasons = {};
+    t.reports.forEach((r) => { reasons[r.reason] = (reasons[r.reason] || 0) + 1; });
+    const card = el("div", { class: "ad-rep" }, [
+      el("div", { class: "ad-rhead" }, [adBadge(isC ? "댓글" : "글", isC ? "" : "warn"), adPostLink(t.post, t.title, t.comment), el("span", { class: "ad-rwho", text: (t.author || "?") + " · 신고 " + t.reports.length + "건" }), adWhen(t.at)]),
+      el("p", { class: "ad-rtext", text: t.text || "(내용 없음)" }),
+      el("div", { class: "ad-rwhy" }, Object.entries(reasons).map(([r, n]) => adBadge(r + (n > 1 ? " " + n : ""), "bad"))),
+      el("ul", { class: "ad-rlist" }, t.reports.map((r) => el("li", {}, [el("b", { text: r.who }), el("span", { text: " · " + r.reason + (r.memo ? " · “" + r.memo + "”" : "") + " · " }), adWhen(r.at)]))),
+      el("div", { class: "ad-acts" }, [
+        adBtn("보기", () => adGoPost(t.post, t.comment)),
+        adBtn(isC ? "댓글 지우기" : "글 지우기", () => adCmDel(isC ? "comment" : "post", isC ? t.comment : t.post, "‘" + (isC ? t.text.slice(0, 40) : t.title) + "’"), "danger"),
+        adBtn("기각", async () => { await adminCall("cmDismiss", { post: t.post, comment: t.comment || 0 }); toast("신고를 기각했습니다(내용은 그대로)."); await adLoad(true); }, "", "문제가 없으면 신고만 지웁니다"),
+      ]),
+    ]);
+    rep.append(card);
+  });
+  box.append(rep);
+
+  // 최근 글 · 사진이 큰 글 · 최근 댓글 · 사용자별
+  const postTable = (title, list, empty) => {
+    const sec = el("section", { class: "ad-sec" }, [el("h3", { text: title })]);
+    if (!list.length) { sec.append(el("p", { class: "ad-none", text: empty })); return sec; }
+    const t = el("div", { class: "ad-table" });
+    list.forEach((p) => t.append(el("div", { class: "ad-trow" }, [
+      el("span", { class: "ad-tcat", text: p.cat }), adPostLink(p.id, p.title),
+      el("span", { class: "ad-tmeta", text: p.author + " · 댓글 " + p.comments + (p.imgs ? " · 사진 " + p.imgs + "장 " + adBytes(p.imgBytes) : "") + (p.editedAt ? " · 수정됨" : "") }),
+      adWhen(p.at), adBtn("지우기", () => adCmDel("post", p.id, "‘" + p.title + "’"), "danger sm"),
+    ])));
+    sec.append(t);
+    return sec;
+  };
+  box.append(postTable("최근 글", s.posts, "아직 글이 없습니다."));
+  if (s.bigPosts.length) box.append(postTable("사진 용량이 큰 글", s.bigPosts, ""));
+  const cs = el("section", { class: "ad-sec" }, [el("h3", { text: "최근 댓글" })]);
+  if (!s.comments.length) cs.append(el("p", { class: "ad-none", text: "아직 댓글이 없습니다." }));
+  else {
+    const t = el("div", { class: "ad-table" });
+    s.comments.forEach((m) => t.append(el("div", { class: "ad-trow" }, [
+      el("b", { class: "ad-tcat", text: m.author }), el("span", { class: "ad-tbody", text: m.body }),
+      el("span", { class: "ad-tmeta" }, [document.createTextNode("글 "), adPostLink(m.post, m.title, m.id)]),
+      adWhen(m.at), adBtn("지우기", () => adCmDel("comment", m.id, "‘" + m.body.slice(0, 40) + "’"), "danger sm"),
+    ])));
+    cs.append(t);
+  }
+  box.append(cs);
+  const us = el("section", { class: "ad-sec" }, [el("h3", { text: "사용자별" }), el("p", { class: "hint", text: "사진 용량이 큰 순서입니다. 아이디를 누르면 그 사용자의 관리 화면으로 갑니다." })]);
+  if (!s.users.length) us.append(el("p", { class: "ad-none", text: "아직 글·댓글을 쓴 사용자가 없습니다." }));
+  else {
+    const t = el("div", { class: "ad-table" });
+    s.users.forEach((u) => {
+      const b = el("button", { type: "button", class: "ad-plink", text: u.id, title: u.id + " 사용자 보기" });
+      b.addEventListener("click", () => { adUid = u.id; adSel = new Set(); adSetTab("users"); });
+      t.append(el("div", { class: "ad-trow" }, [b, el("span", { class: "ad-tmeta", text: "글 " + u.posts + " · 댓글 " + u.comments + " · 사진 " + u.imgs + "장 " + adBytes(u.imgBytes) })]));
+    });
+    us.append(t);
+  }
+  box.append(us);
+}
+
 /* ----- 서버 ----- */
 function renderAdServer() {
   const s = adServer, box = $("adServer");
@@ -402,6 +529,7 @@ function renderAdServer() {
 /* ----- 이벤트 ----- */
 $("adTabUsers").addEventListener("click", () => adSetTab("users"));
 $("adTabAccts").addEventListener("click", () => adSetTab("accts"));
+$("adTabComm").addEventListener("click", () => adSetTab("comm"));
 $("adTabServer").addEventListener("click", () => adSetTab("server"));
 $("adFind").addEventListener("input", renderAdUsers);
 ["adAcctState", "adAcctPlat"].forEach((i) => $(i).addEventListener("change", renderAdAccts));

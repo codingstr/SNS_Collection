@@ -18,21 +18,29 @@ action
   accounts                       모든 사용자가 추적 중인 SNS 계정의 수집 상태
   server                         서버 상태(테스트 계정 로그인, 자동 수집, 큐, 통계)
   checkLogin                     테스트 계정 로그인 상태 다시 확인
+  community                      커뮤니티: 요약(글·댓글·사진 용량·DB 크기), 신고, 최근 글·댓글, 사용자별, 사진이 큰 글
+  cmDelPost     {id}             커뮤니티 글 지우기
+  cmDelComment  {id}             커뮤니티 댓글 지우기
+  cmDismiss     {post, comment}  신고 기각(글·댓글은 그대로 두고 신고만 지움)
+  vacuum                         DB 파일 정리(지운 글·사진이 차지하던 공간을 돌려줌)
 관리자 계정끼리는 비밀번호 초기화·삭제를 하지 않습니다(관리자가 모두 잠기는 일 방지). 관리자 자신의 비밀번호는 계정 메뉴에서 바꿉니다.
 """
 import json
 import logging
+import os
 import secrets
+import sqlite3
 import time
 
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
+import community
 from api_call import DAYS_OK, PLATFORMS, OpError, clean_tracked
 from auth import hash_pw, sha, user_by_session
 from collector import collector, get_login_state
 from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS, kv_get, page_urls
-from db import get_db, reset_seen
+from db import DB_PATH, get_db, reset_seen
 
 router = APIRouter()
 log = logging.getLogger("admin")
@@ -231,6 +239,38 @@ def server_info(db):
                        "pages": n("SELECT COUNT(*) FROM page_log"), "errors": n("SELECT COUNT(*) FROM page_log WHERE error != ''")}}
 
 
+# ---------- 커뮤니티 ----------
+CM_ACTS = {
+    "community": lambda db, p: community.admin_info(db),   # 요약·신고·최근 글/댓글·사용자별·사진이 큰 글
+    "cmDelPost": community.admin_del_post,                  # {id}
+    "cmDelComment": community.admin_del_comment,            # {id}
+    "cmDismiss": community.admin_dismiss,                   # {post, comment} 신고 기각(글·댓글은 그대로)
+}
+
+
+def vacuum() -> dict:
+    """DB 파일 정리(VACUUM): 지운 글·사진이 차지하던 빈 공간을 돌려줍니다. 수집기가 쓰는 중이면 잠깐 기다렸다가 합니다."""
+    def size():
+        n = 0
+        for suffix in ("", "-wal"):
+            try:
+                n += os.path.getsize(str(DB_PATH) + suffix)
+            except OSError:
+                pass
+        return n
+    before = size()
+    conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("VACUUM")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.OperationalError as e:
+        raise OpError("DB가 사용 중이라 정리하지 못했습니다. 수집이 끝난 뒤 다시 시도하세요. (" + str(e) + ")")
+    finally:
+        conn.close()
+    return {"before": before, "after": size()}
+
+
 # ---------- 요청 처리 ----------
 def handle(db, me: str, act: str, p: dict):
     if act == "users":
@@ -239,6 +279,10 @@ def handle(db, me: str, act: str, p: dict):
         return accounts(db)
     if act == "server":
         return server_info(db)
+    if act in CM_ACTS:
+        if act != "community":
+            log.info("관리자 %s: %s %s", me, act, {k: p.get(k) for k in ("id", "post", "comment") if k in p})
+        return CM_ACTS[act](db, p)
     uid = _uid(p)
     if act == "user":
         return user_detail(db, uid)
@@ -287,6 +331,9 @@ def admin(body: dict = Body(...)):
             code, res = 403, {"ok": False, "error": "관리자만 쓸 수 있습니다."}
         elif not isinstance(act, str):
             code, res = 400, {"ok": False, "error": "요청 형식이 올바르지 않습니다."}
+        elif act == "vacuum":
+            log.info("관리자 %s: DB 정리", me["id"])
+            code, res = 200, {"ok": True, "result": vacuum()}
         elif act in COLLECTOR_ACTS:
             if act == "checkLogin":
                 collector.request_login_check(list(LOGIN_ACCTS))

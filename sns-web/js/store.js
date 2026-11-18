@@ -47,7 +47,9 @@ async function refreshOnce() {
   if (!connected) {
     setConn(true); lastDataSig = ""; lastStatusSig = ""; lastLoginSig = "";
     if (Date.now() - lastSeenPull > 60000) pullSeen(); // 다시 연결되면 본 글 기록도 맞춥니다
+    if (typeof cmBoot === "function") cmBoot();        // 주소에 커뮤니티 화면(#c/…)이 적혀 있으면 그 화면으로
   }
+  if (typeof cmBadges === "function") cmBadges(d.cm);   // 커뮤니티 알림 수·새 글 점·(관리자) 신고 수
   // 수집이 끝나는 순간, 프로필 사진도 함께 최신화합니다.
   { const nowRun = !!(checkStatus && checkStatus.running); if (prevRunning && !nowRun) setTimeout(() => refreshPics().catch(() => {}), 1500); prevRunning = nowRun; }
   // 웹을 처음 열 때, 서버 테스트 계정의 로그인 상태가 오래됐으면 서버에 다시 확인을 부탁합니다.

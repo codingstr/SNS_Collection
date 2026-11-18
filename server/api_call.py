@@ -153,6 +153,10 @@ def handle(db, uid: str, op: str, p: dict):
             "nextAuto": int(collector.next_auto * 1000),  # 다음 서버 자동 수집 시각(밀리초)
             "seenReset": st["seenReset"],                 # 본 글 기록을 비운 시각: 화면이 더 늦은 값을 보면 자기 읽음 표시도 버림
         }
+        # 커뮤니티 표시(안 읽은 댓글 알림 수·새 글 여부·관리자는 처리할 신고 수). 따로 요청하지 않고 이 30초 주기에 같이 보냅니다.
+        from community import badges   # community가 이 모듈(OpError)을 불러오므로 여기서 불러옵니다
+        admin = db.execute("SELECT is_admin FROM users WHERE id = ?", (uid,)).fetchone()
+        res["cm"] = badges(db, uid, bool(admin and admin[0]))
         if items is None:
             res["same"] = True        # 화면이 가진 글 목록 그대로 쓰면 됨
         else:

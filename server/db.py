@@ -102,14 +102,16 @@ CREATE TABLE IF NOT EXISTS page_log (
 CREATE TABLE IF NOT EXISTS cm_posts (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   author      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  cat         TEXT NOT NULL,               -- 질문 / 팁 / 건의 / 잡담 / 공지(관리자만)
+  cat         TEXT NOT NULL,               -- 일반 / 질문 / 소식 / 공지(관리자만)
   title       TEXT NOT NULL,
   body        TEXT NOT NULL,
   tags        TEXT NOT NULL DEFAULT '[]',  -- 태그한 SNS 계정(JSON: [{id, platform, label}]). 거르기는 cm_tags로
   links       TEXT NOT NULL DEFAULT '[]',  -- 링크 주소(JSON)
   imgs        TEXT NOT NULL DEFAULT '[]',  -- 첨부 이미지 열쇠(JSON). 내용은 cm_images
-  created_at  INTEGER NOT NULL             -- 밀리초
+  created_at  INTEGER NOT NULL,            -- 밀리초
+  edited_at   INTEGER NOT NULL DEFAULT 0   -- 마지막으로 고친 시각(밀리초). 0이면 고친 적 없음
 );
+CREATE INDEX IF NOT EXISTS cm_posts_author ON cm_posts(author);
 -- 글 ↔ 태그한 계정(예: x:handle). 그룹 커뮤니티는 그 그룹 계정 중 하나라도 태그된 글을 보여 줍니다.
 CREATE TABLE IF NOT EXISTS cm_tags (
   post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
@@ -125,9 +127,11 @@ CREATE TABLE IF NOT EXISTS cm_comments (
   author      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body        TEXT NOT NULL,
   deleted     INTEGER NOT NULL DEFAULT 0,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  edited_at   INTEGER NOT NULL DEFAULT 0   -- 마지막으로 고친 시각(밀리초)
 );
 CREATE INDEX IF NOT EXISTS cm_comments_post ON cm_comments(post_id);
+CREATE INDEX IF NOT EXISTS cm_comments_parent ON cm_comments(parent_id);
 CREATE TABLE IF NOT EXISTS cm_likes (
   post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
   user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -141,8 +145,35 @@ CREATE TABLE IF NOT EXISTS cm_images (
   data        BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS cm_images_post ON cm_images(post_id);
+-- 사용자별 '어디까지 봤는지'(글·댓글 번호). 기기끼리 같이 씁니다.
+--   scope: all(전체 커뮤니티) / g:그룹 이름(그룹 커뮤니티) → 카드의 새 글 수, visit(커뮤니티 화면) → 위쪽 '커뮤니티' 버튼의 새 글 점,
+--          notif(댓글 알림, 댓글 번호)
+CREATE TABLE IF NOT EXISTS cm_seen (
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scope       TEXT NOT NULL,
+  last_id     INTEGER NOT NULL,
+  PRIMARY KEY (user_id, scope)
+);
+-- 스크랩(나중에 볼 글)
+CREATE TABLE IF NOT EXISTS cm_scraps (
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (user_id, post_id)
+);
+-- 신고. 관리자가 관리 탭에서 지우거나 기각할 때까지 그대로 둡니다(자동으로 숨기지 않음).
+CREATE TABLE IF NOT EXISTS cm_reports (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id     INTEGER NOT NULL REFERENCES cm_posts(id) ON DELETE CASCADE,
+  comment_id  INTEGER NOT NULL DEFAULT 0,  -- 0이면 글 신고, 아니면 그 댓글 신고(댓글을 지우면 신고도 지움)
+  reporter    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason      TEXT NOT NULL,
+  memo        TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  UNIQUE (reporter, post_id, comment_id)
+);
 """
-SCHEMA_VERSION = 2   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
+SCHEMA_VERSION = 3   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
 
 
 @contextmanager
@@ -192,8 +223,12 @@ def init_db():
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_state'").fetchone():
             if "seen_reset" not in {r["name"] for r in db.execute("PRAGMA table_info(user_state)")}:
                 db.execute("ALTER TABLE user_state ADD COLUMN seen_reset INTEGER NOT NULL DEFAULT 0")
+        for table in ("cm_posts", "cm_comments"):   # 글·댓글 고치기(edited_at)
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                if "edited_at" not in {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0")
         db.executescript(SCHEMA)
-        if ver < SCHEMA_VERSION:
+        if ver < 2:
             # 한 번만 하면 되는 변환(예전에는 켤 때마다 전체 표를 훑었음)
             db.execute("UPDATE items SET seen_at = collected_at WHERE seen_at = 0")
             db.execute("UPDATE items SET updated_at = MAX(collected_at, seen_at) WHERE updated_at = 0")
@@ -210,6 +245,10 @@ def init_db():
                 db.executemany("INSERT OR REPLACE INTO coverage(url, data, at) VALUES (?, ?, ?)",
                                [(u, json.dumps(c), at) for u, c in old.items() if isinstance(c, dict)])
                 db.execute("DELETE FROM kv WHERE key = 'coverage'")
+        if ver < 3:
+            # 커뮤니티 분류를 일반·질문·소식으로 줄임: 예전 팁·건의·잡담 글은 모두 '일반'으로(질문·공지는 그대로)
+            db.execute("UPDATE cm_posts SET cat = '일반' WHERE cat NOT IN ('일반', '질문', '소식', '공지')")
+        if ver < SCHEMA_VERSION:
             db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         now = int(time.time())
         db.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))

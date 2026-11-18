@@ -438,7 +438,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   const PAD = 6; // 손잡이가 바탕 박스 끝 밖으로 튀어나오지 않게 안쪽 여백
   const VBAR_W = 14; // 잡는 띠 폭 = 글 박스 오른쪽 안쪽 여백(bento.css의 #vbar width와 같게)
   const VBAR_INSET_Y = 12; // 박스 위·아래 가장자리에서 스크롤바까지(둥근 모서리에 닿지 않게). 오른쪽은 박스 끝에 붙임(손잡이는 그 안쪽 9px)
-  const target = () => ["setPanel", "trackPanel", "adminPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
+  const target = () => ["setPanel", "trackPanel", "adminPanel", "communityPanel", "grid", "empty"].map((i) => document.getElementById(i)).find((e) => e && !e.hidden && e.offsetParent !== null);
   function update() {
     const el = target();
     if (!el || window.innerWidth < 861) { bar.hidden = true; return; }
@@ -472,7 +472,7 @@ $("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); win
   bar.addEventListener("pointerdown", (e) => { if (e.target === bar) scrollTo(e.clientY - bar.getBoundingClientRect().top - thumb.offsetHeight / 2); });
   let upRaf = 0;
   const updateSoon = () => { if (!upRaf) upRaf = requestAnimationFrame(() => { upRaf = 0; update(); }); }; // 한 프레임에 한 번만
-  ["grid", "setPanel", "trackPanel", "adminPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", () => { updateSoon(); showBar(); }, { passive: true }); });
+  ["grid", "setPanel", "trackPanel", "adminPanel", "communityPanel"].forEach((i) => { const e = document.getElementById(i); if (e) e.addEventListener("scroll", () => { updateSoon(); showBar(); }, { passive: true }); });
   window.addEventListener("resize", updateSoon);
   new MutationObserver(updateSoon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "style", "class"] });
   setInterval(update, 800);

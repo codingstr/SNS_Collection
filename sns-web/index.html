@@ -10,8 +10,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=430">
-<link rel="stylesheet" href="bento.css?v=430">
+<link rel="stylesheet" href="style.css?v=431">
+<link rel="stylesheet" href="bento.css?v=431">
 
 <!-- 로고(꼬리를 문 뱀). 한 번만 정의하고 브랜드 버튼·로그인 창·검색 매체 메뉴에서 <use href="#logo">로 씁니다.
      색은 --ouro-bg(바탕)·--ouro-fg(뱀)로 바꿀 수 있고, 없으면 테마의 --accent·--accent-fg를 씁니다. -->
@@ -119,7 +119,7 @@
   <button id="vPrev" class="vnav" type="button" aria-label="이전 글">‹</button>
   <button id="vNext" class="vnav" type="button" aria-label="다음 글">›</button>
   <div class="viewer">
-    <div class="vh"><b id="vTitle"></b><button id="vTab" type="button" title="원본 글을 이 브라우저의 새 탭에서 엽니다">새 탭으로 열기</button><button id="vWin" type="button" title="원본 글을 따로 떨어진 새 창에서 엽니다">새 창으로 열기</button><button id="vClose" type="button" aria-label="닫기">×</button></div>
+    <div class="vh"><b id="vTitle"></b><button id="vShare" type="button" title="이 글을 커뮤니티 글로 공유합니다(링크와 계정 태그를 채운 글쓰기)">커뮤니티에 공유</button><button id="vTab" type="button" title="원본 글을 이 브라우저의 새 탭에서 엽니다">새 탭으로 열기</button><button id="vWin" type="button" title="원본 글을 따로 떨어진 새 창에서 엽니다">새 창으로 열기</button><button id="vClose" type="button" aria-label="닫기">×</button></div>
     <div id="vBody" class="vb"></div>
   </div>
 </div>
@@ -193,7 +193,9 @@
         <button type="button" id="cmBack" class="cm-back" aria-label="커뮤니티 목록으로" title="커뮤니티 목록으로" hidden>←</button>
         <h2 id="cmTitle">커뮤니티</h2><span id="cmCount" class="mg-count"></span>
         <input id="cmFind" class="cm-find" type="search" placeholder="커뮤니티 찾기" aria-label="커뮤니티 찾기" autocomplete="off">
+        <button type="button" id="cmBell" class="cm-bell" aria-haspopup="true" aria-expanded="false" aria-label="알림" title="내 글의 댓글 · 내 댓글의 답글">알림<span class="n"></span></button>
         <button type="button" id="cmNew" class="cm-new" hidden>글쓰기</button>
+        <div id="cmNotif" class="cm-notif" role="dialog" aria-label="알림" hidden></div>
       </div>
       <div id="cmCats" class="cm-cats" role="tablist" aria-label="분류" hidden></div>
       <div id="cmWrite" class="cm-write" hidden></div>
@@ -205,6 +207,7 @@
         <div class="ad-tabs" role="tablist" aria-label="관리 화면">
           <button id="adTabUsers" class="ad-tab on" type="button" role="tab" aria-selected="true">사용자</button>
           <button id="adTabAccts" class="ad-tab" type="button" role="tab" aria-selected="false">SNS 계정 상태</button>
+          <button id="adTabComm" class="ad-tab" type="button" role="tab" aria-selected="false">커뮤니티<span class="n"></span></button>
           <button id="adTabServer" class="ad-tab" type="button" role="tab" aria-selected="false">서버</button>
         </div>
       </div>
@@ -224,6 +227,7 @@
         </div>
         <div id="adAcctList" class="ad-accts"></div>
       </div>
+      <div id="adComm" class="ad-view" hidden></div>
       <div id="adServer" class="ad-view" hidden></div>
     </section>
 
@@ -240,15 +244,15 @@
   </main>
 </div>
 
-<script src="js/core.js?v=430"></script>
-<script src="js/bridge.js?v=430"></script>
-<script src="js/store.js?v=430"></script>
-<script src="js/list.js?v=430"></script>
-<script src="js/stories.js?v=430"></script>
-<script src="js/tracking.js?v=430"></script>
-<script src="js/manage.js?v=430"></script>
-<script src="js/admin.js?v=430"></script>
-<script src="js/community.js?v=430"></script>
-<script src="js/account.js?v=430"></script>
-<script src="js/ui.js?v=430"></script>
+<script src="js/core.js?v=431"></script>
+<script src="js/bridge.js?v=431"></script>
+<script src="js/store.js?v=431"></script>
+<script src="js/list.js?v=431"></script>
+<script src="js/stories.js?v=431"></script>
+<script src="js/tracking.js?v=431"></script>
+<script src="js/manage.js?v=431"></script>
+<script src="js/admin.js?v=431"></script>
+<script src="js/community.js?v=431"></script>
+<script src="js/account.js?v=431"></script>
+<script src="js/ui.js?v=431"></script>
 
