@@ -10,8 +10,8 @@
 <title>SNS 모아보기</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=428">
-<link rel="stylesheet" href="bento.css?v=428">
+<link rel="stylesheet" href="style.css?v=429">
+<link rel="stylesheet" href="bento.css?v=429">
 
 <!-- 로고(꼬리를 문 뱀). 한 번만 정의하고 브랜드 버튼·로그인 창·검색 매체 메뉴에서 <use href="#logo">로 씁니다.
      색은 --ouro-bg(바탕)·--ouro-fg(뱀)로 바꿀 수 있고, 없으면 테마의 --accent·--accent-fg를 씁니다. -->
@@ -44,7 +44,7 @@
     <button id="navAdmin" class="navbtn" type="button" title="관리(관리자 전용)" aria-label="관리" hidden>관리</button>
   </nav>
   <div class="acctwrap">
-    <button id="connAcct" class="avatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="계정 메뉴" hidden><span id="avLetter">?</span><img id="avImg" alt="" hidden></button>
+    <button id="connAcct" class="avatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="계정 메뉴" hidden><span id="avLetter">?</span></button>
     <div id="acctMenu" class="acctmenu" role="menu" hidden>
       <div id="menuWho" class="menuwho"></div>
       <button id="themeBtn" type="button" role="menuitem">☾ 다크 모드</button>
@@ -73,16 +73,6 @@
   <div class="modal">
     <button id="amX" class="x" type="button" aria-label="닫기">×</button>
     <h2 id="amTitle">계정 관리</h2>
-    <div class="amsec avsec">
-      <b>프로필 이미지</b>
-      <div class="avrow">
-        <span id="avPrev" class="avprev"><span id="avPrevLetter">?</span><img id="avPrevImg" alt="" hidden></span>
-        <button id="avPick" type="button">이미지 선택</button>
-        <button id="avClear" type="button" hidden>지우기</button>
-        <input id="avFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-      </div>
-      <p class="hint">정사각형으로 잘라 둥근 네모로 보여줍니다. 이 브라우저에만 저장됩니다.</p>
-    </div>
     <form id="pwForm" class="amsec" autocomplete="off">
       <b>비밀번호 변경</b>
       <input id="pwOld" type="password" placeholder="현재 비밀번호" aria-label="현재 비밀번호" autocomplete="current-password" required>
@@ -250,15 +240,15 @@
   </main>
 </div>
 
-<script src="js/core.js?v=428"></script>
-<script src="js/bridge.js?v=428"></script>
-<script src="js/store.js?v=428"></script>
-<script src="js/list.js?v=428"></script>
-<script src="js/stories.js?v=428"></script>
-<script src="js/tracking.js?v=428"></script>
-<script src="js/manage.js?v=428"></script>
-<script src="js/admin.js?v=428"></script>
-<script src="js/community.js?v=428"></script>
-<script src="js/account.js?v=428"></script>
-<script src="js/ui.js?v=428"></script>
+<script src="js/core.js?v=429"></script>
+<script src="js/bridge.js?v=429"></script>
+<script src="js/store.js?v=429"></script>
+<script src="js/list.js?v=429"></script>
+<script src="js/stories.js?v=429"></script>
+<script src="js/tracking.js?v=429"></script>
+<script src="js/manage.js?v=429"></script>
+<script src="js/admin.js?v=429"></script>
+<script src="js/community.js?v=429"></script>
+<script src="js/account.js?v=429"></script>
+<script src="js/ui.js?v=429"></script>
 

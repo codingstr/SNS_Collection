@@ -1,30 +1,7 @@
 /* ---------- 계정 : 아이디·비밀번호 로그인(서버 /api/auth) ---------- */
-let sess = "", avWho = "";
-// 프로필 이미지: 이 브라우저에 저장합니다(정사각형 128px로 줄여서).
-function loadAvatar() {
-  const d = lsGet("snsAvatar", "");
-  const img = $("avImg");
-  if (d) { img.src = d; img.hidden = false; $("avLetter").hidden = true; } else { img.removeAttribute("src"); img.hidden = true; $("avLetter").hidden = false; }
-  $("avClear").hidden = !d;
-  const pi = $("avPrevImg");
-  if (d) { pi.src = d; pi.hidden = false; $("avPrevLetter").hidden = true; } else { pi.removeAttribute("src"); pi.hidden = true; $("avPrevLetter").hidden = false; }
-  $("avPrevLetter").textContent = (avWho || "?").slice(0, 1).toUpperCase();
-}
-function setAvatarWho(uid) { avWho = uid; $("avLetter").textContent = (uid || "?").slice(0, 1).toUpperCase(); $("menuWho").textContent = uid; $("connAcct").title = uid; loadAvatar(); }
-function pickAvatar(file) {
-  if (!file || !/^image\//.test(file.type)) return;
-  const url = URL.createObjectURL(file), im = new Image();
-  im.onload = () => {
-    const c = document.createElement("canvas"); c.width = c.height = 128;
-    const x = c.getContext("2d"), m = Math.min(im.naturalWidth, im.naturalHeight);
-    x.drawImage(im, (im.naturalWidth - m) / 2, (im.naturalHeight - m) / 2, m, m, 0, 0, 128, 128); // 가운데를 정사각형으로 잘라 꽉 채웁니다
-    URL.revokeObjectURL(url);
-    lsSet("snsAvatar", c.toDataURL("image/jpeg", 0.9));
-    loadAvatar();
-  };
-  im.onerror = () => URL.revokeObjectURL(url);
-  im.src = url;
-}
+let sess = "";
+// 오른쪽 위 계정 버튼: 아이디 첫 글자를 보여 줍니다.
+function setAvatarWho(uid) { $("avLetter").textContent = (uid || "?").slice(0, 1).toUpperCase(); $("menuWho").textContent = uid; $("connAcct").title = uid; }
 try { sess = localStorage.getItem("snsSess") || ""; } catch (e) {}
 async function api(action, body) {
   const r = await apiPost("/api/auth", Object.assign({ action, session: sess }, body || {}));
@@ -99,9 +76,6 @@ async function initAccount() {
   const closeAcct = () => { $("acctModal").hidden = true; };
   const setMenu = (on) => { $("acctMenu").hidden = !on; $("connAcct").setAttribute("aria-expanded", String(on)); };
   $("connAcct").addEventListener("click", (e) => { e.stopPropagation(); setMenu($("acctMenu").hidden); });
-  $("avPick").addEventListener("click", () => $("avFile").click());
-  $("avFile").addEventListener("change", () => { pickAvatar($("avFile").files[0]); $("avFile").value = ""; });
-  $("avClear").addEventListener("click", () => { try { localStorage.removeItem(ukey("snsAvatar")); } catch (e) {} loadAvatar(); });
   $("menuSettings").addEventListener("click", () => { setMenu(false); openAcct(); });
   $("connOut").addEventListener("click", () => setMenu(false));
   document.addEventListener("click", (e) => { if (!e.target.closest(".acctwrap")) setMenu(false); });

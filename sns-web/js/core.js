@@ -52,18 +52,20 @@ function toast(msg, kind, action) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v428";
+const WEB_VERSION = "v429";
 const TEAM_NAME = "WebMonster";
 // 로고 그림(index.html의 <symbol id="logo">). 검색 매체 메뉴의 '전체'에 씁니다.
 const LOGO_SVG = '<svg viewBox="0 0 128 128" aria-hidden="true"><use href="#logo"/></svg>';
 const TEAM_GITHUB = "https://github.com/WM-WebMonsters";
 const SRC_LABELS = { "youtube-video": "유튜브 영상", "youtube-post": "유튜브 게시물", x: "X", instagram: "인스타" };
 
-/* 이 브라우저에 저장하는 값 중 사용자마다 따로 둘 것(본 글 기록·프로필 사진·즐겨찾기 등)은 아이디별 이름으로 저장합니다.
+/* 이 브라우저에 저장하는 값 중 사용자마다 따로 둘 것(본 글 기록·그룹 사진·즐겨찾기 등)은 아이디별 이름으로 저장합니다.
    같은 브라우저에서 다른 아이디로 로그인해도 서로 섞이지 않습니다. (화면 설정·테마처럼 기기 설정은 공통) */
-const PER_USER_KEYS = ["snsSeen", "snsSeenReset", "snsAvatar", "snsPics", "snsPicPick", "snsPicAt", "snsFavs"];
+const PER_USER_KEYS = ["snsSeen", "snsSeenReset", "snsPics", "snsPicPick", "snsPicAt", "snsFavs"];
 let UID0 = "";
 try { UID0 = localStorage.getItem("snsUid") || ""; } catch (e) {}
+// 없앤 기능(계정 프로필 이미지)이 남긴 값은 지웁니다.
+try { Object.keys(localStorage).filter((k) => k === "snsAvatar" || k.startsWith("snsAvatar@")).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
 const ukey = (k) => (UID0 ? k + "@" + UID0 : k);
 try {
   // 예전 버전(아이디 구분 없이 저장)의 값은 마지막으로 로그인했던 아이디의 것으로 옮깁니다.

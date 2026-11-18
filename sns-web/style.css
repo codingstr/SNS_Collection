@@ -169,9 +169,6 @@ html:has(#viewer:not([hidden])), body:has(#viewer:not([hidden])) { overflow: hid
 
 .acctmenu{min-width:180px}.acctmenu button{white-space:nowrap}
 
-.avrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.avprev{width:48px;height:48px;border-radius:14px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:20px}
-.avprev img{width:100%;height:100%;object-fit:cover;display:block}
 
 /* 매체별 보기: 유튜브(영상·게시물)는 각각 한 줄, X와 인스타그램은 반줄씩 한 줄에 나란히 */
 .media-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 10px}
@@ -324,7 +321,6 @@ header .sbox .sgo{border-radius:0 9px 9px 0}
 .modal h2+.periodrow{margin-top:-4px}
 header .acctwrap{margin-left:auto}
 header #connAcct.avatar{width:52px;height:52px;min-width:52px;padding:0;border-radius:14px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
-header #connAcct.avatar img{width:100%;height:100%;object-fit:cover;border-radius:0}
 /* 계정 메뉴: 프로필 버튼의 오른쪽 끝에 맞춰 버튼 바로 아래로 펼쳐집니다(버튼은 가리지 않음) */
 .acctwrap .acctmenu{top:calc(100% + 4px);right:0;border-radius:14px;z-index:40}
 /* 계정 메뉴: 상자는 프로필 사진 높이만큼 위(사진의 윗선)에서 시작하고, demo는 사진 옆(왼쪽)에, 메뉴 항목은 사진 아래에 놓입니다 */
