@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import admin
@@ -62,6 +63,12 @@ app.include_router(api_call.router)  # /api/call  글 목록·추적 계정·수
 app.include_router(sync.router)      # /api/sync  본 글 기록
 app.include_router(admin.router)     # /api/admin 관리자 전용(관리 탭)
 app.include_router(community.router) # /api/community 커뮤니티(글·댓글·좋아요·이미지)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """index.html이 탭 아이콘(favicon.svg)을 알려 줘도 일부 브라우저는 /favicon.ico를 따로 찾습니다. 같은 그림으로 보냅니다(404 대신)."""
+    return RedirectResponse("/favicon.svg", status_code=301)
 
 
 # ---------- 웹 화면 ----------
