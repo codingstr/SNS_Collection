@@ -316,6 +316,17 @@ renderAll();
     });
   });
   go.hidden = false; // (예전에는 1초마다 다시 켰지만 숨기는 곳이 없어 한 번이면 됩니다)
+  // 검색창 쓰임새: 홈·즐겨찾기는 '글 검색 + Enter로 계정 찾기', 커뮤니티·추적 계정 관리·관리자 화면은 '계정 찾기'만.
+  // 쓰임새가 바뀌면 적어 둔 검색어와 결과 상자를 비웁니다(홈의 글 거르기가 다른 화면의 계정 검색어로 남지 않게).
+  let acctOnly = false;
+  window.setSearchMode = (on) => {
+    if (on === acctOnly) return;
+    acctOnly = on;
+    q.placeholder = on ? "계정 찾기 · Enter (이름·@아이디·프로필 주소)" : "글 검색 · Enter로 계정 찾기 (이름·@아이디·프로필 주소)";
+    q.setAttribute("aria-label", on ? "계정 찾기 (Enter)" : "글 검색, Enter로 계정 찾기");
+    close();
+    if (q.value) { q.value = ""; renderList(); }
+  };
   const section = (p) => {
     const sec = el("div", { class: "sr-sec" });
     sec.appendChild(el("div", { class: "sr-plat" }, [el("span", { class: "si" }, [pIcon(p)]), el("span", { text: PLATFORM[p] })]));
@@ -391,13 +402,13 @@ renderAll();
 })();
 
 /* ---------- 상단 홈 / 추적 계정 관리 버튼 ---------- */
-$("navHome").addEventListener("click", () => { page = "home"; applyPage(); renderList(); window.scrollTo(0, 0); });
+$("navHome").addEventListener("click", () => { enterListPage("home"); syncRoute(true); });
 $("themeSwitch").addEventListener("click", () => { $("themeBtn").click(); const d = document.documentElement.getAttribute("data-theme") === "dark"; $("themeSwitch").setAttribute("aria-checked", String(d)); });
 { const d = document.documentElement.getAttribute("data-theme") === "dark"; $("themeSwitch").setAttribute("aria-checked", String(d)); }
 $("brand").addEventListener("click", () => $("navHome").click());
-$("navFav").addEventListener("click", () => { page = "fav"; activeTab = "people"; personFocus = ""; personPlat = ""; applyPage(); renderList(); window.scrollTo(0, 0); });
-$("navManage").addEventListener("click", () => { page = "manage"; applyPage(); window.scrollTo(0, 0); });
-$("navAdmin").addEventListener("click", () => { page = "admin"; applyPage(); window.scrollTo(0, 0); });
+$("navFav").addEventListener("click", () => { enterListPage("fav"); syncRoute(true); });
+$("navManage").addEventListener("click", () => { goPage("manage"); window.scrollTo(0, 0); });
+$("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo(0, 0); });
 
 /* ---------- 벤토 디자인: 계정 메뉴 항목을 '설정' 화면(별도 탭)으로 ---------- */
 (function () {

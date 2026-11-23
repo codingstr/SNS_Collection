@@ -54,7 +54,54 @@ function applyPage() {
   if (comm !== wasComm && typeof cmShown === "function") cmShown(comm);
   // 추적 계정 관리 화면을 떠나면 그 화면에서 고른 계정·그룹을 모두 풉니다(다시 들어오면 아무것도 안 고른 상태)
   if (wasManage && !manage && selIds.length) { selIds = []; if (typeof renderTracked === "function") renderTracked(); }
+  // 커뮤니티·추적 계정 관리·관리자 화면에서는 위쪽 검색창이 계정 찾기만 합니다(글 거르기 없음)
+  if (typeof setSearchMode === "function") setSearchMode(manage || adminOn || comm);
 }
+// 위쪽 검색창이 계정 찾기 전용인 화면인지(그때는 입력해도 홈 글 목록을 거르지 않음)
+const searchAcctOnly = () => connected && (page === "manage" || page === "community" || page === "admin");
+
+/* ---------- 화면 주소 ----------
+   홈은 주소 없음 · #fav 즐겨찾기 · #manage 추적 계정 관리 · #admin 관리(관리자 탭은 주소 없이 화면 안에서만 바꿈) · #c/… 커뮤니티(자세한 주소는 community.js의 cmHash)
+   - 화면을 옮기면 새 기록을 남겨(pushState) 뒤로 가기로 이전 화면에 돌아갑니다. 커뮤니티 안의 이동도 같은 기록을 씁니다.
+   - 서버와 연결되기 전(로그인 전·서버 꺼짐)에는 주소를 건드리지 않습니다. 그동안 화면은 홈으로 보이지만 주소는 그대로 남아,
+     연결되면(처음·로그인 뒤·다시 연결) 주소대로 화면을 엽니다(applyRoute). 관리자 여부도 그 전에 알게 됩니다(account.js의 setAdmin).
+   - 열 수 없는 주소(관리자가 아닌데 #admin, 모르는 주소)는 실제로 보이는 화면의 주소로 고칩니다. */
+const PAGE_HASH = { fav: "#fav", manage: "#manage", admin: "#admin" };
+let lastRouteHash = location.hash || "";
+function pageHash() { return page === "community" && typeof cmHash === "function" ? cmHash() : PAGE_HASH[page] || ""; }
+// 지금 화면을 주소에 적습니다. push: 새 기록으로(뒤로 가기로 돌아올 수 있게) / 아니면 지금 기록을 바꿈
+function syncRoute(push) {
+  if (!connected) return;
+  const h = pageHash();
+  lastRouteHash = h;
+  if ((location.hash || "") === h) return;
+  try { history[push ? "pushState" : "replaceState"](null, "", h || location.pathname + location.search); } catch (e) {}
+}
+// 화면 이동(왼쪽 버튼 등)
+function goPage(p) { page = p; applyPage(); syncRoute(true); }
+// 홈·즐겨찾기로 들어갈 때 화면 상태(즐겨찾기는 사람별 보기에서 시작)
+function enterListPage(p) {
+  if (p === "fav") { activeTab = "people"; personFocus = ""; personPlat = ""; }
+  page = p; applyPage(); renderList(); window.scrollTo(0, 0);
+}
+// 주소대로 화면을 엽니다: 연결됐을 때(store.js) · 뒤로/앞으로 가기 · 주소창에 직접 입력
+function applyRoute() {
+  if (!connected) return;
+  const h = location.hash || "";
+  lastRouteHash = h;
+  if (h === pageHash() && (page !== "admin" || isAdmin)) { applyPage(); return; }   // 이미 그 화면(다시 연결 등): 보던 상태 그대로
+  if (/^#c(\/|$)/.test(h) && typeof cmApplyHash === "function") { cmApplyHash(); return; }
+  const p = h === "#fav" ? "fav" : h === "#manage" ? "manage" : h === "#admin" ? "admin" : "home";
+  if (p === "home" || p === "fav") enterListPage(p);
+  else { page = p; applyPage(); window.scrollTo(0, 0); }
+  syncRoute(false);   // 열 수 없는 화면이었으면(관리자 아님 등) 주소를 실제 화면으로 고침
+}
+function onRouteNav() {
+  if ((location.hash || "") === lastRouteHash) return;   // 우리가 바꾼 주소(또는 hashchange·popstate가 둘 다 온 경우)
+  applyRoute();
+}
+window.addEventListener("hashchange", onRouteNav);
+window.addEventListener("popstate", onRouteNav);
 function setConn(ok) {
   connected = ok;
   if (ok) serverDown = false;

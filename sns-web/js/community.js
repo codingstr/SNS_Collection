@@ -12,15 +12,16 @@
 const CM_CATS = ["일반", "질문", "소식"];
 const CM_NOTICE = "공지", CM_HOT = "인기글";
 const CM_REASONS = ["스팸·광고", "욕설·비방", "부적절한 내용", "기타"];
-const CM_IMG_MAX = 4, CM_IMG_SIDE = 1280, CM_IMG_BYTES = 650000, CM_LINK_MAX = 5;
+const CM_IMG_MAX = 4, CM_IMG_SIDE = 1280, CM_IMG_BYTES = 650000, CM_LINK_MAX = 5, CM_TAG_MAX = 20;
 const CM_BUBBLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 const CM_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill="currentColor"/></svg>';
 
 // 보기 상태. cmView: {t:"list"} 커뮤니티 목록 / {t:"all"} 전체 / {t:"grp", key, name, ids} 그룹 / {t:"scrap"} 스크랩 / {t:"post", id} 글 하나
+// 전체·그룹 보기에 sc: true가 붙으면 그 커뮤니티 글 중 내가 스크랩한 글만 봅니다(머리줄의 스크랩 버튼).
 let cmView = { t: "list" }, cmCat = "", cmQ = "", cmPosts = [], cmHot = [], cmMore = false, cmCounts = {};
 let cmOpenId = 0, cmCmts = {}, cmReply = null, cmDraft = {}, cmMe = "", cmAdmin = false, cmHotMin = 3, cmSum = null, cmGen = 0;
 let cmTagF = null, cmTags = null, cmTagOpen = false, cmSeenBefore = Infinity, cmEditCmt = 0, cmFocusCmt = 0, cmMissing = "";
-let cmBadge = { notif: 0, newPosts: false, reports: 0 }, cmLastHash = "", cmBooted = false;
+let cmBadge = { notif: 0, newPosts: false, reports: 0 };
 // 전체 커뮤니티의 '내 추적 계정 글만'(이 브라우저에 기억)
 let cmMine = false;
 try { cmMine = localStorage.getItem("snsCmMine") === "1"; } catch (e) {}
@@ -61,24 +62,18 @@ const cmGrpView = (g) => (g ? { t: "grp", key: g.key, name: g.name, ids: g.ids }
 
 /* ---------- 화면 이동 · 주소(#c/…) ---------- */
 // 주소: #c 목록 · #c/all 전체 · #c/g/<그룹> 그룹 · #c/s 스크랩 · #c/<번호> 글 하나. 펼친 글은 뒤에 /<번호>(예: #c/all/12)
+// 커뮤니티 안의 스크랩만 보기는 /s를 붙입니다(예: #c/all/s, #c/g/<그룹>/s/12).
 function cmHash() {
   const v = cmView;
   let h = v.t === "list" ? "#c" : v.t === "all" ? "#c/all" : v.t === "grp" ? "#c/g/" + encodeURIComponent(v.key) : v.t === "scrap" ? "#c/s" : "#c/" + v.id;
+  if (v.sc) h += "/s";
   if (cmOpenId && v.t !== "post" && v.t !== "list") h += "/" + cmOpenId;
   return h;
 }
+// 커뮤니티 안에서 보기를 바꿨을 때 주소를 맞춥니다(주소 기록은 bridge.js의 syncRoute가 한 곳에서 다룸)
 function cmSyncHash(push) {
   if (page !== "community") return;
-  const h = cmHash();
-  cmLastHash = h;
-  if (location.hash === h) return;
-  try { history[push ? "pushState" : "replaceState"](null, "", h); } catch (e) {}
-}
-// 커뮤니티를 떠나면 주소에서 #c…를 뺍니다(새 기록으로: 뒤로 가기를 누르면 보던 커뮤니티 화면으로 돌아감)
-function cmClearHash() {
-  if (!/^#c(\/|$)/.test(location.hash)) return;
-  cmLastHash = "";
-  try { history.pushState(null, "", location.pathname + location.search); } catch (e) {}
+  syncRoute(push);
 }
 function cmParseHash(h) {
   const m = /^#c(?:\/(.*))?$/.exec(h || "");
@@ -87,13 +82,14 @@ function cmParseHash(h) {
   const num = (x) => (/^\d{1,9}$/.test(x || "") ? Number(x) : 0);
   if (!parts.length) return { v: { t: "list" }, open: 0 };
   if (num(parts[0])) return { v: { t: "post", id: num(parts[0]) }, open: num(parts[0]) };
-  if (parts[0] === "all") return { v: { t: "all" }, open: num(parts[1]) };
-  if (parts[0] === "s") return { v: { t: "scrap" }, open: num(parts[1]) };
+  if (parts[0] === "all") return parts[1] === "s" ? { v: { t: "all", sc: true }, open: num(parts[2]) } : { v: { t: "all" }, open: num(parts[1]) };
+  if (parts[0] === "s") return { v: { t: "all", sc: true }, open: num(parts[1]) };   // 예전 스크랩 주소 → 전체 커뮤니티의 스크랩
   if (parts[0] === "g") {
     let key = "";
     try { key = decodeURIComponent(parts[1] || ""); } catch (e) {}
     const g = cmGroups().find((x) => x.key === key);
-    return g ? { v: cmGrpView(g), open: num(parts[2]) } : { v: { t: "list" }, open: 0 };   // 그룹 이름이 바뀌었으면 목록으로
+    if (!g) return { v: { t: "list" }, open: 0 };   // 그룹 이름이 바뀌었으면 목록으로
+    return parts[2] === "s" ? { v: { ...cmGrpView(g), sc: true }, open: num(parts[3]) } : { v: cmGrpView(g), open: num(parts[2]) };
   }
   return { v: { t: "list" }, open: 0 };
 }
@@ -112,27 +108,12 @@ function cmGo(v, open, push = true) {
 function cmOpenGroup(g) { cmGo(cmGrpView(g)); }
 // 글 하나로 바로(알림·관리 탭·공유 주소). cid가 있으면 그 댓글을 찾아 보여 줍니다.
 function cmGoPost(pid, cid) { cmFocusCmt = cid || 0; delete cmCmts[pid]; cmGo({ t: "post", id: pid }, pid); }
+// 주소(#c/…)대로 커뮤니티 화면을 엽니다(bridge.js의 applyRoute가 부름: 연결됐을 때·뒤로/앞으로 가기·주소 직접 입력)
 function cmApplyHash() {
   const r = cmParseHash(location.hash);
   if (!r || !connected) return false;
-  cmLastHash = location.hash;
   cmGo(r.v, r.open, false);
   return true;
-}
-// 주소창에 글 주소를 붙여 넣거나 뒤로·앞으로 가기를 했을 때
-function cmOnNav() {
-  if (location.hash === cmLastHash) return;
-  if (cmApplyHash()) return;
-  cmLastHash = location.hash;
-  if (page === "community" && !location.hash) { page = "home"; applyPage(); }   // 커뮤니티에 들어오기 전으로 돌아감
-}
-window.addEventListener("hashchange", cmOnNav);
-window.addEventListener("popstate", cmOnNav);
-// 처음 연결됐을 때(store.js): 주소에 커뮤니티 화면이 적혀 있으면 그 화면을 엽니다.
-function cmBoot() {
-  if (cmBooted) return;
-  cmBooted = true;
-  if (/^#c(\/|$)/.test(location.hash)) cmApplyHash();
 }
 
 // 홈의 사람별 그룹 머리줄에 붙는 '커뮤니티' 버튼
@@ -168,7 +149,7 @@ function cmPaintBadges() {
 /* ---------- 불러오기 ---------- */
 // 커뮤니티 화면이 보이거나 사라질 때(bridge.js의 applyPage)
 function cmShown(on) {
-  if (!on) { cmCloseWrite(); cmCloseNotif(); cmClearHash(); cmPaintBadges(); return; }
+  if (!on) { cmCloseWrite(); cmCloseNotif(); cmPaintBadges(); return; }   // 주소는 옮겨 간 화면이 적음(bridge.js의 goPage)
   cmLoad();
   cmSyncHash(true);
   cmPaintBadges();
@@ -202,9 +183,9 @@ async function cmLoad(more) {
   if (v.t === "all" && !more && !cmTags) cmLoadTags();
   const ids = v.t === "grp" ? v.ids : cmTagF ? [cmTagF.id] : [];
   const mine = v.t === "all" && cmMine;
-  const scope = cmTagF || mine ? "" : v.t === "all" ? "all" : v.t === "grp" ? "g:" + v.key : "";   // 거른 목록을 봤다고 '여기까지 봄'으로 적지 않음
+  const scope = cmTagF || mine || v.sc ? "" : v.t === "all" ? "all" : v.t === "grp" ? "g:" + v.key : "";   // 거른 목록을 봤다고 '여기까지 봄'으로 적지 않음
   try {
-    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: v.t === "scrap", mine, scope });
+    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: v.t === "scrap" || !!v.sc, mine, scope });
     if (gen !== cmGen) return;
     cmMe = res.me; cmAdmin = res.admin; cmHotMin = res.hotMin; cmCounts = res.counts; cmMore = res.more;
     if (typeof res.seenBefore === "number") cmSeenBefore = res.seenBefore;
@@ -228,7 +209,7 @@ async function cmLoadTags() {
   try { cmTags = await cmCall("tagStats", {}); } catch (e) { cmTags = []; }
   if (cmView.t === "all") cmRender();
 }
-// 다른 탭에 갔다가 돌아오면(글쓰기·고치기 중이 아니면) 새 글·댓글을 다시 읽습니다.
+// 다른 탭에 갔다가 돌아오면(글쓰기·수정 중이 아니면) 새 글·댓글을 다시 읽습니다.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || page !== "community" || $("communityPanel").hidden || !$("cmWrite").hidden || cmEditCmt) return;
   const a = document.activeElement;
@@ -242,12 +223,22 @@ function cmRender(loading) {
   const v = cmView, list = v.t === "list";
   $("cmBack").hidden = list;
   $("cmCats").hidden = list || v.t === "post";
-  $("cmNew").hidden = list || v.t === "post" || v.t === "scrap";
+  $("cmNew").hidden = v.t === "post" || v.t === "scrap";   // 커뮤니티 목록에서 쓰면 전체 커뮤니티에, 스크랩만 보는 중이면 그 커뮤니티에 올라갑니다
+  // 스크랩 버튼: 목록에서는 스크랩 화면으로, 전체·그룹 커뮤니티에서는 그 커뮤니티의 스크랩 글만 보기(켜고 끄기)
+  const sb = $("cmScrap"), inComm = v.t === "all" || v.t === "grp";
+  sb.hidden = !list && !inComm;
+  sb.classList.toggle("on", !!v.sc);
+  if (inComm) {
+    sb.setAttribute("aria-pressed", String(!!v.sc));
+    sb.querySelector(".n").textContent = "";
+    sb.setAttribute("aria-label", v.sc ? "스크랩만 보기 끄기" : "이 커뮤니티의 스크랩한 글만 보기");
+    sb.title = v.sc ? "모든 글 보기로 돌아갑니다" : "이 커뮤니티 글 중 내가 스크랩한 글만 봅니다";
+  } else { sb.removeAttribute("aria-pressed"); sb.title = "스크랩한 글 (나중에 볼 글)"; }
   $("cmFind").hidden = v.t === "post";
   $("cmFind").placeholder = list ? "커뮤니티 찾기 (그룹 이름·@아이디)" : "글 검색 (제목·내용·쓴 사람·태그)";
   $("cmFind").setAttribute("aria-label", $("cmFind").placeholder);
   const h = $("cmTitle");
-  h.textContent = list ? "커뮤니티" : v.t === "all" ? "전체 커뮤니티" : v.t === "grp" ? v.name : v.t === "scrap" ? "스크랩" : "글";
+  h.textContent = (list ? "커뮤니티" : v.t === "all" ? "전체 커뮤니티" : v.t === "grp" ? v.name : v.t === "scrap" ? "스크랩" : "글") + (v.sc ? " · 스크랩" : "");
   h.title = h.textContent;
   if (list) { cmRenderList(); return; }
   if (v.t !== "post") cmRenderCats();
@@ -270,11 +261,11 @@ function cmRender(loading) {
   const n = cmCounts[cmCat] || 0;
   $("cmCount").textContent = loading && !cmPosts.length ? "" : (cmQ ? "검색 결과 " : "글 ") + n + "개";
   if (loading && !cmPosts.length) { box.appendChild(el("p", { class: "cm-empty", text: "불러오는 중…" })); return; }
-  const hot = !cmCat && !cmQ && v.t !== "scrap" ? cmHot : [];
+  const hot = !cmCat && !cmQ && v.t !== "scrap" && !v.sc ? cmHot : [];
   const hotIds = new Set(hot.map((p) => p.id));
   const rest = cmPosts.filter((p) => !hotIds.has(p.id));
   if (!hot.length && !rest.length) {
-    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "all" && cmMine && !cmTagF ? "내가 추적하는 계정이 태그된 글이 없습니다. 위쪽 ‘내 추적 계정 글만’을 끄면 모든 글이 보입니다." : v.t === "scrap" ? "스크랩한 글이 없습니다. 글을 펼쳐 ‘스크랩’을 누르면 여기에 모입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
+    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "all" && cmMine && !cmTagF ? "내가 추적하는 계정이 태그된 글이 없습니다. 위쪽 ‘내 추적 계정 글만’을 끄면 모든 글이 보입니다." : v.t === "scrap" ? "스크랩한 글이 없습니다. 글을 펼쳐 ‘스크랩’을 누르면 여기에 모입니다." : v.sc ? "이 커뮤니티에서 스크랩한 글이 없습니다. 위쪽 ‘스크랩’을 다시 누르면 모든 글이 보입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
     return;
   }
   hot.forEach((p) => box.appendChild(cmPostEl(p, true)));
@@ -306,17 +297,14 @@ function cmRenderList() {
   const shown = groups.filter((g) => !q || [g.name, g.key, ...g.accs.flatMap((t) => [t.handle || "", t.channelId || "", t.group || "", PLATFORM[t.platform]])].join(" ").toLowerCase().includes(q))
     .map((g, i) => ({ g, i })).sort((a, b) => at(b.g) - at(a.g) || a.i - b.i).map((x) => x.g);
   const showAll = !q || "전체 커뮤니티".includes(q);
-  const showScrap = !q || "스크랩".includes(q);
   $("cmCount").textContent = (q ? "검색 결과 " : "") + (shown.length + (showAll ? 1 : 0)) + "개";
   if (showAll) {
     const face = el("span", { class: "cm-cface all" }); face.innerHTML = LOGO_SVG;
     box.appendChild(card(face, "전체 커뮤니티", info(sum.all), sum.all, () => cmOpenGroup(null), newPill(sum.all)));
   }
-  if (showScrap) {
-    const face = el("span", { class: "cm-cface star" }); face.innerHTML = CM_STAR;
-    box.appendChild(card(face, "스크랩", el("span", { class: "cm-cmeta", text: cmSum ? "글 " + (sum.scraps || 0) + "개" : "…" }), null, () => cmGo({ t: "scrap" }), [],
-      el("span", { class: "cm-clast", text: "나중에 볼 글" })));
-  }
+  // 스크랩은 카드 대신 머리줄(검색칸 옆)의 작은 버튼으로
+  $("cmScrap").querySelector(".n").textContent = cmSum && sum.scraps ? String(sum.scraps > 99 ? "99+" : sum.scraps) : "";
+  $("cmScrap").setAttribute("aria-label", "스크랩" + (cmSum ? " " + (sum.scraps || 0) + "개" : ""));
   shown.forEach((g) => {
     const chosen = g.accs.find((t) => t.platform === picPick[g.key]) || g.accs.find((t) => picMap[t.id]) || g.accs[0];
     const face = el("span", { class: "cm-cface" }, [picFace(chosen, g.name.replace(/^@/, ""), "pface")]);
@@ -511,7 +499,7 @@ function cmPostEl(p, asHot) {
   if (open) art.appendChild(cmOpenEl(p));
   return art;
 }
-// 글 정보를 바꾼 뒤(좋아요·스크랩·고치기): 목록·인기글에 있는 같은 글을 모두 맞춥니다.
+// 글 정보를 바꾼 뒤(좋아요·스크랩·수정): 목록·인기글에 있는 같은 글을 모두 맞춥니다.
 function cmPatch(id, ch) { [...cmPosts, ...cmHot].filter((x) => x.id === id).forEach((x) => Object.assign(x, ch)); }
 
 function cmOpenEl(p) {
@@ -528,34 +516,34 @@ function cmOpenEl(p) {
   if (p.links.length) body.appendChild(el("div", { class: "cm-links" }, p.links.map((u) => (p.cards && p.cards[u] ? cmItemCard(p.cards[u]) : cmLinkEl(u)))));
   if (p.tags.length) body.appendChild(el("div", { class: "cm-tags" }, p.tags.map((t) => cmTagEl(t, true))));
   if (p.editedAt) body.appendChild(el("p", { class: "cm-editnote", text: "수정됨 · " + cmDate(p.editedAt) }));
-  // 좋아요 · 스크랩 · 링크 복사 · 고치기 · 신고 · 지우기
+  // 좋아요 · 스크랩 · 링크 복사 · 수정 · 신고 · 지우기 (하고 나면 아래쪽에 짧은 알림)
   const like = el("button", { type: "button", class: "cm-like" + (p.liked ? " on" : ""), "aria-pressed": String(p.liked), text: "♥ 좋아요 " + p.likes });
   if (p.mine) { like.disabled = true; like.title = "내 글에는 좋아요를 누를 수 없습니다"; }
   like.addEventListener("click", async () => {
     like.disabled = true;
-    try { const r = await cmCall("like", { id: p.id, on: !p.liked }); Object.assign(p, r); cmPatch(p.id, r); cmRender(); }
+    try { const r = await cmCall("like", { id: p.id, on: !p.liked }); Object.assign(p, r); cmPatch(p.id, r); toast(r.liked ? "좋아요를 눌렀습니다." : "좋아요를 취소했습니다."); cmRender(); }
     catch (e) { like.disabled = false; showErr(e); }
   });
-  const scr = el("button", { type: "button", class: "cm-act" + (p.scrapped ? " on" : ""), "aria-pressed": String(p.scrapped), text: p.scrapped ? "★ 스크랩함" : "☆ 스크랩", title: p.scrapped ? "스크랩에서 빼기" : "나중에 볼 글로 모아 두기(커뮤니티 목록의 ‘스크랩’)" });
+  const scr = el("button", { type: "button", class: "cm-act" + (p.scrapped ? " on" : ""), "aria-pressed": String(p.scrapped), text: p.scrapped ? "★ 스크랩함" : "☆ 스크랩", title: p.scrapped ? "스크랩에서 빼기" : "나중에 볼 글로 모아 두기(커뮤니티 목록 위쪽의 ‘스크랩’)" });
   scr.addEventListener("click", async () => {
     scr.disabled = true;
     try {
       const r = await cmCall("scrap", { id: p.id, on: !p.scrapped });
       cmPatch(p.id, r); Object.assign(p, r);
-      toast(r.scrapped ? "스크랩했습니다. 커뮤니티 목록의 ‘스크랩’에서 볼 수 있습니다." : "스크랩에서 뺐습니다.");
-      if (cmView.t === "scrap" && !r.scrapped) { cmPosts = cmPosts.filter((x) => x.id !== p.id); cmOpenId = 0; cmCounts[cmCat] = Math.max(0, (cmCounts[cmCat] || 1) - 1); cmSyncHash(false); }
+      toast(r.scrapped ? "스크랩했습니다. 커뮤니티 목록 위쪽의 ‘스크랩’에서 볼 수 있습니다." : "스크랩에서 뺐습니다.");
+      if ((cmView.t === "scrap" || cmView.sc) && !r.scrapped) { cmPosts = cmPosts.filter((x) => x.id !== p.id); cmOpenId = 0; cmCounts[cmCat] = Math.max(0, (cmCounts[cmCat] || 1) - 1); cmSyncHash(false); }
       cmRender();
     } catch (e) { scr.disabled = false; showErr(e); }
   });
   const copy = el("button", { type: "button", class: "cm-act", text: "링크 복사", title: "이 글의 주소를 복사합니다(받은 사람이 누르면 이 글이 바로 열림)" });
   copy.addEventListener("click", async () => {
     const u = cmPostUrl(p.id);
-    try { await navigator.clipboard.writeText(u); toast("글 주소를 복사했습니다."); }
-    catch (e) { toast("복사하지 못했습니다. 주소: " + u, "error"); }
+    if (await copyText(u)) toast("글 주소를 복사했습니다.");
+    else toast("복사하지 못했습니다. 주소: " + u, "error");
   });
   const acts = el("div", { class: "cm-acts" }, [like, scr, copy]);
   if (p.canEdit) {
-    const ed = el("button", { type: "button", class: "cm-act", text: "고치기" });
+    const ed = el("button", { type: "button", class: "cm-act", text: "수정" });
     ed.addEventListener("click", () => cmOpenWrite({ edit: p }));
     acts.appendChild(ed);
   }
@@ -675,15 +663,16 @@ function cmCmtForm(p, parent, to) {
     try {
       cmCmts[p.id] = await cmCall("comment", { id: p.id, body: (to ? "@" + to + " " : "") + t, parent: parent || null });
       delete cmDraft[key]; cmReply = null;
+      toast(parent ? "답글을 달았습니다." : "댓글을 달았습니다.");
       p.comments = cmCmts[p.id].filter((c) => !c.deleted).length; cmPatch(p.id, { comments: p.comments });
       cmRender();
     } catch (er) { ok.disabled = false; showErr(er); }
   });
   return f;
 }
-// 댓글 고치기 칸(그 댓글 자리에)
+// 댓글 수정 칸(그 댓글 자리에)
 function cmCmtEditForm(p, c) {
-  const inp = el("input", { type: "text", maxlength: "500", "aria-label": "댓글 고치기", autocomplete: "off" });
+  const inp = el("input", { type: "text", maxlength: "500", "aria-label": "댓글 수정", autocomplete: "off" });
   inp.value = c.body;
   const ok = el("button", { type: "submit", text: "저장" });
   const no = el("button", { type: "button", class: "cm-x", text: "취소" });
@@ -696,7 +685,7 @@ function cmCmtEditForm(p, c) {
     if (!t || ok.disabled) return;
     if (t === c.body) { cmEditCmt = 0; cmRender(); return; }
     ok.disabled = true;
-    try { cmCmts[p.id] = await cmCall("editComment", { id: c.id, body: t }); cmEditCmt = 0; cmRender(); }
+    try { cmCmts[p.id] = await cmCall("editComment", { id: c.id, body: t }); cmEditCmt = 0; toast("댓글을 수정했습니다."); cmRender(); }
     catch (er) { ok.disabled = false; showErr(er); }
   });
   setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 0);
@@ -735,7 +724,7 @@ function cmCommentsEl(p) {
       const db = el("button", { type: "button", class: "cm-rbtn danger", text: "지우기" });
       db.addEventListener("click", async () => {
         if (!(await confirmBox({ title: "댓글을 지울까요?", text: "되돌릴 수 없습니다. 답글이 달린 댓글은 ‘지운 댓글’로 남습니다.", ok: "지우기" }))) return;
-        try { cmCmts[p.id] = await cmCall("delComment", { id: c.id }); p.comments = cmCmts[p.id].filter((x) => !x.deleted).length; cmPatch(p.id, { comments: p.comments }); cmRender(); } catch (e) { showErr(e); }
+        try { cmCmts[p.id] = await cmCall("delComment", { id: c.id }); p.comments = cmCmts[p.id].filter((x) => !x.deleted).length; cmPatch(p.id, { comments: p.comments }); toast("댓글을 지웠습니다."); cmRender(); } catch (e) { showErr(e); }
       });
       row.appendChild(db);
     }
@@ -790,9 +779,9 @@ document.addEventListener("click", (e) => {
   cmCloseNotif();
 });
 
-/* ---------- 글쓰기 · 고치기 ---------- */
-let cmW = null; // 쓰는 중인 글: { edit: 고치는 글 번호(새 글이면 0), tags: [{id, platform, label, lock}], imgs: [사진 주소 또는 dataURL] }
-function cmCloseWrite() { cmW = null; $("cmWrite").hidden = true; $("cmWrite").textContent = ""; $("cmNew").classList.remove("on"); }
+/* ---------- 글쓰기 · 수정 ---------- */
+let cmW = null; // 쓰는 중인 글: { edit: 수정하는 글 번호(새 글이면 0), tags: [{id, platform, label, lock}], imgs: [사진 주소 또는 dataURL] }
+function cmCloseWrite() { cmW = null; $("cmWrite").hidden = true; $("cmWrite").textContent = ""; $("cmWrite").classList.remove("picking"); $("cmNew").classList.remove("on"); }
 // 투명한 부분이 있는 사진인지(작게 그려서 알파 값을 봄)
 function cmHasAlpha(im) {
   try {
@@ -847,7 +836,7 @@ function cmItemTag(it) {
   const mine = trackedOf(it.via);
   return { id: it.via, platform: it.via.split(":")[0], label: mine ? cmAcctLabel(mine) : (it.author || it.via.split(":").slice(1).join(":")).slice(0, 60) };
 }
-// opts.edit: 고칠 글 / opts.share: {url, item} 홈에서 '커뮤니티에 공유'로 온 글
+// opts.edit: 수정할 글 / opts.share: {url, item} 홈에서 '커뮤니티에 공유'로 온 글
 function cmOpenWrite(opts = {}) {
   const box = $("cmWrite");
   const ed = opts.edit || null;
@@ -877,7 +866,11 @@ function cmOpenWrite(opts = {}) {
   const pick = el("button", { type: "button", class: "cm-pick", text: "사진 추가" });
   const thumbs = el("div", { class: "cm-thumbs" });
   const tagBox = el("div", { class: "cm-wtags" });
-  const addSel = el("select", { "aria-label": "태그할 계정 추가" });
+  const tagAdd = el("button", { type: "button", class: "cm-tadd", "aria-expanded": "false" });
+  const tagQ = el("input", { type: "search", class: "cm-tpq", placeholder: "그룹·계정 찾기", "aria-label": "태그할 그룹·계정 찾기", autocomplete: "off" });
+  const tagDone = el("button", { type: "button", class: "cm-tpdone", text: "완료" });
+  const tagList = el("div", { class: "cm-tplist" });
+  const tagPick = el("div", { class: "cm-tpick", hidden: "" }, [el("div", { class: "cm-tptop" }, [tagQ, tagDone]), tagList]);
   const err = el("p", { class: "error", hidden: "" });
   const drawThumbs = () => {
     thumbs.textContent = "";
@@ -889,27 +882,114 @@ function cmOpenWrite(opts = {}) {
     pick.disabled = cmW.imgs.length >= CM_IMG_MAX;
     pick.textContent = "사진 추가 (" + cmW.imgs.length + "/" + CM_IMG_MAX + ")";
   };
-  const addTag = (t) => { if (!t || cmW.tags.some((x) => x.id === t.id) || cmW.tags.length >= 10) return; cmW.tags.push({ id: t.id, platform: t.platform, label: t.label }); drawTags(); drawSug(); };
+  // 태그: 계정 하나씩, 또는 그룹을 눌러 그 그룹 계정을 한 번에. 그룹 계정이 모두 태그되면 그룹 칩 하나로 묶어 보입니다.
+  const myAccs = () => tracked.filter((t) => t.kind !== "feed");
+  const myGroups = () => {
+    const m = new Map();
+    myAccs().forEach((t) => { if (t.group) { if (!m.has(t.group)) m.set(t.group, []); m.get(t.group).push(t); } });
+    return [...m].map(([name, accs]) => ({ name, accs }));
+  };
+  const hasTag = (id) => cmW.tags.some((x) => x.id === id);
+  const accTag = (t) => ({ id: t.id, platform: t.platform, label: cmAcctLabel(t) });
+  const redraw = () => { drawTags(); drawSug(); drawPick(); };
+  const addTags = (list) => {
+    const add = list.filter((t, i) => t && !hasTag(t.id) && list.findIndex((y) => y && y.id === t.id) === i);
+    if (!add.length) return;
+    if (cmW.tags.length + add.length > CM_TAG_MAX) {
+      toast("태그는 " + CM_TAG_MAX + "개까지 넣을 수 있습니다" + (add.length > 1 ? "(지금 " + cmW.tags.length + "개 + 이 그룹 " + add.length + "개)" : "") + ".", "error");
+      return;
+    }
+    add.forEach((t) => cmW.tags.push({ id: t.id, platform: t.platform, label: t.label }));
+    redraw();
+  };
+  const addTag = (t) => addTags([t]);
+  const dropTags = (ids) => { const s = new Set(ids); cmW.tags = cmW.tags.filter((x) => x.lock || !s.has(x.id)); redraw(); };
+  const xBtn = (label, fn) => { const x = el("button", { type: "button", class: "cm-tx", text: "×", "aria-label": label + " 태그 빼기" }); x.addEventListener("click", fn); return x; };
   const drawTags = () => {
     tagBox.textContent = "";
-    tagBox.appendChild(el("span", { class: "cm-wl", text: "태그" }));
-    cmW.tags.forEach((t) => {
+    tagBox.appendChild(el("span", { class: "cm-wl", text: "태그 " + cmW.tags.length + "/" + CM_TAG_MAX }));
+    const used = new Set();
+    myGroups().forEach((g) => {
+      if (g.accs.length < 2 || !g.accs.every((t) => hasTag(t.id))) return;
+      const tags = cmW.tags.filter((x) => g.accs.some((t) => t.id === x.id));
+      tags.forEach((x) => used.add(x.id));
+      const lock = tags.every((x) => x.lock);
+      const c = el("span", { class: "cm-chip grp" + (lock ? " lock" : ""), title: tags.map((x) => x.label).join(", ") + (lock ? " (지금 보고 있는 커뮤니티라 뺄 수 없음)" : "") }, [
+        el("i", { class: "cm-gtag", text: "그룹" }), el("span", { text: g.name + " · " + tags.length + "개" }),
+      ]);
+      if (!lock) c.appendChild(xBtn(g.name + " 그룹", () => dropTags(g.accs.map((t) => t.id))));
+      tagBox.appendChild(c);
+    });
+    cmW.tags.filter((t) => !used.has(t.id)).forEach((t) => {
       const c = el("span", { class: "cm-chip" + (t.lock ? " lock" : ""), title: t.lock ? "지금 보고 있는 커뮤니티의 계정(뺄 수 없음)" : "" }, [pIcon(t.platform), el("span", { text: t.label })]);
-      if (!t.lock) {
-        const x = el("button", { type: "button", class: "cm-tx", text: "×", "aria-label": t.label + " 태그 빼기" });
-        x.addEventListener("click", () => { cmW.tags = cmW.tags.filter((y) => y !== t); drawTags(); drawSug(); });
-        c.appendChild(x);
-      }
+      if (!t.lock) c.appendChild(xBtn(t.label, () => dropTags([t.id])));
       tagBox.appendChild(c);
     });
     if (!cmW.tags.length) tagBox.appendChild(el("span", { class: "cm-wnone", text: "태그 없음 · 전체 커뮤니티에만 보입니다" }));
-    addSel.textContent = "";
-    addSel.appendChild(el("option", { value: "", text: "+ 계정 태그" }));
-    const have = new Set(cmW.tags.map((t) => t.id));
-    tracked.filter((t) => t.kind !== "feed" && !have.has(t.id)).forEach((t) => addSel.appendChild(el("option", { value: t.id, text: PLATFORM[t.platform] + " " + cmAcctLabel(t) + (t.group ? " · " + t.group : "") })));
-    addSel.hidden = addSel.options.length < 2 || cmW.tags.length >= 10;
-    tagBox.appendChild(addSel);
+    tagAdd.textContent = tagPick.hidden ? "＋ 그룹·계정 태그" : "고르기 닫기";
+    tagAdd.setAttribute("aria-expanded", String(!tagPick.hidden));
+    tagAdd.hidden = !myAccs().length;
+    tagBox.appendChild(tagAdd);
   };
+  // 태그 고르기 칸: 그룹(눌러서 한 번에 넣기·빼기)과 그 계정들, 그룹에 없는 계정. 위쪽 칸으로 찾기.
+  const drawPick = () => {
+    if (tagPick.hidden) return;
+    tagList.textContent = "";
+    const q = tagQ.value.trim().toLowerCase();
+    const hit = (t) => !q || [cmAcctLabel(t), t.id, PLATFORM[t.platform]].join(" ").toLowerCase().includes(q);
+    const accBtn = (t) => {
+      const on = hasTag(t.id), lock = on && cmW.tags.find((x) => x.id === t.id).lock;
+      const b = el("button", { type: "button", class: "cm-tpa" + (on ? " on" : ""), "aria-pressed": String(on), title: lock ? "지금 보고 있는 커뮤니티의 계정(뺄 수 없음)" : on ? "태그 빼기" : "태그하기" }, [pIcon(t.platform), el("span", { text: cmAcctLabel(t) })]);
+      if (lock) b.disabled = true;
+      b.addEventListener("click", () => (hasTag(t.id) ? dropTags([t.id]) : addTag(accTag(t))));
+      return b;
+    };
+    const groups = myGroups().filter((g) => !q || g.name.toLowerCase().includes(q) || g.accs.some(hit));
+    if (groups.length) tagList.appendChild(el("p", { class: "cm-tph", text: "그룹 · 이름을 누르면 그룹의 계정을 한 번에 넣거나 뺍니다" }));
+    groups.forEach((g) => {
+      const n = g.accs.filter((t) => hasTag(t.id)).length, all = n === g.accs.length;
+      const locked = g.accs.every((t) => { const x = cmW.tags.find((y) => y.id === t.id); return x && x.lock; });
+      const head = el("button", { type: "button", class: "cm-tpg" + (all ? " on" : n ? " part" : ""), "aria-pressed": all ? "true" : n ? "mixed" : "false",
+        title: locked ? "지금 보고 있는 커뮤니티의 그룹(뺄 수 없음)" : all ? "이 그룹의 태그를 모두 뺍니다" : "이 그룹의 계정 " + g.accs.length + "개를 모두 태그합니다" }, [
+        el("span", { class: "ck", "aria-hidden": "true", text: all ? "✓" : n ? "−" : "" }), el("b", { text: g.name }), el("span", { class: "cnt", text: n + "/" + g.accs.length }),
+      ]);
+      if (locked) head.disabled = true;
+      head.addEventListener("click", () => (all ? dropTags(g.accs.map((t) => t.id)) : addTags(g.accs.map(accTag))));
+      const accs = q && !g.name.toLowerCase().includes(q) ? g.accs.filter(hit) : g.accs;
+      tagList.appendChild(el("div", { class: "cm-tprow" }, [head, el("div", { class: "cm-tpaccs" }, accs.map(accBtn))]));
+    });
+    const singles = myAccs().filter((t) => !t.group && hit(t));
+    if (singles.length) {
+      tagList.appendChild(el("p", { class: "cm-tph", text: "그룹에 없는 계정" }));
+      tagList.appendChild(el("div", { class: "cm-tprow" }, [el("div", { class: "cm-tpaccs" }, singles.map(accBtn))]));
+    }
+    if (!groups.length && !singles.length) tagList.appendChild(el("p", { class: "cm-wnone", text: "찾는 그룹·계정이 없습니다." }));
+  };
+  // 고르기 칸을 열면 글쓰기 칸을 키우고(picking), 태그 줄부터 고르기 칸 끝까지 한눈에 보이게 맞춥니다.
+  const showPick = () => {
+    const w = $("cmWrite"), wr = w.getBoundingClientRect(), tb = tagBox.getBoundingClientRect(), pb = tagPick.getBoundingClientRect();
+    if (w.scrollHeight > w.clientHeight + 1) {   // 넓은 화면: 글쓰기 칸 안에서 스크롤
+      const d = Math.min(pb.bottom - wr.bottom + 8, tb.top - wr.top - 8);
+      if (d > 0) w.scrollTop += d;
+    } else {                                     // 좁은 화면: 페이지를 스크롤
+      const d = Math.min(pb.bottom - window.innerHeight + 16, tb.top - 80);
+      if (d > 0) window.scrollBy(0, d);
+    }
+  };
+  const openPick = (on) => {
+    tagPick.hidden = !on;
+    $("cmWrite").classList.toggle("picking", on);
+    if (on) { tagQ.value = ""; drawPick(); setTimeout(() => tagQ.focus({ preventScroll: true }), 0); }
+    drawTags();
+    if (on) setTimeout(showPick, 0);
+  };
+  tagAdd.addEventListener("click", () => openPick(tagPick.hidden));
+  tagDone.addEventListener("click", () => { openPick(false); tagAdd.focus(); });
+  tagQ.addEventListener("input", drawPick);
+  tagQ.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") e.preventDefault();
+    if (e.key === "Escape") { e.stopPropagation(); if (tagQ.value) { tagQ.value = ""; drawPick(); } else { openPick(false); tagAdd.focus(); } }
+  });
   // 링크 중 이미 모은 글: '모은 글 n개 · 카드로 보입니다' + 그 글 계정을 태그로 제안
   const drawSug = () => {
     sug.textContent = "";
@@ -974,7 +1054,6 @@ function cmOpenWrite(opts = {}) {
     }, 300);
   });
   find.addEventListener("keydown", (e) => { if (e.key === "Escape" && find.value) { e.stopPropagation(); find.value = ""; found.hidden = true; } if (e.key === "Enter") e.preventDefault(); });
-  addSel.addEventListener("change", () => { const t = trackedOf(addSel.value); if (t) addTag({ id: t.id, platform: t.platform, label: cmAcctLabel(t) }); else drawTags(); });
   pick.addEventListener("click", () => file.click());
   file.addEventListener("change", async () => {
     for (const f of [...file.files]) {
@@ -989,10 +1068,10 @@ function cmOpenWrite(opts = {}) {
   const go = el("button", { type: "submit", class: "primary", text: ed ? "저장" : "등록" });
   cancel.addEventListener("click", cmCloseWrite);
   const form = el("form", { class: "cm-form" + (ed ? " editing" : "") }, [
-    ...(ed ? [el("p", { class: "cm-wmode", text: "글 고치기 · ‘" + ed.title + "’" })] : opts.share ? [el("p", { class: "cm-wmode", text: "커뮤니티에 공유 · 링크와 계정 태그를 채워 두었습니다" })] : []),
+    ...(ed ? [el("p", { class: "cm-wmode", text: "글 수정 · ‘" + ed.title + "’" })] : opts.share ? [el("p", { class: "cm-wmode", text: "커뮤니티에 공유 · 링크와 계정 태그를 채워 두었습니다" })] : []),
     el("div", { class: "cm-frow" }, [cat, title]), text, links,
     el("div", { class: "cm-wfindbox" }, [find, found]), sug,
-    el("div", { class: "cm-frow" }, [pick, file, thumbs]), tagBox, err,
+    el("div", { class: "cm-frow" }, [pick, file, thumbs]), tagBox, tagPick, err,
     el("div", { class: "cm-frow end" }, [cancel, go]),
   ]);
   form.addEventListener("submit", async (e) => {
@@ -1008,12 +1087,15 @@ function cmOpenWrite(opts = {}) {
         const p = await cmCall("edit", Object.assign({ id: cmW.edit }, body), 30000);
         cmCloseWrite();
         cmPatch(p.id, p);
-        toast("글을 고쳤습니다.");
+        toast("글을 수정했습니다.");
         cmRender();
         return;
       }
       const p = await cmCall("write", body, 30000);
       cmCloseWrite();
+      if (cmView.t === "list") { toast("글을 올렸습니다. 전체 커뮤니티에서 볼 수 있습니다."); cmGo({ t: "all" }, p.id); return; }
+      // 스크랩만 보는 중에 쓴 글: 새 글은 스크랩 전이라 안 보이므로, 그 커뮤니티의 모든 글 보기로 가서 펼칩니다
+      if (cmView.sc) { const n = { ...cmView }; delete n.sc; toast("글을 올렸습니다."); cmGo(n, p.id); return; }
       cmCat = ""; cmQ = ""; cmTagF = null; $("cmFind").value = ""; cmOpenId = p.id; cmCmts[p.id] = [];
       toast("글을 올렸습니다.");
       cmSyncHash(false);
@@ -1042,12 +1124,18 @@ function cmShareItem(it) {
   $("navCommunity").addEventListener("click", () => {
     // 다른 화면에서 오면 보던 커뮤니티 그대로, 커뮤니티 안에서 다시 누르면 커뮤니티 목록으로
     if (page === "community") cmGo({ t: "list" });
-    else { page = "community"; applyPage(); }
+    else goPage("community");
     window.scrollTo(0, 0);
   });
   $("cmBack").addEventListener("click", () => { if (cmQ || $("cmFind").value) { cmQ = ""; $("cmFind").value = ""; } cmGo({ t: "list" }); });
   $("cmNew").addEventListener("click", () => { if (cmW && !cmW.edit) cmCloseWrite(); else cmOpenWrite(); });
   $("cmBell").addEventListener("click", (e) => { e.stopPropagation(); cmToggleNotif(); });
+  $("cmScrap").querySelector(".ic").innerHTML = CM_STAR;
+  $("cmScrap").addEventListener("click", () => {
+    const v = cmView;
+    if (v.t === "all" || v.t === "grp") { const n = { ...v }; if (v.sc) delete n.sc; else n.sc = true; cmGo(n); }
+    else cmGo({ t: "all", sc: true });   // 커뮤니티 목록에서는 전체 커뮤니티의 스크랩(#c/all/s)으로
+  });
   $("vShare").addEventListener("click", () => { const it = viewCtx[viewIdx]; if (!it) return; closeViewer(); cmShareItem(it); });
   let t = 0;
   $("cmFind").addEventListener("input", () => {

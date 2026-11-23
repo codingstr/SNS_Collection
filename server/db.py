@@ -223,7 +223,7 @@ def init_db():
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_state'").fetchone():
             if "seen_reset" not in {r["name"] for r in db.execute("PRAGMA table_info(user_state)")}:
                 db.execute("ALTER TABLE user_state ADD COLUMN seen_reset INTEGER NOT NULL DEFAULT 0")
-        for table in ("cm_posts", "cm_comments"):   # 글·댓글 고치기(edited_at)
+        for table in ("cm_posts", "cm_comments"):   # 글·댓글 수정(edited_at)
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                 if "edited_at" not in {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}:
                     db.execute(f"ALTER TABLE {table} ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0")

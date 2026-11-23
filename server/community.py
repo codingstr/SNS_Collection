@@ -12,12 +12,12 @@ action
   get         {id}                                 글 하나(글 주소 #c/번호로 바로 열 때)
   comments    {id}                                 그 글의 댓글·답글
   write       {cat, title, body, tags, links, imgs}   글쓰기 → 새 글
-  edit        {id, cat, title, body, tags, links, imgs}   글 고치기(쓴 사람만). imgs: 남길 사진 주소(/api/community/img/…)와 새 사진(data:…)
+  edit        {id, cat, title, body, tags, links, imgs}   글 수정(쓴 사람만). imgs: 남길 사진 주소(/api/community/img/…)와 새 사진(data:…)
   delete      {id}                                 글 지우기(쓴 사람·관리자)
   like        {id, on}                             좋아요 켜기/끄기(내 글에는 못 누름)
   scrap       {id, on}                             스크랩 켜기/끄기
   comment     {id, body, parent?}                  댓글(parent가 있으면 그 댓글의 답글) → 댓글 목록
-  editComment {id, body}                           댓글 고치기(쓴 사람만) → 댓글 목록
+  editComment {id, body}                           댓글 수정(쓴 사람만) → 댓글 목록
   delComment  {id}                                 댓글 지우기(쓴 사람·관리자) → 댓글 목록
   report      {id, cid?, reason, memo?}            글(cid가 있으면 그 댓글) 신고. 관리자가 관리 탭에서 처리할 때까지 그대로 둠
   notifs      {}                                   내 글에 달린 댓글·내 댓글에 달린 답글(최근 30개)
@@ -28,7 +28,7 @@ action
 
 분류: 일반·질문·소식. '공지'는 관리자만 쓰고 목록 맨 위에 붙습니다. 좋아요가 HOT_MIN개 이상인 글은 '인기글'입니다.
 글의 태그는 SNS 계정 ID(예: x:handle)라서, 같은 계정을 추적하는 다른 사용자의 그룹 커뮤니티에도 같은 글이 보입니다.
-관리자도 남의 글·댓글은 고칠 수 없고 지우기만 합니다.
+관리자도 남의 글·댓글은 수정할 수 없고 지우기만 합니다.
 """
 import base64
 import binascii
@@ -56,10 +56,10 @@ HOT = "인기글"
 HOT_MIN = 3                    # 좋아요가 이만큼 모이면 인기글
 PAGE = 30                      # 한 번에 보내는 글 수
 TITLE_MAX, BODY_MAX, CMT_MAX, MEMO_MAX = 80, 2000, 500, 200
-TAGS_MAX, LINKS_MAX, IMGS_MAX = 10, 5, 4
+TAGS_MAX, LINKS_MAX, IMGS_MAX = 20, 5, 4   # 태그 20개: 그룹을 통째로 태그해도 넉넉하게
 IMG_BYTES = 700_000            # 이미지 하나 최대 크기(화면이 보통 1280px JPEG로 줄여서 보냄 → 200KB 안팎)
 RL_POST = (20, 3600)           # 한 시간에 글 20개
-RL_EDIT = (60, 3600)           # 한 시간에 고치기 60번(글·댓글 합쳐서)
+RL_EDIT = (60, 3600)           # 한 시간에 수정 60번(글·댓글 합쳐서)
 RL_CMT = (90, 3600)            # 한 시간에 댓글 90개
 RL_REPORT = (30, 3600)         # 한 시간에 신고 30번
 REASONS = ("스팸·광고", "욕설·비방", "부적절한 내용", "기타")
@@ -475,10 +475,10 @@ def write(db, user, p: dict):
 
 
 def edit(db, user, p: dict):
-    """글 고치기: 쓴 사람만(관리자도 남의 글은 못 고침). 사진은 남길 것(기존 주소)과 새로 붙일 것(data:)을 순서대로 받습니다."""
+    """글 수정: 쓴 사람만(관리자도 남의 글은 수정 못 함). 사진은 남길 것(기존 주소)과 새로 붙일 것(data:)을 순서대로 받습니다."""
     r = get_post(db, _id(p.get("id")), user)
     if r["author"] != user["id"]:
-        raise OpError("내가 쓴 글만 고칠 수 있습니다.")
+        raise OpError("내가 쓴 글만 수정할 수 있습니다.")
     cat = _cat(user, p.get("cat"))
     title, body = _text(p.get("title"), TITLE_MAX, "제목"), _text(p.get("body"), BODY_MAX, "내용")
     tags, links = clean_tags(p.get("tags")), clean_links(p.get("links"))
@@ -496,7 +496,7 @@ def edit(db, user, p: dict):
             order.append(None)
             new.append(s)
     decoded = decode_images(new)
-    _limit(db, "cm-edit:" + user["id"], RL_EDIT, "너무 자주 고쳤습니다. 잠시 뒤 다시 시도하세요.")
+    _limit(db, "cm-edit:" + user["id"], RL_EDIT, "너무 자주 수정했습니다. 잠시 뒤 다시 시도하세요.")
     fresh = iter([(secrets.token_urlsafe(18), m, d) for m, d in decoded])
     keys, adds = [], []
     for k in order:
@@ -571,10 +571,10 @@ def add_comment(db, user, p: dict):
 def edit_comment(db, user, p: dict):
     c = _comment(db, p.get("id"))
     if c["author"] != user["id"]:
-        raise OpError("내가 단 댓글만 고칠 수 있습니다.")
+        raise OpError("내가 단 댓글만 수정할 수 있습니다.")
     body = _text(p.get("body"), CMT_MAX, "댓글")
     if body != c["body"]:
-        _limit(db, "cm-edit:" + user["id"], RL_EDIT, "너무 자주 고쳤습니다. 잠시 뒤 다시 시도하세요.")
+        _limit(db, "cm-edit:" + user["id"], RL_EDIT, "너무 자주 수정했습니다. 잠시 뒤 다시 시도하세요.")
         db.execute("UPDATE cm_comments SET body = ?, edited_at = ? WHERE id = ?", (body, now_ms(), c["id"]))
     return comments(db, c["post_id"], user)
 

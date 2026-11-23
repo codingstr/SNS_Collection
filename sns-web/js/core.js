@@ -50,9 +50,23 @@ function toast(msg, kind, action) {
   n._t = setTimeout(() => n.remove(), action ? 9000 : kind === "error" ? 7000 : 4500);
 }
 
+// 글자를 클립보드에 복사합니다. 클립보드 API를 못 쓰는 곳(https가 아닌 주소, 창에 초점이 없을 때 등)에서는 예전 방식(execCommand)으로 한 번 더 해 봅니다.
+async function copyText(s) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(s); return true; } } catch (e) { /* 아래 방식으로 */ }
+  const ta = document.createElement("textarea");
+  ta.value = s; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  const prev = document.activeElement;
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  if (prev && prev.focus) prev.focus({ preventScroll: true });
+  return ok;
+}
+
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v434";
+const WEB_VERSION = "v440";
 // 브라우저가 예전 index.html(예전 ?v=)을 쓰고 있으면 화면 뼈대와 새 JS가 짝이 안 맞아 일부 화면이 빕니다.
 // 이 파일이 예전 버전 주소로 불렸으면 한 번만 새로고침해서 새 index.html을 받습니다(같은 버전으로는 다시 하지 않음).
 (() => {

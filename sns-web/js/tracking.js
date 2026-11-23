@@ -73,7 +73,7 @@ function parseAccount(platformHint, raw) {
 
 
 /* ---------- 이벤트 ---------- */
-{ let qt = 0; $("q").addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(renderList, 180); }); } // 글자마다 전체를 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
+{ let qt = 0; $("q").addEventListener("input", () => { if (searchAcctOnly()) return; clearTimeout(qt); qt = setTimeout(renderList, 180); }); }   // 계정 찾기 전용 화면에서는 글을 거르지 않음 // 글자마다 전체를 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
 // 추적 계정 관리 화면(고르기·그룹화·기간·숨기기·제거)은 js/manage.js에 있습니다.
 async function removeTrackedIds(ids) {
   const set = new Set(ids);
@@ -84,7 +84,7 @@ async function removeTrackedIds(ids) {
   selIds = selIds.filter((i) => !set.has(i));
   ids.forEach((i) => removedIds.add(i)); // 서버가 아직 옛 목록을 돌려줘도 다시 나타나지 않게 합니다
   renderTracked(); renderTabs(); renderList();
-  await saveTracked().catch(showErr);
+  try { await saveTracked(); toast(ids.length > 1 ? "계정 " + ids.length + "개를 제거했습니다." : "계정을 제거했습니다."); } catch (e) { showErr(e); }
 }
 // 추적 계정 저장: 저장하는 동안(그리고 직후 몇 초)에는 주기적 새로고침이 화면 목록을 옛 목록으로 되돌리지 않게 합니다.
 async function saveTracked() {

@@ -779,7 +779,7 @@ function personHead(head, r) {
 function renderList() {
   queueMicrotask(() => sizeSections($("grid")));   // 다 그린 뒤에 섹션 자리 높이를 맞춤
   renderTabs();
-  const q = $("q").value.trim().toLowerCase();
+  const q = searchAcctOnly() ? "" : $("q").value.trim().toLowerCase();   // 커뮤니티 등에서 적은 계정 검색어로 홈 글을 거르지 않음
   let list = homeItems().filter((it) => activeTab === "all" || activeTab === "people" || tabOf(it.source) === activeTab);
   if (q) {
     // 통합 검색: 제목·본문·작성자·매체 이름·그룹 이름·계정을 한 번에 찾습니다(공백으로 나눈 단어가 모두 들어 있어야 함).
