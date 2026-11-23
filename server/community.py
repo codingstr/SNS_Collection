@@ -6,8 +6,9 @@
 
 action
   summary     {groups: [{key, ids: [계정 ID…]}]}     전체·그룹별 글 수·마지막 글·새 글 수, 스크랩 수(커뮤니티 목록 카드)
-  list        {ids?, cat?, q?, offset?, scrap?, scope?}   글 목록(30개씩). ids가 있으면 그 계정 중 하나라도 태그된 글만,
-                                                  scrap이면 내 스크랩만. scope(all / g:그룹)를 주면 첫 쪽을 읽을 때 '여기까지 봄'으로 적음
+  list        {ids?, cat?, q?, offset?, scrap?, mine?, scope?}   글 목록(30개씩). ids가 있으면 그 계정 중 하나라도 태그된 글만,
+                                                  scrap이면 내 스크랩만, mine이면 내가 추적하는 계정이 태그된 글만.
+                                                  scope(all / g:그룹)를 주면 첫 쪽을 읽을 때 '여기까지 봄'으로 적음
   get         {id}                                 글 하나(글 주소 #c/번호로 바로 열 때)
   comments    {id}                                 그 글의 댓글·답글
   write       {cat, title, body, tags, links, imgs}   글쓰기 → 새 글
@@ -334,6 +335,16 @@ def one_post(db, user, pid: int) -> dict:
     return posts_out(db, user, [get_post(db, pid, user)])[0]
 
 
+def my_tracked_ids(db, uid: str) -> list:
+    """이 사용자가 추적하는 계정 ID(태그와 같은 형식). 숨긴 계정도 포함합니다."""
+    row = db.execute("SELECT tracked FROM user_state WHERE user_id = ?", (uid,)).fetchone()
+    try:
+        lst = json.loads(row["tracked"]) if row else []
+    except ValueError:
+        lst = []
+    return list(dict.fromkeys(t["id"] for t in lst if isinstance(t, dict) and isinstance(t.get("id"), str) and TAG_OK.match(t["id"])))
+
+
 def scope(ids: list):
     """계정 ID들 중 하나라도 태그된 글(없으면 모든 글)."""
     if not ids:
@@ -347,6 +358,10 @@ def list_posts(db, user, p: dict):
     if p.get("scrap") is True:
         where.append("p.id IN (SELECT post_id FROM cm_scraps WHERE user_id = ?)")
         wargs.append(user["id"])
+    if p.get("mine") is True:   # 내가 추적하는 계정 중 하나라도 태그된 글만(전체 커뮤니티의 '내 추적 계정 글만')
+        mids = my_tracked_ids(db, user["id"])
+        where.append(f"p.id IN (SELECT post_id FROM cm_tags WHERE tag IN ({','.join('?' * len(mids))}))" if mids else "0")
+        wargs += mids
     q = p.get("q").strip()[:60] if isinstance(p.get("q"), str) else ""
     for w in q.lower().split()[:5]:   # 띄어 쓴 낱말이 모두 들어 있는 글(제목·본문·쓴 사람·태그 이름)
         where.append("(LOWER(p.title) LIKE ? ESCAPE '\\' OR LOWER(p.body) LIKE ? ESCAPE '\\' OR p.author LIKE ? ESCAPE '\\' OR LOWER(p.tags) LIKE ? ESCAPE '\\')")
@@ -367,8 +382,8 @@ def list_posts(db, user, p: dict):
            "hotMin": HOT_MIN, "admin": bool(user["is_admin"]), "me": user["id"]}
     # 전체 분류 첫 쪽에는 최근 인기글 3개를 맨 위에 따로 보여 줍니다(검색 중에는 안 함)
     if not cat and not q and off == 0 and p.get("scrap") is not True:
-        hot = db.execute(f"SELECT {POST_COLS} FROM cm_posts p WHERE {sw} AND {HOT_SQL} ORDER BY p.id DESC LIMIT 3",
-                         [user["id"], *args]).fetchall()
+        hot = db.execute(f"SELECT {POST_COLS} FROM cm_posts p WHERE {base} AND {HOT_SQL} ORDER BY p.id DESC LIMIT 3",
+                         [user["id"], *wargs]).fetchall()
         res["hot"] = posts_out(db, user, hot)
     # 커뮤니티를 처음부터 열었으면 '여기까지 봄'으로 적고, 그 전까지 본 번호를 돌려줍니다(화면이 그보다 새 글에 점을 붙임)
     sc = p.get("scope") if isinstance(p.get("scope"), str) and SCOPE_OK.match(p.get("scope")) else ""

@@ -21,6 +21,9 @@ let cmView = { t: "list" }, cmCat = "", cmQ = "", cmPosts = [], cmHot = [], cmMo
 let cmOpenId = 0, cmCmts = {}, cmReply = null, cmDraft = {}, cmMe = "", cmAdmin = false, cmHotMin = 3, cmSum = null, cmGen = 0;
 let cmTagF = null, cmTags = null, cmTagOpen = false, cmSeenBefore = Infinity, cmEditCmt = 0, cmFocusCmt = 0, cmMissing = "";
 let cmBadge = { notif: 0, newPosts: false, reports: 0 }, cmLastHash = "", cmBooted = false;
+// 전체 커뮤니티의 '내 추적 계정 글만'(이 브라우저에 기억)
+let cmMine = false;
+try { cmMine = localStorage.getItem("snsCmMine") === "1"; } catch (e) {}
 
 async function cmCall(action, body, ms) {
   const used = sess;
@@ -198,9 +201,10 @@ async function cmLoad(more) {
   if (!more) cmRender(true);
   if (v.t === "all" && !more && !cmTags) cmLoadTags();
   const ids = v.t === "grp" ? v.ids : cmTagF ? [cmTagF.id] : [];
-  const scope = cmTagF ? "" : v.t === "all" ? "all" : v.t === "grp" ? "g:" + v.key : "";
+  const mine = v.t === "all" && cmMine;
+  const scope = cmTagF || mine ? "" : v.t === "all" ? "all" : v.t === "grp" ? "g:" + v.key : "";   // 거른 목록을 봤다고 '여기까지 봄'으로 적지 않음
   try {
-    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: v.t === "scrap", scope });
+    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: v.t === "scrap", mine, scope });
     if (gen !== cmGen) return;
     cmMe = res.me; cmAdmin = res.admin; cmHotMin = res.hotMin; cmCounts = res.counts; cmMore = res.more;
     if (typeof res.seenBefore === "number") cmSeenBefore = res.seenBefore;
@@ -270,7 +274,7 @@ function cmRender(loading) {
   const hotIds = new Set(hot.map((p) => p.id));
   const rest = cmPosts.filter((p) => !hotIds.has(p.id));
   if (!hot.length && !rest.length) {
-    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "scrap" ? "스크랩한 글이 없습니다. 글을 펼쳐 ‘스크랩’을 누르면 여기에 모입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
+    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "all" && cmMine && !cmTagF ? "내가 추적하는 계정이 태그된 글이 없습니다. 위쪽 ‘내 추적 계정 글만’을 끄면 모든 글이 보입니다." : v.t === "scrap" ? "스크랩한 글이 없습니다. 글을 펼쳐 ‘스크랩’을 누르면 여기에 모입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
     return;
   }
   hot.forEach((p) => box.appendChild(cmPostEl(p, true)));
@@ -333,14 +337,34 @@ function cmRenderCats() {
     b.addEventListener("click", () => { if (cmCat === k) return; cmCat = k; cmOpenId = 0; cmPosts = []; cmSyncHash(false); cmLoad(); });
     bar.appendChild(b);
   });
+  // 전체 커뮤니티: 내가 추적하는 계정(숨긴 계정 포함)이 태그된 글만 보기. 분류·검색·태그 거르기와 같이 쓸 수 있습니다.
+  if (cmView.t === "all") {
+    const n = tracked.filter((t) => t.kind !== "feed").length;
+    const b = el("button", { type: "button", class: "cm-mine" + (cmMine ? " on" : ""), role: "switch", "aria-checked": String(cmMine),
+      title: n ? "내가 추적하는 계정 " + n + "개 중 하나라도 태그된 글만 봅니다" : "추적하는 계정이 없습니다" }, [el("span", { class: "sw", "aria-hidden": "true" }), document.createTextNode("내 추적 계정 글만")]);
+    if (!n && !cmMine) b.disabled = true;
+    b.addEventListener("click", () => {
+      cmMine = !cmMine;
+      try { localStorage.setItem("snsCmMine", cmMine ? "1" : "0"); } catch (e) {}
+      cmOpenId = 0; cmPosts = []; cmSyncHash(false); cmLoad();
+    });
+    bar.appendChild(b);
+  }
 }
 
 // 계정 태그 칩. 내가 추적 중인(홈에 보이는) 계정이면 누르면 그 그룹 커뮤니티로 갑니다.
-function cmTagEl(t) {
+// addable: 내가 추적하지 않는 계정이면 옆에 '＋'(내 추적 계정에 추가)를 붙입니다(펼친 글의 태그 줄).
+function cmTagEl(t, addable) {
   const g = cmGroupOf(t.id);
   const mine = trackedOf(t.id);
   const label = mine ? cmAcctLabel(mine) : t.label || t.id.split(":").slice(1).join(":");
   const kids = [pIcon(t.platform), el("span", { text: label })];
+  if (!mine && addable) {
+    const chip = el("span", { class: "cm-chip", title: PLATFORM[t.platform] + " " + label + " · 추적하지 않는 계정" }, kids);
+    const add = el("button", { type: "button", class: "cm-tadd", text: "＋", title: label + " 을(를) 내 추적 계정에 추가", "aria-label": label + " 추가" });
+    add.addEventListener("click", (e) => { e.stopPropagation(); cmAddTagAcct(t, label); });
+    return el("span", { class: "cm-tpair" }, [chip, add]);
+  }
   if (!g) return el("span", { class: "cm-chip", title: PLATFORM[t.platform] + " " + label }, kids);
   const b = el("button", { type: "button", class: "cm-chip go", title: g.name + " 커뮤니티로" }, kids);
   b.addEventListener("click", (e) => { e.stopPropagation(); cmOpenGroup(g); });
@@ -502,7 +526,7 @@ function cmOpenEl(p) {
     body.appendChild(g);
   }
   if (p.links.length) body.appendChild(el("div", { class: "cm-links" }, p.links.map((u) => (p.cards && p.cards[u] ? cmItemCard(p.cards[u]) : cmLinkEl(u)))));
-  if (p.tags.length) body.appendChild(el("div", { class: "cm-tags" }, p.tags.map(cmTagEl)));
+  if (p.tags.length) body.appendChild(el("div", { class: "cm-tags" }, p.tags.map((t) => cmTagEl(t, true))));
   if (p.editedAt) body.appendChild(el("p", { class: "cm-editnote", text: "수정됨 · " + cmDate(p.editedAt) }));
   // 좋아요 · 스크랩 · 링크 복사 · 고치기 · 신고 · 지우기
   const like = el("button", { type: "button", class: "cm-like" + (p.liked ? " on" : ""), "aria-pressed": String(p.liked), text: "♥ 좋아요 " + p.likes });

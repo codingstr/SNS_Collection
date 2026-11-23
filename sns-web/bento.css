@@ -2290,3 +2290,13 @@ html[data-design="bento"] #adminPanel .ad-btn.sm{flex:none;height:28px;padding:0
   html[data-design="bento"] #communityPanel .cm-tsec{flex-direction:column;gap:6px}
   html[data-design="bento"] #communityPanel .cm-ithumb{width:110px}
 }
+/* 전체 커뮤니티: '내 추적 계정 글만' 스위치(분류 단추 줄 오른쪽) */
+html[data-design="bento"] #communityPanel .cm-mine{display:inline-flex;align-items:center;gap:8px;height:34px;margin-left:auto;padding:0 14px 0 8px;border:0;border-radius:17px;background:var(--soft);color:var(--fg);font-weight:600;font-size:13px}
+html[data-design="bento"] #communityPanel .cm-mine:hover:not(:disabled){background:var(--line)}
+html[data-design="bento"] #communityPanel .cm-mine:disabled{opacity:.5;cursor:not-allowed}
+html[data-design="bento"] #communityPanel .cm-mine .sw{position:relative;flex:none;width:30px;height:18px;border-radius:9px;background:var(--line);transition:background .15s}
+html[data-design="bento"] #communityPanel .cm-mine .sw::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+html[data-design="bento"] #communityPanel .cm-mine.on{background:var(--accent);color:var(--accent-fg)}
+html[data-design="bento"] #communityPanel .cm-mine.on .sw{background:color-mix(in srgb,var(--accent-fg) 35%,transparent)}
+html[data-design="bento"] #communityPanel .cm-mine.on .sw::after{transform:translateX(12px)}
+@media (max-width:860px){html[data-design="bento"] #communityPanel .cm-mine{margin-left:0}}
