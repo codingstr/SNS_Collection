@@ -1867,6 +1867,7 @@ class Collector:
         self._ensure_login(wanted & set(PLATFORMS))
         logins = get_login_state()
         pages = {}   # 주소 → {"p", "via", "days", "users"}
+        no_login = set()   # 테스트 계정이 로그인되어 있지 않아 이번에 빼는 페이지(관리 탭 진단용)
         for row in rows:
             settings = json.loads(row["settings"])
             for t in json.loads(row["tracked"])[:30]:
@@ -1876,6 +1877,7 @@ class Collector:
                 if t.get("hidden") is True:
                     continue   # 숨긴 그룹은 모으지 않음(같은 계정을 숨기지 않은 다른 사용자가 있으면 그 사용자 몫으로 모음)
                 if p != "youtube" and (logins.get(p) or {}).get("loggedIn") is False:
+                    no_login.update(page_urls(t))
                     continue
                 days = t["days"] if t.get("days") in (7, 14, 30, 60) else row["window_days"]
                 for url in page_urls(t):
@@ -1889,10 +1891,11 @@ class Collector:
             return
         log.info("자동 수집 시작: 페이지 %d곳", len(pages))
         started, visited = now_ms(), 0
-        tasks = []
+        tasks, skipped = [], []
         for url, e in pages.items():
             last = self.recent.get(url)
             if last and now_ms() - last[0] < RECENT_ANY_MS:
+                skipped.append({"url": url, "ago": int((now_ms() - last[0]) / 60000), "mode": last[1]})   # 방금(20분 안) 모은 페이지
                 continue
             vias = sorted(e["vias"])
             since_ms = now_ms() - e["days"] * DAY_MS
@@ -1900,10 +1903,13 @@ class Collector:
             tasks.append({"p": e["p"], "url": url, "via": vias[0], "vias": vias, "days": e["days"], "since": since_ms, "stop": stop_known, "cov": cov,
                           "cfg": {"mode": "shallow", "since": since_ms, "known": known, "stopKnown": stop_known}})
         done = {"n": 0}
+        ended, failed = set(), []
 
         def on_done(t, res, t0):
+            ended.add(t["url"])
             log_page(t["url"], "shallow", res, self._friendly(res) if isinstance(res, Exception) else "")
             if isinstance(res, Exception):
+                failed.append({"url": t["url"], "error": self._friendly(res)[:120]})
                 return
             cover_update(t["url"], res, t["stop"], t["cov"], t["since"], t0)
             if len(t["vias"]) > 1:   # 같은 계정을 다른 ID로 추적하는 사용자에게도 글을 연결합니다
@@ -1913,7 +1919,19 @@ class Collector:
                 self._remember_channel(t["url"], t["vias"], res)
             done["n"] += 1
 
-        self._run_lanes(tasks, SHALLOW_WAIT, on_done, yield_to_users=True)
+        try:
+            self._run_lanes(tasks, SHALLOW_WAIT, on_done, yield_to_users=True)
+        finally:
+            # 이번 자동 수집에서 각 페이지가 어떻게 됐는지 남깁니다(관리 탭 '서버'의 '지난 자동 수집').
+            # 대상인데 끝나지 않은 페이지가 있으면, 어디서 빠졌는지 알 수 있게 서버 로그에도 경고로 남깁니다.
+            unfinished = [t["url"] for t in tasks if t["url"] not in ended]
+            kv_set("autoDiag", {"at": now_ms(), "started": started, "pages": len(pages), "tasks": len(tasks), "visited": done["n"],
+                                "skipped": skipped[:80], "failed": failed[:80], "unfinished": unfinished[:80], "noLogin": sorted(no_login)[:80],
+                                "targets": sorted(pages)[:400]})
+            log.info("자동 수집 끝: 대상 %d곳 · 방문 %d곳 · 방금 모아 건너뜀 %d곳 · 오류 %d곳 · 로그인 안 돼 뺌 %d곳",
+                     len(pages), done["n"], len(skipped), len(failed), len(no_login))
+            if unfinished:
+                log.warning("자동 수집에서 끝나지 않은 페이지 %d곳: %s", len(unfinished), ", ".join(unfinished[:20]))
         visited = done["n"]
         prune_items()
         self._prune_recent()

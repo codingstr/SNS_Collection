@@ -164,17 +164,51 @@ def set_user(db, uid: str, p: dict):
 TAB_LABEL = {"/videos": "영상", "/shorts": "쇼츠", "/posts": "게시물"}
 
 
+def merged_entry(entries: list) -> dict:
+    """같은 계정을 여러 사용자가 추적할 때, 수집기가 실제로 여는 주소를 정하는 정보를 합칩니다.
+    · 채널 ID: 누구 한 명의 항목에라도 있으면 그것(수집기는 채널 ID가 있는 항목으로 /channel/ 주소를 엶)
+    · 유튜브 탭: 수집하는 사용자(숨기지 않은 사용자) 중 누구라도 켠 탭은 모음 → 끈 탭은 모두가 끈 것만
+    첫 사용자의 항목만 보면, 그 사람 항목에 채널 ID가 없을 때 예전 @핸들 주소의 기록을 보고 '오래됨'으로 잘못 보입니다."""
+    m = dict(entries[0])
+    live = [e for e in entries if e.get("hidden") is not True] or entries
+    cid = next((e["channelId"] for e in live + entries if e.get("channelId")), "")
+    if cid:
+        m["channelId"] = cid
+    handle = next((e["handle"] for e in live if e.get("handle")), m.get("handle") or "")
+    m["handle"] = handle
+    offs = [set(e.get("ytOff") or []) for e in live]
+    common = set.intersection(*offs) if offs else set()
+    if common:
+        m["ytOff"] = sorted(common)
+    else:
+        m.pop("ytOff", None)
+    return m
+
+
+def auto_states(diag: dict) -> dict:
+    """지난 서버 자동 수집에서 페이지마다 어떻게 됐는지: {주소: visited / skipped / failed / unfinished / noLogin}. 목록에 없으면 대상 아님."""
+    st = {u: "visited" for u in diag.get("targets") or []}
+    st.update({x["url"]: "skipped" for x in diag.get("skipped") or []})
+    st.update({x["url"]: "failed" for x in diag.get("failed") or []})
+    st.update({u: "unfinished" for u in diag.get("unfinished") or []})
+    st.update({u: "noLogin" for u in diag.get("noLogin") or []})
+    return st
+
+
 def accounts(db):
     login = get_login_state()
     active = collector.active_urls()
-    acc = {}
+    acc, entries = {}, {}
     for r in db.execute("SELECT user_id, tracked, settings FROM user_state").fetchall():
         settings = json.loads(r["settings"] or "{}")
         for t in json.loads(r["tracked"] or "[]"):
-            a = acc.setdefault(t.get("id"), {"id": t.get("id"), "platform": t.get("platform"), "handle": t.get("handle") or "",
-                                             "channelId": t.get("channelId") or "", "owners": [], "urls": page_urls(t)})
+            a = acc.setdefault(t.get("id"), {"id": t.get("id"), "platform": t.get("platform"), "owners": []})
+            entries.setdefault(t.get("id"), []).append(t)
             a["owners"].append({"uid": r["user_id"], "group": t.get("group") or "", "hidden": t.get("hidden") is True,
                                 "off": settings.get(t.get("platform")) is False, "days": t.get("days") or 0})
+    for tid, a in acc.items():
+        m = merged_entry(entries[tid])
+        a.update(handle=m.get("handle") or "", channelId=m.get("channelId") or "", urls=page_urls(m))
     if not acc:
         return []
     urls = sorted({u for a in acc.values() for u in a["urls"]})
@@ -197,6 +231,8 @@ def accounts(db):
                                 FROM item_via v JOIN items i ON i.id = v.item_id WHERE v.via IN ({','.join('?' * len(chunk))}) GROUP BY v.via""", chunk):
             counts[r["via"]] = r
     now = now_ms()
+    diag = kv_get("autoDiag", None) or {}
+    auto = auto_states(diag)
     out = []
     for a in acc.values():
         pages = []
@@ -205,7 +241,7 @@ def accounts(db):
             tab = next((v for k, v in TAB_LABEL.items() if u.endswith(k)), "")
             pages.append({"url": u, "tab": tab, "active": u in active, "at": lg.get("at", 0), "okAt": lg.get("ok_at", 0), "mode": lg.get("mode", ""),
                           "why": lg.get("why", ""), "found": lg.get("found", 0), "added": lg.get("added", 0), "error": lg.get("error", ""),
-                          "old": bool(lg.get("old"))})
+                          "old": bool(lg.get("old")), "auto": auto.get(u, "notTarget") if diag else ""})
         p = a["platform"]
         everyone_off = all(o["hidden"] or o["off"] for o in a["owners"])
         logged_out = p in ("x", "instagram") and (login.get(p) or {}).get("loggedIn") is False
@@ -233,7 +269,9 @@ def accounts(db):
 
 def server_info(db):
     n = lambda q: db.execute(q).fetchone()[0]  # noqa: E731
-    return {"login": get_login_state(), "loginAccts": list(LOGIN_ACCTS), "lastAuto": kv_get("lastAuto", 0) or 0,
+    diag = kv_get("autoDiag", None) or {}
+    diag.pop("targets", None)   # 페이지 목록 전체는 'SNS 계정 상태'에서 계정마다 보여 줌
+    return {"login": get_login_state(), "loginAccts": list(LOGIN_ACCTS), "lastAuto": kv_get("lastAuto", 0) or 0, "autoDiag": diag,
             "autoMinutes": AUTO_EVERY_MS // 60000, **collector.queue_info(),
             "counts": {"users": n("SELECT COUNT(*) FROM users"), "items": n("SELECT COUNT(*) FROM items"),
                        "pages": n("SELECT COUNT(*) FROM page_log"), "errors": n("SELECT COUNT(*) FROM page_log WHERE error != ''")}}

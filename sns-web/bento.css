@@ -2300,3 +2300,9 @@ html[data-design="bento"] #communityPanel .cm-mine.on{background:var(--accent);c
 html[data-design="bento"] #communityPanel .cm-mine.on .sw{background:color-mix(in srgb,var(--accent-fg) 35%,transparent)}
 html[data-design="bento"] #communityPanel .cm-mine.on .sw::after{transform:translateX(12px)}
 @media (max-width:860px){html[data-design="bento"] #communityPanel .cm-mine{margin-left:0}}
+/* 관리: 지난 자동 수집에서 그 페이지가 어떻게 됐는지(문제 있는 계정) · 서버 탭의 목록 */
+html[data-design="bento"] #adminPanel .ad-pauto{flex-basis:100%;padding-left:50px;font-size:11.5px;color:var(--muted)}
+html[data-design="bento"] #adminPanel .ad-pauto.warn{color:color-mix(in srgb,var(--warn) 75%,var(--fg))}
+html[data-design="bento"] #adminPanel .ad-dlist{font-size:12px}
+html[data-design="bento"] #adminPanel .ad-dlist summary{cursor:pointer;font-weight:600}
+html[data-design="bento"] #adminPanel .ad-dlist ul{margin:6px 0 0;padding-left:18px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}

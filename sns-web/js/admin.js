@@ -6,6 +6,12 @@ const AD_STATE = {
   never: { t: "아직 안 모음", c: "warn" }, running: { t: "수집 중", c: "run" }, ok: { t: "정상", c: "ok" }, off: { t: "수집 안 함", c: "off" },
 };
 const AD_STATE_ORDER = ["error", "login", "stale", "never", "running", "ok", "off"];
+// 지난 서버 자동 수집에서 그 페이지가 어떻게 됐는지(문제 있는 계정에만 보여 줌, server/admin.py의 auto_states)
+const AD_AUTO = {
+  visited: "지난 자동 수집에서 열어 봄", skipped: "지난 자동 수집: 방금 모은 페이지라 건너뜀", failed: "지난 자동 수집: 오류",
+  unfinished: "지난 자동 수집: 열었지만 끝나지 않음(서버 로그 확인)", noLogin: "지난 자동 수집: 테스트 계정 로그인이 안 돼 뺌",
+  notTarget: "지난 자동 수집 대상이 아님(모든 사용자가 숨김·수집 끔이거나, 그 뒤에 추가·변경됨)",
+};
 const AD_ACCT_NAME = { youtube: "유튜브", x: "X 수집용", instagram: "인스타 수집용", "x-search": "X 검색용", "instagram-search": "인스타 검색용" };
 
 let adTab = "users", adUsers = [], adUid = "", adDetail = null, adSel = new Set(), adAccts = [], adServer = null, adComm = null, adTimer = 0, adGen = 0;
@@ -379,6 +385,7 @@ function renderAdAccts() {
       ...(p.active ? [adBadge("수집 중", "run")] : p.at ? [adWhen(p.at)] : []),
       el("span", { class: "ad-pwhy", text: p.at ? (p.error || p.why || "결과 없음") + (!p.error && !p.old ? " · 본 글 " + p.found + " · 새 글 " + p.added : "") + (p.mode ? " · " + (p.mode === "deep" ? "사용자 수집" : "자동 수집") : "") : "아직 모으지 않음" }),
       ...(p.error && p.okAt ? [el("span", { class: "hint", text: "마지막 성공 " + adAgo(p.okAt) })] : []),
+      ...(p.auto && ["stale", "never", "error"].includes(a.state) ? [el("span", { class: "ad-pauto" + (p.auto === "visited" ? "" : " warn"), text: AD_AUTO[p.auto] || p.auto })] : []),
     ])));
     box.append(el("section", { class: "ad-acct st-" + s.c }, [
       el("div", { class: "ad-ahead" }, [el("span", { class: "mg-pi" }, [pIcon(a.platform)]), name, adBadge(s.t, s.c),
@@ -517,13 +524,34 @@ function renderAdServer() {
     el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "기다리는 일" }), el("span", { text: s.queued + "개" + (s.users.length ? " · 수집 대기·진행 사용자: " + s.users.join(", ") : "") })]),
     el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "쓰는 중인 창" }), el("span", { text: s.busy.length ? s.busy.join(", ") : "없음" })]),
   ]);
+  // 지난 자동 수집: 대상·방문·건너뜀·오류·끝나지 않음. 계정이 '오래됨'이면 여기서 어디서 빠졌는지 봅니다.
+  const d = s.autoDiag || {};
+  const autoCard = el("section", { class: "ad-card" }, [el("h3", { text: "지난 자동 수집" })]);
+  if (!d.at) autoCard.append(el("p", { class: "hint", text: "아직 기록이 없습니다(서버를 켠 뒤 첫 자동 수집이 끝나면 보입니다)." }));
+  else {
+    const list = (title, items, fmt) => {
+      if (!items || !items.length) return null;
+      const det = el("details", { class: "ad-dlist" }, [el("summary", { text: title + " " + items.length + "곳" })]);
+      det.append(el("ul", {}, items.map((x) => el("li", { text: fmt(x) }))));
+      return det;
+    };
+    autoCard.append(
+      el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "끝난 시각" }), adWhen(d.at), el("span", { class: "hint", text: "걸린 시간 " + Math.max(1, Math.round((d.at - d.started) / 60000)) + "분" })]),
+      el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "페이지" }), el("span", { text: "대상 " + d.pages + "곳 · 열어 봄 " + d.visited + "곳 · 방금 모아 건너뜀 " + (d.skipped || []).length + "곳" })]),
+      el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "문제" }),
+        (d.failed || []).length || (d.unfinished || []).length ? adBadge("오류 " + (d.failed || []).length + " · 끝나지 않음 " + (d.unfinished || []).length, "bad") : adBadge("없음", "ok"),
+        ...((d.noLogin || []).length ? [adBadge("로그인 안 돼 뺌 " + d.noLogin.length, "warn")] : [])]),
+      ...[list("오류", d.failed, (x) => x.url + " — " + x.error), list("끝나지 않음", d.unfinished, (x) => x),
+        list("방금 모아 건너뜀", d.skipped, (x) => x.url + " (" + x.ago + "분 전 " + (x.mode === "deep" ? "사용자 수집" : "자동 수집") + ")"),
+        list("로그인 안 돼 뺌", d.noLogin, (x) => x)].filter(Boolean));
+  }
   const c = s.counts;
   const stats = el("section", { class: "ad-card" }, [el("h3", { text: "데이터" }),
     el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "사용자" }), el("span", { text: c.users + "명" })]),
     el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "저장된 글" }), el("span", { text: c.items + "개" })]),
     el("div", { class: "ad-row" }, [el("span", { class: "ad-k", text: "수집 기록이 있는 페이지" }), el("span", { text: c.pages + "곳" + (c.errors ? " · 마지막 수집이 오류인 곳 " + c.errors : "") })]),
   ]);
-  box.append(el("div", { class: "ad-cards" }, [login, auto, stats]));
+  box.append(el("div", { class: "ad-cards" }, [login, auto, autoCard, stats]));
 }
 
 /* ----- 이벤트 ----- */
