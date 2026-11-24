@@ -273,7 +273,6 @@ function renderTracked() {
 
 // 그룹 숨기기/보이기(그룹의 모든 계정에 한꺼번에). 숨긴 그룹은 홈·그룹 줄에 안 나오고 서버도 수집하지 않습니다.
 // 다시 보이게 하면 숨긴 동안 못 모은 글을 바로 모읍니다.
-async function setPersonHidden(name, hide) { return setPeopleHidden([name], hide); }
 async function setPeopleHidden(names, hide) {
   const set = new Set(names);
   const m = peopleMap();

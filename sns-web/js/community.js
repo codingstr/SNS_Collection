@@ -16,7 +16,7 @@ const CM_IMG_MAX = 4, CM_IMG_SIDE = 1280, CM_IMG_BYTES = 650000, CM_LINK_MAX = 5
 const CM_BUBBLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 const CM_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill="currentColor"/></svg>';
 
-// 보기 상태. cmView: {t:"list"} 커뮤니티 목록 / {t:"all"} 전체 / {t:"grp", key, name, ids} 그룹 / {t:"scrap"} 스크랩 / {t:"post", id} 글 하나
+// 보기 상태. cmView: {t:"list"} 커뮤니티 목록 / {t:"all"} 전체 / {t:"grp", key, name, ids} 그룹 / {t:"post", id} 글 하나
 // 전체·그룹 보기에 sc: true가 붙으면 그 커뮤니티 글 중 내가 스크랩한 글만 봅니다(머리줄의 스크랩 버튼).
 let cmView = { t: "list" }, cmCat = "", cmQ = "", cmPosts = [], cmHot = [], cmMore = false, cmCounts = {};
 let cmOpenId = 0, cmCmts = {}, cmReply = null, cmDraft = {}, cmMe = "", cmAdmin = false, cmHotMin = 3, cmSum = null, cmGen = 0;
@@ -65,7 +65,7 @@ const cmGrpView = (g) => (g ? { t: "grp", key: g.key, name: g.name, ids: g.ids }
 // 커뮤니티 안의 스크랩만 보기는 /s를 붙입니다(예: #c/all/s, #c/g/<그룹>/s/12).
 function cmHash() {
   const v = cmView;
-  let h = v.t === "list" ? "#c" : v.t === "all" ? "#c/all" : v.t === "grp" ? "#c/g/" + encodeURIComponent(v.key) : v.t === "scrap" ? "#c/s" : "#c/" + v.id;
+  let h = v.t === "list" ? "#c" : v.t === "all" ? "#c/all" : v.t === "grp" ? "#c/g/" + encodeURIComponent(v.key) : "#c/" + v.id;
   if (v.sc) h += "/s";
   if (cmOpenId && v.t !== "post" && v.t !== "list") h += "/" + cmOpenId;
   return h;
@@ -185,7 +185,7 @@ async function cmLoad(more) {
   const mine = v.t === "all" && cmMine;
   const scope = cmTagF || mine || v.sc ? "" : v.t === "all" ? "all" : v.t === "grp" ? "g:" + v.key : "";   // 거른 목록을 봤다고 '여기까지 봄'으로 적지 않음
   try {
-    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: v.t === "scrap" || !!v.sc, mine, scope });
+    const res = await cmCall("list", { ids, cat: cmCat, q: cmQ, offset: more ? cmPosts.length : 0, scrap: !!v.sc, mine, scope });
     if (gen !== cmGen) return;
     cmMe = res.me; cmAdmin = res.admin; cmHotMin = res.hotMin; cmCounts = res.counts; cmMore = res.more;
     if (typeof res.seenBefore === "number") cmSeenBefore = res.seenBefore;
@@ -223,7 +223,7 @@ function cmRender(loading) {
   const v = cmView, list = v.t === "list";
   $("cmBack").hidden = list;
   $("cmCats").hidden = list || v.t === "post";
-  $("cmNew").hidden = v.t === "post" || v.t === "scrap";   // 커뮤니티 목록에서 쓰면 전체 커뮤니티에, 스크랩만 보는 중이면 그 커뮤니티에 올라갑니다
+  $("cmNew").hidden = v.t === "post";   // 커뮤니티 목록에서 쓰면 전체 커뮤니티에, 스크랩만 보는 중이면 그 커뮤니티에 올라갑니다
   // 스크랩 버튼: 목록에서는 스크랩 화면으로, 전체·그룹 커뮤니티에서는 그 커뮤니티의 스크랩 글만 보기(켜고 끄기)
   const sb = $("cmScrap"), inComm = v.t === "all" || v.t === "grp";
   sb.hidden = !list && !inComm;
@@ -238,7 +238,7 @@ function cmRender(loading) {
   $("cmFind").placeholder = list ? "커뮤니티 찾기 (그룹 이름·@아이디)" : "글 검색 (제목·내용·쓴 사람·태그)";
   $("cmFind").setAttribute("aria-label", $("cmFind").placeholder);
   const h = $("cmTitle");
-  h.textContent = (list ? "커뮤니티" : v.t === "all" ? "전체 커뮤니티" : v.t === "grp" ? v.name : v.t === "scrap" ? "스크랩" : "글") + (v.sc ? " · 스크랩" : "");
+  h.textContent = (list ? "커뮤니티" : v.t === "all" ? "전체 커뮤니티" : v.t === "grp" ? v.name : "글") + (v.sc ? " · 스크랩" : "");
   h.title = h.textContent;
   if (list) { cmRenderList(); return; }
   if (v.t !== "post") cmRenderCats();
@@ -261,11 +261,11 @@ function cmRender(loading) {
   const n = cmCounts[cmCat] || 0;
   $("cmCount").textContent = loading && !cmPosts.length ? "" : (cmQ ? "검색 결과 " : "글 ") + n + "개";
   if (loading && !cmPosts.length) { box.appendChild(el("p", { class: "cm-empty", text: "불러오는 중…" })); return; }
-  const hot = !cmCat && !cmQ && v.t !== "scrap" && !v.sc ? cmHot : [];
+  const hot = !cmCat && !cmQ && !v.sc ? cmHot : [];
   const hotIds = new Set(hot.map((p) => p.id));
   const rest = cmPosts.filter((p) => !hotIds.has(p.id));
   if (!hot.length && !rest.length) {
-    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "all" && cmMine && !cmTagF ? "내가 추적하는 계정이 태그된 글이 없습니다. 위쪽 ‘내 추적 계정 글만’을 끄면 모든 글이 보입니다." : v.t === "scrap" ? "스크랩한 글이 없습니다. 글을 펼쳐 ‘스크랩’을 누르면 여기에 모입니다." : v.sc ? "이 커뮤니티에서 스크랩한 글이 없습니다. 위쪽 ‘스크랩’을 다시 누르면 모든 글이 보입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
+    box.appendChild(el("p", { class: "cm-empty", text: cmQ ? "검색 결과가 없습니다." : v.t === "all" && cmMine && !cmTagF ? "내가 추적하는 계정이 태그된 글이 없습니다. 위쪽 ‘내 추적 계정 글만’을 끄면 모든 글이 보입니다." : v.sc ? "이 커뮤니티에서 스크랩한 글이 없습니다. 위쪽 ‘스크랩’을 다시 누르면 모든 글이 보입니다." : cmCat ? "이 분류에는 아직 글이 없습니다." : "아직 글이 없습니다. 첫 글을 써 보세요." }));
     return;
   }
   hot.forEach((p) => box.appendChild(cmPostEl(p, true)));
@@ -469,7 +469,6 @@ function cmItemCard(it) {
 
 /* ---------- 글 ---------- */
 const cmIsNew = (p) => !p.mine && p.id > cmSeenBefore;
-function cmEditedMark(at) { return at ? el("span", { class: "cm-edited", title: "수정 " + cmDate(at), text: "수정됨" }) : null; }
 function cmPostEl(p, asHot) {
   const open = cmOpenId === p.id;
   const art = el("article", { class: "cm-post" + (open ? " open" : "") + (p.cat === CM_NOTICE ? " notice" : "") + (asHot || (cmCat === CM_HOT && p.hot) ? " hot" : ""), "data-pid": String(p.id) });
@@ -531,7 +530,7 @@ function cmOpenEl(p) {
       const r = await cmCall("scrap", { id: p.id, on: !p.scrapped });
       cmPatch(p.id, r); Object.assign(p, r);
       toast(r.scrapped ? "스크랩했습니다. 커뮤니티 목록 위쪽의 ‘스크랩’에서 볼 수 있습니다." : "스크랩에서 뺐습니다.");
-      if ((cmView.t === "scrap" || cmView.sc) && !r.scrapped) { cmPosts = cmPosts.filter((x) => x.id !== p.id); cmOpenId = 0; cmCounts[cmCat] = Math.max(0, (cmCounts[cmCat] || 1) - 1); cmSyncHash(false); }
+      if (cmView.sc && !r.scrapped) { cmPosts = cmPosts.filter((x) => x.id !== p.id); cmOpenId = 0; cmCounts[cmCat] = Math.max(0, (cmCounts[cmCat] || 1) - 1); cmSyncHash(false); }
       cmRender();
     } catch (e) { scr.disabled = false; showErr(e); }
   });

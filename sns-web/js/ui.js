@@ -390,7 +390,7 @@ renderAll();
   // Esc로 검색어 지우기: 닫을 것(글 보기 창·대화 상자·메뉴·계정 찾기 결과 등)이 없을 때만 동작합니다.
   // 그런 것이 열려 있으면 이번 Esc는 그것을 닫는 데 쓰고, 다음 Esc에 검색어를 지웁니다. 검색창에 커서가 있으면 지운 뒤 검색창에서 나옵니다.
   // 다른 입력칸(그룹 이름 등)에서 누른 Esc는 건드리지 않습니다. 이 처리는 다른 Esc 처리보다 먼저 돌아야 열린 것을 정확히 봅니다(capture).
-  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #acctMenu:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden]), .cm-lb";
+  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden]), .cm-lb";
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || e.isComposing) return;
     const a = document.activeElement, inQ = a === q;
@@ -410,23 +410,9 @@ $("navFav").addEventListener("click", () => { enterListPage("fav"); syncRoute(tr
 $("navManage").addEventListener("click", () => { goPage("manage"); window.scrollTo(0, 0); });
 $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo(0, 0); });
 
-/* ---------- 벤토 디자인: 계정 메뉴 항목을 '설정' 화면(별도 탭)으로 ---------- */
+/* ---------- 설정 화면: 프로필 버튼을 누르면 열립니다(다크 모드·계정 관리·사용 설명·수집한 글 삭제·로그아웃) ---------- */
 (function () {
-  const root = document.documentElement;
-  const ids = ["menuWho", "themeBtn", "menuSettings", "navHelp", "clear", "connOut"];
-  const place = () => {
-    const bento = root.getAttribute("data-design") === "bento";
-    const dest = $(bento ? "setBody" : "acctMenu");
-    ids.forEach((i) => dest.appendChild($(i)));
-    if (!bento) { $("setPanel").hidden = true; $("setBack").hidden = true; }
-    $("acctMenu").hidden = true;
-  };
-  // 벤토에서는 프로필 버튼이 설정 화면으로 이동시킵니다(클래식은 기존 드롭다운 그대로).
-  $("connAcct").addEventListener("click", (e) => {
-    if (root.getAttribute("data-design") !== "bento") return;
-    e.stopImmediatePropagation(); e.preventDefault();
-    setModal(!$("setPanel").hidden ? false : true);
-  }, true);
+  $("connAcct").addEventListener("click", () => setModal($("setPanel").hidden));
   function setModal(open) {
     $("setPanel").hidden = !open; $("setBack").hidden = !open;
     document.body.classList.toggle("setOpen", open); $("connAcct").classList.toggle("on", open);
@@ -435,7 +421,6 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
   $("setClose").addEventListener("click", () => setModal(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("setPanel").hidden) setModal(false); });
   ["navHome", "navFav", "navCommunity", "navManage", "navAdmin", "navHelp"].forEach((i) => $(i).addEventListener("click", () => setModal(false)));   // 사용 설명: 설정 화면을 닫고 안내를 엶
-  place();
 })();
 
 // 글 영역(또는 설정·추적 화면)과 오른쪽 열 사이 빈틈에 세로 스크롤바를 그립니다.

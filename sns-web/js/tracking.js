@@ -202,10 +202,7 @@ function fillResults(box, platform, list) {
     let thumb = ph("사진 주소를 읽지 못했습니다");
     const swap = (img, kind, src) => img.addEventListener("error", () => img.replaceWith(ph("사진 불러오기 실패(" + kind + "): " + String(src).slice(0, 80))));
     if (r.avatar) { thumb = el("img", { src: r.avatar, alt: "", referrerpolicy: "no-referrer" }); swap(thumb, "서버가 전달한 데이터", r.avatar); }
-    else if (r.avatarUrl) {
-      if (window.claude) { thumb = el("img", { alt: "", referrerpolicy: "no-referrer" }); loadImg(r.avatarUrl, thumb); }
-      else { thumb = el("img", { src: r.avatarUrl, alt: "", referrerpolicy: "no-referrer" }); swap(thumb, "주소로 직접", r.avatarUrl); }
-    }
+    else if (r.avatarUrl) { thumb = el("img", { src: r.avatarUrl, alt: "", referrerpolicy: "no-referrer" }); swap(thumb, "주소로 직접", r.avatarUrl); }
     box.appendChild(el("div", { class: "res" }, [thumb, el("div", { class: "t" }, [el("b", { text: (() => { const n = (r.name || "").replace(/\s+/g, " ").trim(), h = Math.floor(n.length / 2); return n.length > 1 && n.length % 2 === 1 && n[h] === " " && n.slice(0, h) === n.slice(h + 1) ? n.slice(0, h) : n || (acc.handle ? "@" + acc.handle : acc.channelId || acc.resolveUrl || ""); })() }), el("span", { text: [r.handle ? "@" + r.handle : "", r.desc && r.desc.replace(/^@/, "").toLowerCase() !== String(r.handle || "").toLowerCase() ? r.desc : ""].filter(Boolean).join(" · ") })]), add]));
   });
 }
@@ -248,7 +245,6 @@ $("clear").addEventListener("click", async (e) => {
     renderTabs(); renderList(); renderWork();
     toast("모은 글과 읽음 표시를 모두 지웠습니다. 다음 수집부터 다시 모입니다.");
   } catch (err) { showErr(err); }
-  $("acctMenu").hidden = true; $("connAcct").setAttribute("aria-expanded", "false");
 });
 
 

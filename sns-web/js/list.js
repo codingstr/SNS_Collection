@@ -29,20 +29,6 @@ const inPeriod = (it) => {
   return !d || publishedMs(it) >= Date.now() - d * 86400000;
 };
 
-// 이미지: 외부 이미지를 막는 환경에서는 서버에 요청해 데이터로 받아 보여줍니다(보이는 카드만, 동시에 4장).
-const imgCache = new Map(), imgQueue = [];
-let imgActive = 0;
-function pumpImg() {
-  while (imgActive < 4 && imgQueue.length) {
-    const { url, img } = imgQueue.shift();
-    imgActive++;
-    call("image", { url }, 20000)
-      .then((v) => { imgCache.set(url, v || ""); v ? (img.src = v) : img.remove(); })
-      .catch(() => { img.remove(); })
-      .finally(() => { imgActive--; pumpImg(); });
-  }
-}
-
 // 카드는 폭 240px 안팎인데 원본 썸네일(특히 인스타그램)은 1000px 이상이라, 큰 채로 올려 두면 메모리·디코딩 부담으로 스크롤이 끊깁니다.
 // 한 번 받아서 폭 520px(2배 화면 대응)로 줄인 JPEG로 바꿔 쓰고, 같은 주소는 다시 받지 않습니다. 줄이기가 막히면(CORS 등) 원본을 그대로 씁니다.
 // 줄인 그림은 최근에 쓴 것부터 SMALL_MAX장만 기억하고, 밀려난 것은 메모리에서 풉니다(URL.revokeObjectURL).
@@ -125,12 +111,7 @@ function loadSmall(url, img) {
   pumpSmall();
 }
 function loadImg(url, img) {
-  // 일반 웹 주소에서는 이미지를 바로 불러옵니다. 외부 이미지가 막힌 곳(claude.ai 안)에서만 서버를 거칩니다.
-  if (!window.claude) { if (/^https:\/\//.test(url || "")) loadSmall(url, img); else img.remove(); return; }
-  if (!connected || !/^https:\/\//.test(url || "")) { img.remove(); return; }
-  if (imgCache.has(url)) { const v = imgCache.get(url); v ? (img.src = v) : img.remove(); return; }
-  imgQueue.push({ url, img });
-  pumpImg();
+  if (/^https:\/\//.test(url || "")) loadSmall(url, img); else img.remove();
 }
 // 화면 근처(위아래 약 1200px)의 그림만 메모리에 올리고, 멀어지면 내려놓습니다(인스타그램 252장처럼 큰 그림이 수백 장 쌓여 렉 걸리는 것 방지). 칸 크기는 16:9로 고정이라 다시 올려도 위치가 안 밀립니다.
 const imgObserver = new IntersectionObserver((entries) => {
@@ -145,7 +126,6 @@ const imgObserver = new IntersectionObserver((entries) => {
 const YT_PARAMS = () => "?autoplay=1&rel=0&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
 // 글 열기: 유튜브 영상·X·인스타그램 글은 이 페이지 안에서 바로 보고, 그 밖(유튜브 게시물 등)은 새 크롬 창으로 엽니다.
 function embedFor(it) {
-  if (window.claude) return null; // claude.ai 안에서는 다른 사이트를 끼워 넣을 수 없습니다
   const u = it.url || "";
   let m;
   if (it.source === "youtube-video" && (m = /[?&]v=([\w-]{11})/.exec(u))) return { src: "https://www.youtube-nocookie.com/embed/" + m[1] + YT_PARAMS(), ratio: "16 / 9", yt: true };
@@ -229,12 +209,7 @@ function renderPost(p, it) {
   if (p.text) wrap.appendChild(el("div", { class: "txt", text: p.text }));
   if (p.video && /^[\w-]{11}$/.test(p.video.id || "")) {
     const box = el("div", { class: "vid" });
-    if (window.claude) {
-      box.appendChild(el("button", { type: "button", text: "▶ 첨부 영상 보기" + (p.video.title ? ": " + p.video.title : "") }));
-      box.firstChild.addEventListener("click", () => openTab("https://www.youtube.com/watch?v=" + p.video.id));
-    } else {
-      box.appendChild(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + p.video.id + "?rel=0", title: p.video.title || "첨부 영상", allow: "encrypted-media; picture-in-picture; fullscreen; clipboard-write", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" }));
-    }
+    box.appendChild(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + p.video.id + "?rel=0", title: p.video.title || "첨부 영상", allow: "encrypted-media; picture-in-picture; fullscreen; clipboard-write", allowfullscreen: "", referrerpolicy: "strict-origin-when-cross-origin" }));
     wrap.appendChild(box);
   }
   if (p.images && p.images.length) {
@@ -428,16 +403,8 @@ function card(it) {
   return a;
 }
 
-// 한 줄(가로 스크롤) 채우기: 벤토 디자인에서는 미리보기 이미지가 있는 카드를 기본 크기로 두고,
-// 이미지 없는 카드는 두 개씩 위아래로 묶어 이미지 카드 한 장 높이를 채웁니다(빈 공간 없이).
-function fillRow(grid, arr) {
-  const STACK_TEXT_CARDS = false; // true: 이미지 없는 카드를 두 개씩 묶음 / false: 모든 카드를 같은 높이로 늘림
-  if (!STACK_TEXT_CARDS || document.documentElement.getAttribute("data-design") !== "bento") { arr.forEach((it) => grid.appendChild(card(it))); return; }
-  let buf = [];
-  const flush = () => { if (!buf.length) return; const st = el("div", { class: "cstack" }); buf.forEach((it) => st.appendChild(card(it))); grid.appendChild(st); buf = []; };
-  arr.forEach((it) => { if (it.thumb) { flush(); grid.appendChild(card(it)); } else { buf.push(it); if (buf.length === 2) flush(); } });
-  flush();
-}
+// 한 줄(가로 스크롤) 채우기: 모든 카드를 같은 높이로 늘려 나란히 놓습니다.
+function fillRow(grid, arr) { arr.forEach((it) => grid.appendChild(card(it))); }
 // 구역 머리: 이름 대신 매체 아이콘만 보여줍니다.
 function srcIcon(k) {
   const pf = tabOf(k);
@@ -445,7 +412,6 @@ function srcIcon(k) {
   b.appendChild(typeof pIcon === "function" ? pIcon(pf) : el("span", { text: SRC_LABELS[k] }));
   return b;
 }
-const PARTNER = { "youtube-video": "youtube-post", "youtube-post": "youtube-video", x: "instagram", instagram: "x" };
 function renderTabs() {
   const vis = homeItems();
   const counts = { all: vis.length };
@@ -692,8 +658,6 @@ function sizeSections(g) {
 let sizeT = 0;
 window.addEventListener("resize", () => { clearTimeout(sizeT); sizeT = setTimeout(() => sizeSections($("grid")), 200); });
 
-// 사람별 화면의 매체 칸과 매체 탭(유튜브 영상+게시물)이 함께 씁니다
-const MEDIA = ["youtube-video", "youtube-post", "x", "instagram"];
 // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
 // 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
 //   줄은 모두 반 칸(한 줄에 두 개)이고, 개수가 홀수면 마지막 하나만 한 줄을 다 씁니다.

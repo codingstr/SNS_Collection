@@ -136,9 +136,6 @@ def items_for(db, state: dict, known_ver: str):
 
 # ---------- 요청 처리 ----------
 def handle(db, uid: str, op: str, p: dict):
-    if op == "resumeCheck":
-        return True  # 수집 일시정지는 서버 방식에서 생기지 않습니다(화면 호환용)
-
     if op == "get":
         st = load_state(db, uid)
         ver, items = items_for(db, st, str(p.get("ver") or ""))
@@ -185,9 +182,6 @@ def handle(db, uid: str, op: str, p: dict):
             db.execute("UPDATE user_state SET window_days = ? WHERE user_id = ?", (p["windowDays"], uid))
         return True
 
-    if op == "removeVia":
-        # 글은 다른 사용자도 쓸 수 있어서 지우지 않습니다. 추적 목록에서 빠지면 이 사용자에게는 안 보입니다.
-        return 0
     if op == "clearItems":
         load_state(db, uid)
         db.execute("UPDATE user_state SET cleared_before = ? WHERE user_id = ?", (int(time.time() * 1000), uid))
@@ -195,12 +189,6 @@ def handle(db, uid: str, op: str, p: dict):
         reset_seen(db, uid)
         return True
 
-    if op == "openWindow":
-        raise OpError("새 창은 브라우저에서 직접 엽니다.")  # 화면이 이 오류를 받으면 새 탭으로 엽니다
-    if op == "openLogin":
-        raise OpError("SNS 로그인은 서버 PC에서 관리자가 합니다. (server 폴더의 login_setup.bat)")
-    if op == "image":
-        return ""  # 화면은 이미지를 직접 불러옵니다
     if op == "avatars":
         # 계정 프로필 사진(검색할 때 받아 둔 것). {계정 ID: 데이터 주소}
         ids = [x for x in (p.get("ids") or []) if isinstance(x, str) and len(x) <= 200][:60] if isinstance(p.get("ids"), list) else []

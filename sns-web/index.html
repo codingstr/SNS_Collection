@@ -12,8 +12,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=440">
-<link rel="stylesheet" href="bento.css?v=440">
+<link rel="stylesheet" href="style.css?v=441">
+<link rel="stylesheet" href="bento.css?v=441">
 
 <!-- 로고(꼬리를 문 뱀). 한 번만 정의하고 브랜드 버튼·로그인 창·검색 매체 메뉴에서 <use href="#logo">로 씁니다.
      색은 --ouro-bg(바탕)·--ouro-fg(뱀)로 바꿀 수 있고, 없으면 테마의 --accent·--accent-fg를 씁니다. -->
@@ -46,15 +46,7 @@
     <button id="navAdmin" class="navbtn" type="button" title="관리(관리자 전용)" aria-label="관리" hidden>관리</button>
   </nav>
   <div class="acctwrap">
-    <button id="connAcct" class="avatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="계정 메뉴" hidden><span id="avLetter">?</span></button>
-    <div id="acctMenu" class="acctmenu" role="menu" hidden>
-      <div id="menuWho" class="menuwho"></div>
-      <button id="themeBtn" type="button" role="menuitem">☾ 다크 모드</button>
-      <button id="menuSettings" type="button" role="menuitem">계정 관리</button>
-      <button id="navHelp" type="button" role="menuitem">사용 설명 다시 보기</button>
-      <button id="clear" class="danger" type="button" role="menuitem">수집한 글 모두 삭제</button>
-      <button id="connOut" type="button" role="menuitem">로그아웃</button>
-    </div>
+    <button id="connAcct" class="avatar" type="button" aria-haspopup="dialog" aria-label="설정" hidden><span id="avLetter">?</span></button>
   </div>
 </header>
 
@@ -147,7 +139,14 @@
     <section class="panel" id="setPanel" hidden role="dialog" aria-modal="true" aria-label="설정">
       <button type="button" class="setx" id="setClose" aria-label="닫기">×</button>
       <h2>설정</h2>
-      <div id="setBody" class="setbody"></div>
+      <div id="setBody" class="setbody">
+        <div id="menuWho" class="menuwho"></div>
+        <button id="themeBtn" type="button">☾ 다크 모드</button>
+        <button id="menuSettings" type="button">계정 관리</button>
+        <button id="navHelp" type="button">사용 설명 다시 보기</button>
+        <button id="clear" class="danger" type="button">수집한 글 모두 삭제</button>
+        <button id="connOut" type="button">로그아웃</button>
+      </div>
     </section>
 
     <section class="panel" id="trackPanel" hidden>
@@ -247,15 +246,15 @@
   </main>
 </div>
 
-<script src="js/core.js?v=440"></script>
-<script src="js/bridge.js?v=440"></script>
-<script src="js/store.js?v=440"></script>
-<script src="js/list.js?v=440"></script>
-<script src="js/stories.js?v=440"></script>
-<script src="js/tracking.js?v=440"></script>
-<script src="js/manage.js?v=440"></script>
-<script src="js/admin.js?v=440"></script>
-<script src="js/community.js?v=440"></script>
-<script src="js/account.js?v=440"></script>
-<script src="js/ui.js?v=440"></script>
+<script src="js/core.js?v=441"></script>
+<script src="js/bridge.js?v=441"></script>
+<script src="js/store.js?v=441"></script>
+<script src="js/list.js?v=441"></script>
+<script src="js/stories.js?v=441"></script>
+<script src="js/tracking.js?v=441"></script>
+<script src="js/manage.js?v=441"></script>
+<script src="js/admin.js?v=441"></script>
+<script src="js/community.js?v=441"></script>
+<script src="js/account.js?v=441"></script>
+<script src="js/ui.js?v=441"></script>
 

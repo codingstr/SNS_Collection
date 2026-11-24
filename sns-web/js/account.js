@@ -41,8 +41,6 @@ function askNewPassword() {
   m.hidden = false; m.className = "error";
   $("pwOld").focus();
 }
-// 예전(크롬 확장 시절) 브라우저에 남은 값 정리
-try { ["snsToken", "snsLocal", "snsLocalToken"].forEach((k) => localStorage.removeItem(k)); } catch (e) {}
 async function initAccount() {
   $("acct").hidden = false;
   // 세션이 끝나 로그인 화면으로 돌아온 경우 그 이유를 보여 줍니다.
@@ -74,14 +72,10 @@ async function initAccount() {
   const say = (id, t, err) => { const m = $(id); m.textContent = t || ""; m.hidden = !t; m.className = err ? "error" : "hint"; };
   const openAcct = () => { $("acctModal").hidden = false; say("pwMsg", ""); say("delMsg", ""); };
   const closeAcct = () => { $("acctModal").hidden = true; };
-  const setMenu = (on) => { $("acctMenu").hidden = !on; $("connAcct").setAttribute("aria-expanded", String(on)); };
-  $("connAcct").addEventListener("click", (e) => { e.stopPropagation(); setMenu($("acctMenu").hidden); });
-  $("menuSettings").addEventListener("click", () => { setMenu(false); openAcct(); });
-  $("connOut").addEventListener("click", () => setMenu(false));
-  document.addEventListener("click", (e) => { if (!e.target.closest(".acctwrap")) setMenu(false); });
+  $("menuSettings").addEventListener("click", openAcct);
   $("amX").addEventListener("click", closeAcct);
   $("acctModal").addEventListener("click", (e) => { if (e.target === $("acctModal")) closeAcct(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAcct(); setMenu(false); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAcct(); });
   $("pwForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if ($("pwNew").value !== $("pwNew2").value) { say("pwMsg", "새 비밀번호 두 칸이 서로 다릅니다.", true); return; }

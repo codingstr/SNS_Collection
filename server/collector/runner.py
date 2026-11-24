@@ -146,7 +146,6 @@ URL_OK = re.compile(r"^https://(www\.youtube\.com|x\.com|twitter\.com|www\.insta
 HANDLE_OK = re.compile(r"^[^\s/?#@]{1,60}$")
 CHANNEL_OK = re.compile(r"^UC[\w-]{22}$")
 LEGACY_OK = re.compile(r"^https://www\.youtube\.com/(c|user)/[^/?#]+$")
-POST_URL_OK = re.compile(r"^https://www\.youtube\.com/post/[\w-]{10,60}$")
 # 페이지가 통째로 이 주소로 이동했다면 테스트 계정 로그인이 풀린 것입니다.
 LOGIN_WALL = re.compile(r"^https://(?:(?:x|twitter)\.com/(?:i/flow/login|login)|www\.instagram\.com/(?:accounts/login|challenge))")
 IG_CODE = re.compile(r"^[\w-]{5,40}$")
