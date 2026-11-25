@@ -685,6 +685,8 @@ window.addEventListener("resize", () => { clearTimeout(sizeT); sizeT = setTimeou
 // 한 사람의 글을 매체별(유튜브 영상·유튜브 게시물·X·인스타그램) 줄로 나눠 보여줍니다.
 // 한 그룹에 같은 매체의 계정이 여럿이면(예: 유튜브 채널 2개) 계정마다 따로 줄을 둡니다(섞이지 않게).
 //   줄은 모두 반 칸(한 줄에 두 개)이고, 개수가 홀수면 마지막 하나만 한 줄을 다 씁니다.
+// 줄 머리글의 글 수: 줄에 다 못 놓으면 "52건 중 20건"(전체 중 줄에 놓인 수), 다 놓이면 "12건"
+const shownOf = (total, limit) => (total > limit ? total + "건 중 " + limit + "건" : total + "건");
 function mediaRows(r, limit, onMore) {
   const box = el("div", { class: "sections media-grid" });
   const nAcc = {};   // 이 사람(그룹)의 매체별 계정 수
@@ -705,7 +707,7 @@ function mediaRows(r, limit, onMore) {
     const t = via ? trackedOf(via) : null;
     const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : "") || b.part[0].author || (t && t.channelId) || "";
     const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
-    const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: b.part.length + "건" })]);
+    const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: shownOf(b.part.length, limit) })]);
     if (onMore && b.part.length > limit) {
       const more = el("button", { type: "button", text: "전체 보기" });
       more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
@@ -855,7 +857,7 @@ function renderList() {
         const [pk, pv] = personPlat.split("|");
         const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)));
         const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
-        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who })])]);
+        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who }), el("span", { class: "n", text: mine.length + "건" })])]);
         appendProgressive(grid, mine, "pp|" + personFocus + "|" + personPlat);
         body.appendChild(grid);
       } else {
@@ -930,8 +932,9 @@ function renderList() {
     if (ytBar) g.appendChild(el("div", { class: "segwrap" }, [ytBar]));
     // 특정 매체 탭에서는 그 매체에 글이 없는 계정·그룹 줄은 숨깁니다.
     (activeTab === "all" ? rows : rows.filter((r) => r.list.length)).forEach((r) => {
-      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: r.list.length + "건" })]);
       const split = activeTab === "youtube" && ytMode === "both" && r.list.length;
+      // 유튜브 영상+게시물 화면은 칸마다 "N건 중 M건"을 따로 쓰므로 그룹 머리글은 전체 수만
+      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: split ? r.list.length + "건" : shownOf(r.list.length, 30) })]);
       // 줄에는 최근 30개만 놓습니다. 더 있으면 '전체 보기'로 그 줄의 글을 모두 봅니다(유튜브 영상+게시물 화면은 칸마다 따로)
       if (!split && r.list.length > 30) {
         const more = el("button", { type: "button", text: "전체 보기" });

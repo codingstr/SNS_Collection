@@ -14,7 +14,7 @@ const AD_AUTO = {
 };
 const AD_ACCT_NAME = { youtube: "유튜브", x: "X 수집용", instagram: "인스타 수집용", "x-search": "X 검색용", "instagram-search": "인스타 검색용" };
 
-let adTab = "users", adUsers = [], adUid = "", adDetail = null, adSel = new Set(), adAccts = [], adServer = null, adComm = null, adTimer = 0, adGen = 0;
+let adTab = "users", adUsers = [], adUid = "", adDetail = null, adSel = new Set(), adAccts = [], adQueued = [], adServer = null, adComm = null, adTimer = 0, adGen = 0;
 const AD_TABS = [["users", "adTabUsers", "adUsers"], ["accts", "adTabAccts", "adAccts"], ["comm", "adTabComm", "adComm"], ["server", "adTabServer", "adServer"]];
 try { const t = localStorage.getItem("snsAdminTab"); if (AD_TABS.some((x) => x[0] === t)) adTab = t; } catch (e) {}   // 마지막으로 본 탭
 
@@ -129,9 +129,9 @@ async function adLoad(quiet) {
       renderAdUsers();
       if (adUid) await adOpenUser(adUid, true);
     } else if (adTab === "accts") {
-      const list = await adminCall("accounts", {}, 20000);
+      const r = await adminCall("accounts", {}, 20000);
       if (gen !== adGen) return;
-      adAccts = list; renderAdAccts();
+      adAccts = r.accounts; adQueued = r.queued || []; renderAdAccts();
     } else if (adTab === "comm") {
       const c = await adminCall("community", {}, 20000);
       if (gen !== adGen) return;
@@ -353,7 +353,26 @@ function adSelBar(keepName) {
 }
 
 /* ----- SNS 계정 상태 ----- */
+// 모든 계정 지금 수집: 사용자마다 '지금 최신화'를 누른 것과 같습니다(같은 페이지는 한 번만 엶). 수집 중인 사용자가 있으면 '모두 멈추기'도 보입니다.
+function renderAdAcctActs() {
+  const box = $("adAcctActs");
+  box.textContent = "";
+  const live = adAccts.filter((a) => a.owners.some((o) => !o.hidden && !o.off));
+  const users = new Set(live.flatMap((a) => a.owners.filter((o) => !o.hidden && !o.off).map((o) => o.uid)));
+  if (live.length) box.append(adBtn("모든 계정 지금 수집", async () => {
+    if (!(await adAsk({ title: "모든 계정을 지금 수집할까요?", text: "사용자 " + users.size + "명 · 계정 " + live.length + "개. 사용자마다 ‘지금 최신화’를 누른 것과 같이 설정한 기간 끝까지 확인합니다(같은 계정은 한 번만 엶). 숨긴 계정·수집을 끈 매체는 빼고, 사용자마다 앞의 30개 계정만 모읍니다. 계정이 많으면 오래 걸리고, 그동안 서버 테스트 계정이 사이트를 자주 엽니다.", ok: "수집" }))) return;
+    const r = await adminCall("collectAll");
+    toast(r.users ? "사용자 " + r.users + "명의 수집을 시작했습니다." : "모을 계정이 없습니다.");
+    await adLoad(true);
+  }, "", "모든 사용자의 추적 계정을 지금 모읍니다"));
+  if (adQueued.length) box.append(adBtn("모두 멈추기 (" + adQueued.length + "명)", async () => {
+    const r = await adminCall("cancelAll");
+    toast("사용자 " + r.users + "명의 수집을 멈춥니다(남은 페이지는 열지 않습니다).");
+    await adLoad(true);
+  }, "danger", "수집 대기·진행 중인 사용자: " + adQueued.join(", ")));
+}
 function renderAdAccts() {
+  renderAdAcctActs();
   const box = $("adAcctList"), stSel = $("adAcctState"), plat = $("adAcctPlat").value, q = $("adAcctFind").value.trim().toLowerCase();
   const n = {};
   adAccts.forEach((a) => { n[a.state] = (n[a.state] || 0) + 1; });

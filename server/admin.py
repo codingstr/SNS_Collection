@@ -15,7 +15,9 @@ action
   clearSeen     {uid}            본 글 기록 지우기
   resetPassword {uid}            비밀번호를 RESET_PW로 초기화(모든 기기 로그아웃, 다음 로그인 때 바꾸라고 안내)
   deleteUser    {uid}            사용자와 그 데이터 삭제
-  accounts                       모든 사용자가 추적 중인 SNS 계정의 수집 상태
+  accounts                       모든 사용자가 추적 중인 SNS 계정의 수집 상태 + 수집 대기·진행 중인 사용자
+  collectAll                     모든 사용자의 추적 계정을 지금 수집(사용자마다 '지금 최신화'를 누른 것과 같음, 같은 페이지는 한 번만)
+  cancelAll                      수집 대기·진행 중인 모든 사용자의 수집 멈추기
   server                         서버 상태(테스트 계정 로그인, 자동 수집, 큐, 통계)
   checkLogin                     테스트 계정 로그인 상태 다시 확인
   community                      커뮤니티: 요약(글·댓글·사진 용량·DB 크기), 신고, 최근 글·댓글, 사용자별, 사진이 큰 글
@@ -314,7 +316,7 @@ def handle(db, me: str, act: str, p: dict):
     if act == "users":
         return users(db)
     if act == "accounts":
-        return accounts(db)
+        return {"accounts": accounts(db), "queued": collector.queue_info()["users"]}
     if act == "server":
         return server_info(db)
     if act in CM_ACTS:
@@ -352,8 +354,18 @@ def handle(db, me: str, act: str, p: dict):
     raise OpError("알 수 없는 요청입니다.")
 
 
+def collect_users(db) -> list:
+    """모을 계정이 있는 사용자: 숨기지 않았고 그 매체 수집을 끄지 않은 추적 계정이 하나라도 있는 사용자."""
+    out = []
+    for r in db.execute("SELECT user_id, tracked, settings FROM user_state ORDER BY user_id").fetchall():
+        settings = json.loads(r["settings"] or "{}")
+        if any(t.get("hidden") is not True and settings.get(t.get("platform")) is not False for t in json.loads(r["tracked"] or "[]")):
+            out.append(r["user_id"])
+    return out
+
+
 # 수집기에 일을 넣는 요청은 DB 연결 밖에서(수집기가 상태를 저장하며 DB를 씀)
-COLLECTOR_ACTS = ("collect", "cancel", "checkLogin")
+COLLECTOR_ACTS = ("collect", "cancel", "checkLogin", "collectAll", "cancelAll")
 
 
 @router.post("/api/admin")
@@ -373,8 +385,23 @@ def admin(body: dict = Body(...)):
             log.info("관리자 %s: DB 정리", me["id"])
             code, res = 200, {"ok": True, "result": vacuum()}
         elif act in COLLECTOR_ACTS:
+            result = True
             if act == "checkLogin":
                 collector.request_login_check(list(LOGIN_ACCTS))
+            elif act == "collectAll":
+                # 사용자마다 수집 요청을 넣으면 수집기가 한 묶음으로 처리합니다(같은 페이지는 한 번만 열어 같이 씀)
+                with get_db() as db:
+                    uids = collect_users(db)
+                log.info("관리자 %s: 모든 계정 수집(사용자 %d명)", me["id"], len(uids))
+                for uid in uids:
+                    collector.request_collect(uid, "deep")
+                result = {"users": len(uids)}
+            elif act == "cancelAll":
+                uids = collector.queue_info()["users"]
+                log.info("관리자 %s: 모든 수집 멈추기(사용자 %d명)", me["id"], len(uids))
+                for uid in uids:
+                    collector.cancel(uid)
+                result = {"users": len(uids)}
             else:
                 uid = _uid(p)
                 with get_db() as db:
@@ -384,7 +411,7 @@ def admin(body: dict = Body(...)):
                     collector.request_collect(uid, "deep")
                 else:
                     collector.cancel(uid)
-            code, res = 200, {"ok": True, "result": True}
+            code, res = 200, {"ok": True, "result": result}
         else:
             with get_db() as db:
                 result = handle(db, me["id"], act, p)
