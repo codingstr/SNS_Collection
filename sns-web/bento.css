@@ -249,23 +249,15 @@ html[data-theme="dark"]{--ouro-bg:#262523}
   html[data-design="bento"] #grid .sec:last-child{margin-bottom:0}
 }
 
-/* 레일 아래쪽: 세로형 라이트/다크 스위치(계정 버튼 바로 위) */
+/* 레일 아래쪽: 라이트/다크 버튼(계정 버튼 바로 위). 지금 테마의 해·달 아이콘, 기기 설정을 따르는 중이면 흐리게(읽은 글처럼) */
 @media (min-width:861px){
-  html[data-design="bento"] .themeswitch{display:block;position:fixed;left:22px;bottom:114px;z-index:3;width:56px;height:112px;padding:0;border:0;border-radius:28px;overflow:hidden;cursor:pointer;background:#5fb1f2;box-shadow:inset 0 3px 8px rgba(0,0,0,.22),0 0 0 3px var(--card),0 4px 12px rgba(40,38,35,.2)}
-  html[data-design="bento"] .themeswitch svg{position:absolute;inset:0;width:100%;height:100%;transition:opacity .35s}
-  html[data-design="bento"] .themeswitch .sw-night{opacity:0}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .sw-night{opacity:1}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .sw-day{opacity:0}
-  html[data-design="bento"] .themeswitch .knob{position:absolute;left:5px;top:5px;width:46px;height:46px;border-radius:50%;transition:top .4s cubic-bezier(.5,0,.2,1)}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .knob{top:61px}
-  html[data-design="bento"] .themeswitch .sun{position:absolute;inset:0;border-radius:50%;background:#ffbf1f;box-shadow:inset 0 -3px 6px rgba(240,130,0,.35),0 0 0 5px rgba(255,255,255,.22),0 0 0 11px rgba(255,255,255,.12);transition:opacity .3s}
-  html[data-design="bento"] .themeswitch .moon{position:absolute;inset:0;border-radius:50%;background:#e8e6e1;box-shadow:inset -3px -3px 6px rgba(130,126,118,.35),0 0 0 5px rgba(255,255,255,.12),0 0 0 11px rgba(255,255,255,.06);opacity:0;transition:opacity .3s}
-  html[data-design="bento"] .themeswitch .moon i{position:absolute;border-radius:50%;background:#cdcbc5}
-  html[data-design="bento"] .themeswitch .moon i:nth-child(1){width:12px;height:12px;left:24px;top:8px}
-  html[data-design="bento"] .themeswitch .moon i:nth-child(2){width:8px;height:8px;left:9px;top:26px}
-  html[data-design="bento"] .themeswitch .moon i:nth-child(3){width:6px;height:6px;left:28px;top:30px}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .sun{opacity:0}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .moon{opacity:1}
+  html[data-design="bento"] .themeswitch{display:flex;align-items:center;justify-content:center;position:fixed;left:22px;bottom:114px;z-index:3;width:56px;height:56px;padding:0;border:0;border-radius:50%;cursor:pointer;background:var(--soft);color:var(--muted);transition:opacity .2s,background .2s}
+  html[data-design="bento"] .themeswitch:hover{background:var(--line)}
+  html[data-design="bento"] .themeswitch svg{width:26px;height:26px;display:block}
+  html[data-design="bento"] .themeswitch .ts-moon{display:none}
+  html[data-design="bento"][data-theme="dark"] .themeswitch .ts-sun{display:none}
+  html[data-design="bento"][data-theme="dark"] .themeswitch .ts-moon{display:block}
+  html[data-design="bento"][data-theme-auto] .themeswitch{opacity:.6}
   html[data-design="bento"] .themeswitch:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 }
 /* 위치: 라이트/다크 스위치가 위, 계정 버튼이 맨 아래 */
@@ -1125,23 +1117,11 @@ html[data-design="bento"] body.setOpen #vbar{display:none !important}
   html[data-design="bento"] .themeswitch{bottom:118px !important}
 }
 
-/* 스위치 바깥 테두리·그림자 제거 → 배경이 튀어나와 보이지 않게 */
-@media (min-width:861px){ html[data-design="bento"] .themeswitch{box-shadow:inset 0 3px 8px rgba(0,0,0,.22) !important} }
-
 /* 현재 작업 카드는 세로를 줄이고, 사람 목록 카드는 늘림 */
 @media (min-width:861px){
   html[data-design="bento"] .workcard:not([hidden]){max-height:300px;overflow:hidden}
   html[data-design="bento"] #sidePeople:not([hidden]){min-height:272px}
 }
-
-/* 다크: 스위치 테두리가 레일 색과 같아 안 보이던 것 → 밝은 테두리 */
-html[data-design="bento"][data-theme="dark"] .themeswitch{box-shadow:inset 0 3px 8px rgba(0,0,0,.35),0 0 0 3px #34322f,0 4px 12px rgba(0,0,0,.4) !important}
-
-/* 라이트: 스위치 테두리 — 레일보다 살짝만 진한 흰색 계열 */
-html[data-design="bento"]:not([data-theme="dark"]) .themeswitch{box-shadow:inset 0 3px 8px rgba(0,0,0,.22),0 0 0 3px #efedea,0 4px 12px rgba(40,38,35,.2) !important}
-
-/* 다크: 가장자리에 라이트 모드 하늘색 바탕이 비쳐 보이지 않게 밤하늘 색으로 */
-html[data-design="bento"][data-theme="dark"] .themeswitch{background:#1b1b1a !important}
 
 /* 모든 계정 카드: 창이 충분히 높아 현재 작업 카드가 더 안 늘어날 때는, 남는 세로 공간을 모든 계정 카드가 채워 빈 여백이 없게 */
 @media (min-width:861px) and (min-height:980px){
@@ -1275,12 +1255,6 @@ html[data-design="bento"] header .toolbar .lb.pi.stop{opacity:.45}
 html[data-design="bento"] header .toolbar .lb.pi.nl{opacity:.4;filter:grayscale(1)}
 html[data-design="bento"][data-theme="dark"] header .toolbar .lb.pi-x > .pg{box-shadow:0 0 0 1.5px rgba(255,255,255,.28)}
 
-/* 태양: 노란색 대신 앱의 포인트색(검은 계열) */
-html[data-design="bento"] .themeswitch .sun{background:radial-gradient(circle at 36% 32%,#ffffff 0,#fffdf6 55%,#f4efe2 100%);box-shadow:inset 0 -3px 6px rgba(190,170,120,.35),0 0 0 5px rgba(255,255,255,.35),0 0 0 11px rgba(255,255,255,.18),0 0 18px rgba(255,255,255,.7)}
-html[data-design="bento"] .themeswitch{background:#c3cfd9}
-html[data-design="bento"] .themeswitch{background:#dde5ec}
-html[data-design="bento"] .themeswitch{background:#9fcbee}
-
 /* 창 높이가 낮을 때(약 700px 이하): 오른쪽 열이 서로 겹치지 않게 매체 탭·현재 작업 카드를 낮추고, 남는 높이는 그룹 목록이 쓰도록 합니다 */
 @media (min-width:861px) and (max-height:700px){
   html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))){grid-template-rows:minmax(0,1fr) auto auto !important}
@@ -1312,11 +1286,6 @@ html[data-design="bento"] .themeswitch{background:#9fcbee}
 #tour .tour-tip[data-side="top"]::before{display:block;bottom:-7px;left:var(--ax,50%);margin-left:-8px}
 #tour .tour-tip[data-side="right"]::before{display:block;left:-7px;top:var(--ay,50%);margin-top:-8px}
 #tour .tour-tip[data-side="left"]::before{display:block;right:-7px;top:var(--ay,50%);margin-top:-8px}
-
-/* 라이트 모드 스위치: 테두리와 안쪽 가장자리 그늘까지 밝게 */
-@media (min-width:861px){
-  html[data-design="bento"]:not([data-theme="dark"]) .themeswitch{box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),inset 0 2px 6px rgba(120,150,180,.18),0 0 0 3px #ffffff,0 4px 14px rgba(120,150,180,.28) !important}
-}
 
 /* 노트북 트랙패드 가로 스와이프로 브라우저가 뒤로/앞으로 가기를 하거나 화면이 출렁이지 않게 */
 html,body{overscroll-behavior-x:none}

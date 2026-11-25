@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- 저장된 로그인(snsSess)이 있으면 html에 has-sess를 붙여, 새로고침 때 로그인 창 없이 바로 홈 화면을 그립니다(아래 style).
      로그인이 만료되었거나 로그아웃하면 js/account.js의 setSess가 has-sess를 떼어 로그인 창이 다시 보입니다. -->
-<script>document.documentElement.setAttribute("data-design","bento");try{if(localStorage.getItem("snsTheme")==="dark")document.documentElement.setAttribute("data-theme","dark");if(localStorage.getItem("snsSess"))document.documentElement.classList.add("has-sess")}catch(e){}</script>
+<script>document.documentElement.setAttribute("data-design","bento");try{var tm=localStorage.getItem("snsThemeMode");if(tm!=="light"&&tm!=="dark")document.documentElement.setAttribute("data-theme-auto","");if(tm==="dark"||(tm!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.setAttribute("data-theme","dark");if(localStorage.getItem("snsSess"))document.documentElement.classList.add("has-sess")}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>[hidden]{display:none!important}img{max-width:100%}html.has-sess #connectPanel{display:none!important}</style>
 <title>SNS 모아보기</title>
@@ -12,8 +12,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="style.css?v=447">
-<link rel="stylesheet" href="bento.css?v=447">
+<link rel="stylesheet" href="style.css?v=449">
+<link rel="stylesheet" href="bento.css?v=449">
 
 <!-- 로고(꼬리를 문 뱀). 한 번만 정의하고 브랜드 버튼·로그인 창·검색 매체 메뉴에서 <use href="#logo">로 씁니다.
      색은 --ouro-bg(바탕)·--ouro-fg(뱀)로 바꿀 수 있고, 없으면 테마의 --accent·--accent-fg를 씁니다. -->
@@ -33,10 +33,9 @@
     <div id="sResults" class="sresults" hidden></div>
   </div>
   <button id="brand" class="brand" type="button" title="SNS 모아보기 · 홈으로" aria-label="SNS 모아보기 홈"><svg viewBox="0 0 128 128" aria-hidden="true"><use href="#logo"/></svg></button>
-  <button id="themeSwitch" class="themeswitch" type="button" role="switch" aria-checked="false" title="화이트/다크 모드 전환" aria-label="다크 모드">
-    <svg class="sw-day" viewBox="0 0 56 112" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="swSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fcbee"/><stop offset="1" stop-color="#d9ecf9"/></linearGradient><linearGradient id="swCloud" gradientUnits="userSpaceOnUse" x1="0" y1="66" x2="0" y2="112"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f3f9fd"/><stop offset="1" stop-color="#cfe5f6"/></linearGradient></defs><rect width="56" height="112" fill="url(#swSky)"/><g fill="#ffffff" opacity=".6"><circle cx="42" cy="73" r="8"/><circle cx="28" cy="77" r="9"/><circle cx="51" cy="80" r="7"/></g><g fill="url(#swCloud)"><circle cx="9" cy="93" r="10"/><circle cx="21" cy="85" r="11"/><circle cx="35" cy="79" r="12.5"/><circle cx="47" cy="87" r="11"/><circle cx="14" cy="100" r="14"/><circle cx="30" cy="98" r="15"/><circle cx="48" cy="100" r="14"/><rect y="98" width="56" height="14"/></g></svg>
-    <svg class="sw-night" viewBox="0 0 56 112" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="56" height="112" fill="#1b1b1a"/><rect y="0" width="56" height="112" fill="#2c2c2a" opacity=".3" /><g fill="#fff" transform="translate(0 6)"><path opacity=".7" d="M37 7l2.4 6.6 6.6 2.4-6.6 2.4L37 25l-2.4-6.6L28 16l6.6-2.4z"/><path opacity=".55" d="M15 27l1.5 3.9 3.9 1.5-3.9 1.5L15 38l-1.5-4.1L9.6 32.4l3.9-1.5z"/><circle opacity=".5" cx="12" cy="11" r="1.1"/><circle opacity=".4" cx="47" cy="34" r="1.2"/><circle opacity=".35" cx="27" cy="38" r=".9"/><circle opacity=".3" cx="49" cy="8" r=".8"/></g></svg>
-    <span class="knob"><span class="sun"></span><span class="moon"><i></i><i></i><i></i></span></span>
+  <button id="themeSwitch" class="themeswitch" type="button" role="switch" aria-checked="false" aria-label="다크 모드 (우클릭: 기기 설정 따르기)">
+    <svg class="ts-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="ts-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
   </button>
   <nav class="navbtns" aria-label="화면 이동">
     <button id="navHome" class="navbtn on" type="button">홈</button>
@@ -247,15 +246,15 @@
   </main>
 </div>
 
-<script src="js/core.js?v=447"></script>
-<script src="js/bridge.js?v=447"></script>
-<script src="js/store.js?v=447"></script>
-<script src="js/list.js?v=447"></script>
-<script src="js/stories.js?v=447"></script>
-<script src="js/tracking.js?v=447"></script>
-<script src="js/manage.js?v=447"></script>
-<script src="js/admin.js?v=447"></script>
-<script src="js/community.js?v=447"></script>
-<script src="js/account.js?v=447"></script>
-<script src="js/ui.js?v=447"></script>
+<script src="js/core.js?v=449"></script>
+<script src="js/bridge.js?v=449"></script>
+<script src="js/store.js?v=449"></script>
+<script src="js/list.js?v=449"></script>
+<script src="js/stories.js?v=449"></script>
+<script src="js/tracking.js?v=449"></script>
+<script src="js/manage.js?v=449"></script>
+<script src="js/admin.js?v=449"></script>
+<script src="js/community.js?v=449"></script>
+<script src="js/account.js?v=449"></script>
+<script src="js/ui.js?v=449"></script>
 

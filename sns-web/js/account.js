@@ -52,6 +52,8 @@ async function initAccount() {
     try {
       const j = await api(action, { id: $("acctEmail").value.trim(), password: $("acctPw").value });
       $("acctPw").value = "";
+      // 새로 만든 계정: 첫 화면에서 사용 설명을 한 번 띄웁니다(ui.js). 아이디가 바뀌면 화면을 다시 열므로 저장소에 남겨 둡니다
+      if (action === "signup") { try { localStorage.setItem("snsTourNew", j.id); } catch (e) {} }
       setSess(j.session);
       await afterLogin(j.id, j);
     } catch (e) { acctSay(e.message, true); }

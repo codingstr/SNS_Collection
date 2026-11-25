@@ -202,19 +202,45 @@ else addResumeButtons();
 
 renderAll();
 
-/* ---------- 화이트/다크 모드 전환 (기본은 화이트) ---------- */
+/* ---------- 화이트/다크 모드 (기본: 기기 설정을 따름) ----------
+   저장값(snsThemeMode): "light" · "dark" · 없음(기기 설정을 따름). 첫 화면 그리기 전에 index.html이 먼저 적용합니다.
+   왼쪽 레일의 해·달 버튼: 누르면 화이트↔다크로 고정, 우클릭(터치는 길게 누르기)하면 다시 기기 설정을 따름.
+   기기 설정을 따르는 중이면 버튼을 흐리게 보여 줍니다(읽은 글처럼, data-theme-auto). */
 (function () {
-  const root = document.documentElement, btn = $("themeBtn");
-  const apply = (dark) => {
+  const root = document.documentElement, btn = $("themeBtn"), sw = $("themeSwitch");
+  const KEY = "snsThemeMode";
+  const mq = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
+  try { localStorage.removeItem("snsTheme"); } catch (e) {}   // 예전 저장값(화이트/다크만): 모두 기기 설정 따르기로 시작
+  const getMode = () => { try { const m = localStorage.getItem(KEY); return m === "light" || m === "dark" ? m : ""; } catch (e) { return ""; } };
+  const apply = () => {
+    const mode = getMode(), dark = mode ? mode === "dark" : !!(mq && mq.matches);
     if (dark) root.setAttribute("data-theme", "dark"); else root.removeAttribute("data-theme");
+    if (mode) root.removeAttribute("data-theme-auto"); else root.setAttribute("data-theme-auto", "");
     btn.textContent = dark ? "☀ 화이트 모드로 전환" : "☾ 다크 모드로 전환";
+    sw.setAttribute("aria-checked", String(dark));
+    sw.setAttribute("aria-label", (dark ? "다크 모드" : "화이트 모드") + (mode ? "" : " · 기기 설정을 따르는 중") + " (누르면 전환, 우클릭하면 기기 설정 따르기)");
   };
-  apply(root.getAttribute("data-theme") === "dark");
-  btn.addEventListener("click", () => {
-    const dark = root.getAttribute("data-theme") !== "dark";
-    apply(dark);
-    try { localStorage.setItem("snsTheme", dark ? "dark" : "light"); } catch (e) {}
-  });
+  const setMode = (m) => { try { if (m) localStorage.setItem(KEY, m); else localStorage.removeItem(KEY); } catch (e) {} apply(); };
+  const toggle = () => setMode(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  const follow = () => {
+    if (!getMode()) { toast("이미 기기 설정을 따르고 있습니다."); return; }
+    setMode("");
+    toast("기기 설정(" + (root.getAttribute("data-theme") === "dark" ? "다크" : "화이트") + ")을 따릅니다.");
+  };
+  apply();
+  btn.addEventListener("click", toggle);
+  // 길게 누르기로 기기 설정을 따르게 했으면, 손을 뗄 때의 클릭·우클릭은 한 번 더 처리하지 않습니다
+  sw.addEventListener("click", () => { if (sw._longPressed) { sw._longPressed = false; return; } toggle(); });
+  sw.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!sw._longPressed) follow(); });
+  if (typeof onLongPress === "function") onLongPress(sw, follow);
+  // 기기 설정을 따르는 중에 기기의 화이트/다크가 바뀌면 바로 맞춥니다
+  // (뒤에 있던 탭은 바뀐 알림을 놓칠 수 있어, 화면으로 돌아올 때도 한 번 맞춥니다)
+  if (mq) {
+    const on = () => { if (!getMode() && (root.getAttribute("data-theme") === "dark") !== mq.matches) apply(); };
+    if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
+    window.addEventListener("focus", on);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) on(); });
+  }
 })();
 
 /* ---------- 통합 검색창 왼쪽: 검색할 매체 설정 버튼 ---------- */
@@ -403,8 +429,6 @@ renderAll();
 
 /* ---------- 상단 홈 / 추적 계정 관리 버튼 ---------- */
 $("navHome").addEventListener("click", () => { enterListPage("home"); syncRoute(true); });
-$("themeSwitch").addEventListener("click", () => { $("themeBtn").click(); const d = document.documentElement.getAttribute("data-theme") === "dark"; $("themeSwitch").setAttribute("aria-checked", String(d)); });
-{ const d = document.documentElement.getAttribute("data-theme") === "dark"; $("themeSwitch").setAttribute("aria-checked", String(d)); }
 $("brand").addEventListener("click", () => $("navHome").click());
 $("navFav").addEventListener("click", () => { enterListPage("fav"); syncRoute(true); });
 $("navManage").addEventListener("click", () => { goPage("manage"); window.scrollTo(0, 0); });
@@ -599,7 +623,7 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
 })();
 
 
-// 처음 안내: 화면을 어둡게 하고 말풍선으로 하나씩 짚어 줍니다. 로그인 후 첫 화면에서 한 번 자동으로 열리고, 계정 메뉴(프로필 버튼)의 '사용 설명 다시 보기'로 다시 봅니다.
+// 처음 안내: 화면을 어둡게 하고 말풍선으로 하나씩 짚어 줍니다. 계정을 만든 뒤 첫 화면에서 한 번 자동으로 열리고, 계정 메뉴(프로필 버튼)의 '사용 설명 다시 보기'로 다시 봅니다.
 (() => {
   const root = document.getElementById("tour"), btn = document.getElementById("navHelp");
   if (!root || !btn) return;
@@ -619,10 +643,10 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
     { sel: ["#navFav"], t: "즐겨찾기", d: "☆를 눌러 둔 사람의 글만 모아서 봅니다." },
     { sel: ["#navCommunity"], t: "커뮤니티", d: "모든 사용자가 같이 쓰는 게시판이에요. 그룹마다 커뮤니티가 있고, 글에 계정을 태그하면 그 계정을 추적하는 사람들의 그룹 커뮤니티에 함께 보입니다. 홈의 그룹 이름 옆 말풍선 버튼으로도 갈 수 있어요." },
     { sel: ["#navManage"], t: "추적 계정 관리", d: "그룹별 카드에서 계정을 골라 가져올 기간·그룹을 정하거나, 숨기거나 제거하는 화면이에요. 그룹 이름을 누르면 그 그룹의 계정이 한꺼번에 골라져요. 숨긴 그룹은 홈에 안 나오고 글도 모으지 않아요. 계정 추가는 위쪽 검색창에서 해요." },
-    { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "눌러서 밝은 화면과 어두운 화면을 바꿀 수 있어요." },
+    { sel: ["#themeSwitch"], pad: 6, t: "화이트/다크 모드", d: "처음에는 기기 설정(화이트/다크)을 따라요. 누르면 밝은 화면과 어두운 화면 중 하나로 고정되고, 우클릭(휴대폰·태블릿은 길게 누르기)하면 다시 기기 설정을 따라요. 기기 설정을 따르는 중에는 버튼이 흐리게 보여요." },
     { sel: ["#connAcct"], t: "계정 메뉴", d: "계정 관리(비밀번호 변경·계정 삭제), 사용 설명 다시 보기(지금 보는 이 안내), 수집한 글 모두 삭제, 로그아웃이 들어 있어요." },
   ];
-  const KEY = "snsHelpSeen";
+  const NEW_KEY = "snsTourNew";   // 방금 가입한 아이디
   let list = [], idx = 0;
   const vis = (e) => { if (!e || e.hidden) return null; const r = e.getBoundingClientRect(); return r.width > 4 && r.height > 4 && getComputedStyle(e).visibility !== "hidden" ? r : null; };
   const rectOf = (st) => {
@@ -678,7 +702,7 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
     list = STEPS.filter((s) => rectOf(s) !== undefined);
     idx = 0; root.hidden = false; show(); $q("#tourNext").focus();
   }
-  function close() { root.hidden = true; try { localStorage.setItem(KEY, "1"); } catch (e) {} }
+  function close() { root.hidden = true; }
   btn.addEventListener("click", open);
   $q("#tourNext").addEventListener("click", () => step(1));
   $q("#tourPrev").addEventListener("click", () => step(-1));
@@ -689,11 +713,17 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
     if (e.key === "Escape") close(); else if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); step(1); } else if (e.key === "ArrowLeft") step(-1);
   });
   window.addEventListener("resize", () => { if (!root.hidden) show(); });
-  let seen = false;
-  try { seen = localStorage.getItem(KEY) === "1"; } catch (e) {}
-  // 로그인(또는 서버 없이 연결)이 끝난 첫 화면에서 한 번만 자동으로 엽니다. 로그인 화면 위에는 띄우지 않습니다.
+  // 계정을 새로 만든 뒤 첫 화면에서만 한 번 자동으로 엽니다(account.js가 가입할 때 남긴 표시, 열면 지움).
+  // 이미 있는 계정으로 로그인할 때는 새 브라우저여도 열지 않습니다. 로그인 화면 위에는 띄우지 않습니다.
+  let fresh = false;
+  try { const n = localStorage.getItem(NEW_KEY); fresh = !!n && n === localStorage.getItem("snsUid"); } catch (e) {}
   const au = document.getElementById("acctUser");
-  const maybe = () => { if (!seen && au && !au.hidden) { seen = true; setTimeout(open, 700); } };
+  const maybe = () => {
+    if (!fresh || !au || au.hidden) return;
+    fresh = false;
+    try { localStorage.removeItem(NEW_KEY); } catch (e) {}
+    setTimeout(open, 700);
+  };
   if (au) { new MutationObserver(maybe).observe(au, { attributes: true, attributeFilter: ["hidden"] }); setTimeout(maybe, 600); }
 })();
 

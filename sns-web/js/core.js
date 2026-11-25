@@ -66,7 +66,7 @@ async function copyText(s) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v447";
+const WEB_VERSION = "v449";
 // 브라우저가 예전 index.html(예전 ?v=)을 쓰고 있으면 화면 뼈대와 새 JS가 짝이 안 맞아 일부 화면이 빕니다.
 // 이 파일이 예전 버전 주소로 불렸으면 한 번만 새로고침해서 새 index.html을 받습니다(같은 버전으로는 다시 하지 않음).
 (() => {
