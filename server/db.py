@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS cm_reports (
   UNIQUE (reporter, post_id, comment_id)
 );
 """
-SCHEMA_VERSION = 3   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
+SCHEMA_VERSION = 4   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
 
 
 @contextmanager
@@ -254,6 +254,9 @@ def init_db():
         if ver < 3:
             # 커뮤니티 분류를 일반·질문·소식으로 줄임: 예전 팁·건의·잡담 글은 모두 '일반'으로(질문·공지는 그대로)
             db.execute("UPDATE cm_posts SET cat = '일반' WHERE cat NOT IN ('일반', '질문', '소식', '공지')")
+        if ver < 4:
+            # 유튜브 동영상 탭의 "N개월 전" 영상을 정확한 날짜로 바꾸게 됨: 이미 모은 영상도 고치도록 한 번은 기간 끝까지 다시 봅니다
+            db.execute("""UPDATE coverage SET data = '{"gap": true}' WHERE url LIKE 'https://www.youtube.com/%/videos'""")
         if ver < SCHEMA_VERSION:
             db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         now = int(time.time())

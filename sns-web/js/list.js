@@ -377,18 +377,27 @@ function platMeta(r) {
   });
   return span;
 }
-function appendProgressive(g, arr, step) {
-  step = step || 48;
-  let n = 0;
+// 글이 많은 격자(전체 보기·검색)는 개수 제한 없이, 처음에 48장만 그리고 끝에 가까워지면 48장씩 더 그립니다.
+// 목록은 새 글이 오면 통째로 다시 그려지므로(keepView가 보던 카드를 찾아 제자리로), 같은 화면(key)을 다시 그릴 때는
+// 이미 보여 준 만큼 + 한 묶음(새 글이 위에 끼어 밀린 만큼)을 한 번에 그려, 보던 카드가 그려져 있게 합니다.
+let progKey = "", progShown = 0;
+function appendProgressive(g, arr, key) {
+  const step = 48;
+  let n = 0, first = key === progKey && progShown > step ? progShown + step : step;
+  progKey = key; progShown = 0;
   const sentinel = el("div", { style: "grid-column:1/-1;height:1px" });
-  const more = () => {
-    const end = Math.min(arr.length, n + step);
+  const more = (k) => {
+    const end = Math.min(arr.length, n + k);
     for (; n < end; n++) g.insertBefore(card(arr[n]), sentinel);
+    progShown = n;
     if (n >= arr.length) { io.disconnect(); sentinel.remove(); }
   };
-  const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) more(); }, { rootMargin: "700px" });
+  const io = new IntersectionObserver((es) => {
+    if (!sentinel.isConnected) { io.disconnect(); return; }   // 목록을 다시 그려 사라진 격자
+    if (es.some((e) => e.isIntersecting)) more(step);
+  }, { rootMargin: "700px" });
   g.appendChild(sentinel);
-  more();
+  more(first);
   if (n < arr.length) io.observe(sentinel);
 }
 
@@ -847,7 +856,7 @@ function renderList() {
         const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)));
         const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
         const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who })])]);
-        mine.slice(0, 300).forEach((it) => grid.appendChild(card(it)));
+        appendProgressive(grid, mine, "pp|" + personFocus + "|" + personPlat);
         body.appendChild(grid);
       } else {
         body.appendChild(el("section", { class: "sec" }, [
@@ -863,7 +872,9 @@ function renderList() {
         nameBtn.addEventListener("click", go);
         nameBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
         const head = personHead(el("div", { class: "sec-head" }, [personAvatar(r), nameBtn, ...cmBtnFor(r), favStar(r.name), platMeta(r)]), r);
-        const sec = el("section", { class: "sec" }, [head, mediaRows(r, 20, null)]);
+        // 매체 칸의 '전체 보기': 그 사람의 그 매체 글을 모두 봅니다. '← 이름'을 누르면 이 모든 그룹 화면의 보던 자리로 돌아옵니다
+        const more = (k) => { backCtx = { tab: activeTab, pf: "", pp: "", pg: page, st: ($("grid") || {}).scrollTop || 0 }; personFocus = r.name; personPlat = k; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
+        const sec = el("section", { class: "sec" }, [head, mediaRows(r, 20, more)]);
         sec._person = r.name;
         body.appendChild(sec);
       });
@@ -900,7 +911,7 @@ function renderList() {
     if (rest.length) rows.push({ key: "etc", name: "기타", plats: [], ids: new Set(), list: rest });
     rows.forEach((r) => r.list.sort((a, b) => publishedMs(b) - publishedMs(a)));
     rows.sort((a, b) => (b.list[0] ? publishedMs(b.list[0]) : 0) - (a.list[0] ? publishedMs(a.list[0]) : 0));
-    // '전체 보기'로 줄 하나를 펼친 중: 그 줄의 글을 격자로 모두(최대 300개) 보여 줍니다. 탭이 바뀌었거나 그 줄이 없어졌으면 목록으로.
+    // '전체 보기'로 줄 하나를 펼친 중: 그 줄의 글을 격자로 모두 보여 줍니다(스크롤하면 이어서 그림). 탭이 바뀌었거나 그 줄이 없어졌으면 목록으로.
     const fr = rowFocus && rowFocus.tab === activeTab && rows.find((r) => r.key === rowFocus.key && r.list.length);
     if (rowFocus && !fr) rowFocus = null;
     if (fr) {
@@ -910,7 +921,7 @@ function renderList() {
       const back = el("button", { type: "button", text: "← 목록으로" });
       back.addEventListener("click", closeRow);
       const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: dispName(fr) + kindName }), el("span", { class: "n", text: mine.length + "건" })])]);
-      mine.slice(0, 300).forEach((it) => grid.appendChild(card(it)));
+      appendProgressive(grid, mine, "row|" + activeTab + "|" + rowFocus.key + "|" + rowFocus.kind);
       g.appendChild(el("div", { class: "sections" }, [grid]));
       $("empty").hidden = true;
       return;
@@ -942,7 +953,7 @@ function renderList() {
     rowFocus = null;   // 검색 중에는 줄이 없음(검색을 비우면 목록부터)
     g.className = "cards";
     if (ytBar) g.appendChild(el("div", { style: "grid-column: 1 / -1" }, [ytBar]));
-    appendProgressive(g, list.slice(0, 300));
+    appendProgressive(g, list, "q|" + activeTab + "|" + q + "|" + (ytBar ? ytMode : ""));
   }
   const emptyMsg = q ? "“" + q + "”에 맞는 글이 없습니다. 검색창을 비우면 모든 글이 보입니다."
     : ytBar && ytMode !== "both" ? "이 기간에 모은 유튜브 " + (ytMode === "video" ? "영상" : "게시물") + "이 없습니다."

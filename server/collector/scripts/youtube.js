@@ -12,6 +12,7 @@
   ].join(",");
 
   const TIME_TEXT = /(전|ago)$/;
+  const COARSE_TEXT = /\d+\s*(개월|년)\s*전|\d+\s*(month|year)s?\s*ago/i;   // 한 달·한 해 단위로 뭉뚱그린 게시 시각
   // 유튜브 이미지 주소 끝의 크기·자르기(-c-fcrop…) 표시를 떼고 원본 비율의 지정 크기로 바꿉니다(안 그러면 정사각형으로 잘린 그림이 옵니다).
   const bigImg = (u, n) => String(u || "").replace(/=(s|w)\d+[^/?#]*$/, "=s" + (n || 1200));
 
@@ -307,7 +308,15 @@
   //   3) 묻기 한도(SHORT_ASK_MAX)를 넘거나 요청이 실패하면 예전처럼 날짜를 모르는 쇼츠에서 멈추고 저장하지 않습니다
   //      (날짜 없이 저장하면 최신 글로 잘못 정렬되기 때문).
   // 이미 모은 쇼츠(DB에 날짜가 있음)는 날짜 없이 보내도 서버가 예전 날짜를 그대로 둡니다.
-  const SHORT_ASK_MAX = 150;          // 한 번 수집에서 쇼츠 날짜를 묻는 최대 횟수
+  //
+  // 동영상 탭도 같은 방법을 씁니다. 목록의 "1개월 전"·"1년 전"은 한 달·한 해를 뭉뚱그린 것이라(1개월 전 = 30~59일 전),
+  // 그대로 바꾸면 30~59일 된 영상이 모두 '30일 전'에 몰리고, "2개월 전"(60일 넘음)이 60일 기간 안으로 잘못 들어옵니다.
+  //   - RSS(최근 15개)에 있는 영상은 정확한 시각을 씁니다.
+  //   - "N개월 전"·"N년 전" 영상 중 기간 안일 수 있는 것(가장 늦은 경우가 기간 안)만 위처럼 묻고 나눠 채웁니다.
+  //     "N일 전"·"N주 전"은 하루~한 주 오차라 그대로 둡니다.
+  //   - 묻기 한도를 넘거나 실패하면 예전처럼 대략적인 날짜로 저장합니다(쇼츠와 달리 멈추지 않음).
+  // 서버는 두 날짜 중 이른 쪽을 남기므로(대략적인 날짜는 늘 실제보다 늦음), 이미 모은 영상도 다시 보면 정확한 날짜로 바뀝니다.
+  const SHORT_ASK_MAX = 150;          // 한 번 수집에서 쇼츠·영상 날짜를 묻는 최대 횟수
   const SHORT_REFINE_MS = 86400000;   // 보간하는 두 기준 시각이 이보다 멀면 가운데를 더 물어봄(하루)
   async function shortsDates(channelId) {
     const out = { ok: false, dates: {}, oldest: 0 };
@@ -343,7 +352,7 @@
   async function collectApi({ maxPages, emit, timeUp, since, isKnown }) {
     const pm = /^\/(@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/(videos|shorts|posts|community)\/?$/.exec(location.pathname);
     if (!pm) return null;
-    const isShorts = pm[2] === "shorts", isPosts = pm[2] === "posts" || pm[2] === "community";
+    const isShorts = pm[2] === "shorts", isPosts = pm[2] === "posts" || pm[2] === "community", isVideos = pm[2] === "videos";
     // 쇼츠는 실패해도 화면 스크롤 방식으로 넘어가지 않습니다(그 방식은 날짜를 몰라 잘못 정렬된 글을 모음)
     const fail = (why) => (isShorts ? { pages: 0, total: 0, why: "쇼츠 목록을 읽지 못함(" + why + ", 데이터 요청)" } : null);
     try {
@@ -361,7 +370,7 @@
       }
       const author = clip(chMeta.title, 80);
       const runsText = (t) => (t && (t.simpleText || (t.runs || []).map((r) => r.text).join(""))) || "";
-      const rss = isShorts ? await shortsDates(chMeta.externalId) : null;
+      const rss = isShorts || isVideos ? await shortsDates(chMeta.externalId) : null;
 
       // 쇼츠 하나의 정확한 게시 시각(밀리초). 페이지를 열지 않고 정보 요청만 보냅니다. 실패하면 0.
       let asks = 0;
@@ -382,13 +391,15 @@
           return 0;
         }
       };
-      // 지금까지 받은 쇼츠(목록 순서 그대로)와 정확히 아는 시각(RSS·직접 물어봄). 보간한 시각은 기준으로 쓰지 않습니다.
+      // 지금까지 받은 쇼츠·영상(목록 순서 그대로)과 정확히 아는 시각(RSS·직접 물어봄). 보간한 시각은 기준으로 쓰지 않습니다.
       const all = [], exact = new Map();
-      const need = (k) => !all[k].publishedAt && !(isKnown && isKnown(all[k].id));
+      // 쇼츠: 날짜가 없고 처음 보는 것 / 영상: 뭉뚱그린 날짜(_coarse)인데 기간 안일 수 있는 것
+      const need = (k) => isShorts ? !all[k].publishedAt && !(isKnown && isKnown(all[k].id))
+        : !!all[k]._coarse && !(since && Date.parse(all[k].publishedAt) < since);
       const ask = async (k) => {
         if (exact.has(k)) return exact.get(k);
         const t = await shortDate(all[k].id.slice(3));
-        if (t) { exact.set(k, t); all[k].publishedAt = new Date(t).toISOString(); }
+        if (t) { exact.set(k, t); all[k].publishedAt = new Date(t).toISOString(); all[k]._coarse = false; }
         return t;
       };
       const anchorBefore = (k) => { for (let i = k - 1; i >= 0; i--) if (exact.has(i)) return i; return -1; };
@@ -406,6 +417,7 @@
             }
             const t = Math.min(ta, Math.max(tb, ta + ((tb - ta) * (k - a)) / (b - a)));
             all[k].publishedAt = new Date(Math.round(t)).toISOString();
+            all[k]._coarse = false;
           }
         }
         return -1;
@@ -463,12 +475,14 @@
         } else return null;
         if (!/^[\w-]{11}$/.test(id || "") || !title) return null;
         const pubText = clip(pub, 40);
+        const exactAt = rss && rss.dates[id];
         return {
           id: "yt:" + id, source: "youtube-video",
           url: "https://www.youtube.com/watch?v=" + id,
           title: clip(title, 200), author,
           thumb: "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg",
-          publishedText: pubText, publishedAt: relativeToIso(pubText),
+          publishedText: pubText, publishedAt: exactAt || relativeToIso(pubText),
+          _exact: !!exactAt, _coarse: !exactAt && COARSE_TEXT.test(pubText),
         };
       };
 
@@ -521,16 +535,16 @@
       let batch = first, pages = 0, total = 0;
       while (batch) {
         let items = listOf(batch);
-        // 쇼츠: 날짜를 채웁니다(위 설명). 못 채운 새 쇼츠가 있으면 그 앞까지만 보내고 멈춥니다.
+        // 쇼츠·영상: 날짜를 채웁니다(위 설명). 못 채운 새 쇼츠가 있으면 그 앞까지만 보내고 멈춥니다(영상은 대략적인 날짜로 보냄).
         let cut = -1;
-        if (isShorts && items.length) {
+        if ((isShorts || isVideos) && items.length) {
           const base = all.length;
-          items.forEach((x, i) => { all.push(x); if (x.publishedAt) exact.set(base + i, Date.parse(x.publishedAt)); });
+          items.forEach((x, i) => { all.push(x); if (isShorts ? x.publishedAt : x._exact) exact.set(base + i, Date.parse(x.publishedAt)); });
           let end = all.length - 1;
           if (items.some((_, i) => need(base + i))) {
-            const tEnd = await ask(end);   // 이 묶음의 마지막 쇼츠
+            const tEnd = await ask(end);   // 이 묶음의 마지막 쇼츠·영상
             if (!tEnd) {
-              cut = items.findIndex((_, i) => need(base + i));
+              if (isShorts) cut = items.findIndex((_, i) => need(base + i));
             } else {
               if (since && tEnd < since) {
                 // 가져올 기간의 끝이 이 묶음 안에 있음: 이진 탐색으로 기간 밖 첫 쇼츠를 찾습니다
@@ -547,7 +561,7 @@
                 end = hi - lo > 1 ? end : hi;   // 찾았으면 기간 밖 첫 쇼츠까지만(그 쇼츠에서 emit이 멈춤)
               }
               const miss = await fill(base, end);
-              cut = miss >= 0 ? miss - base : -1;
+              cut = isShorts && miss >= 0 ? miss - base : -1;
             }
           }
           items = all.slice(base, cut >= 0 ? base + cut : end + 1);
