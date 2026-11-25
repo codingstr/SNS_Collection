@@ -1265,11 +1265,15 @@ html[data-design="bento"] .sresults .sr-body::-webkit-scrollbar{display:none}
   html[data-design="bento"] .layout:not(:has(#trackPanel:not([hidden]))):not(:has(#adminPanel:not([hidden]))):not(:has(#communityPanel:not([hidden]))) #sidePeople[hidden]::before{content:"그룹 목록이 없습니다";display:block;padding:12px 10px;font-size:12.5px;color:var(--muted)}
 }
 
-/* 상단 점 안의 표시: 인스타 = 가운데 빈 흰 원, X = 흰 X, 유튜브 = 흰 재생 세모(유튜브 재생 버튼 비율, 무게중심을 가운데로) */
-html[data-design="bento"] header .toolbar .lb.pi::before{content:"";position:absolute;inset:0;pointer-events:none;background:var(--glyph) center/68% no-repeat}
-html[data-design="bento"] header .toolbar .lb.pi-instagram{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5.6' fill='none' stroke='%23fff' stroke-width='3.4'/%3E%3C/svg%3E")}
-html[data-design="bento"] header .toolbar .lb.pi-x{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.4 6.4l11.2 11.2M17.6 6.4L6.4 17.6' fill='none' stroke='%23fff' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E")}
-html[data-design="bento"] header .toolbar .lb.pi-youtube{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.6 7.3L17.6 12L9.6 16.7Z' fill='%23fff' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E")}
+/* 우하단 최신화 줄의 매체 버튼: 다른 곳과 같은 기본 매체 아이콘(pIcon: img/*.png)을 동그랗게 채웁니다.
+   상태는 버튼의 흐림으로: 수집 꺼짐 = 반투명, 서버 테스트 계정 로그인 필요 = 회색·더 흐리게 */
+html[data-design="bento"] header .toolbar .lb.pi{background:transparent !important;box-shadow:none !important;border:0 !important}
+html[data-design="bento"] header .toolbar .lb.pi::before{content:none}
+html[data-design="bento"] header .toolbar .lb.pi > .pg{display:flex !important;position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none}
+html[data-design="bento"] header .toolbar .lb.pi > .pg img{width:100%;height:100%;object-fit:cover;display:block}
+html[data-design="bento"] header .toolbar .lb.pi.stop{opacity:.45}
+html[data-design="bento"] header .toolbar .lb.pi.nl{opacity:.4;filter:grayscale(1)}
+html[data-design="bento"][data-theme="dark"] header .toolbar .lb.pi-x > .pg{box-shadow:0 0 0 1.5px rgba(255,255,255,.28)}
 
 /* 태양: 노란색 대신 앱의 포인트색(검은 계열) */
 html[data-design="bento"] .themeswitch .sun{background:radial-gradient(circle at 36% 32%,#ffffff 0,#fffdf6 55%,#f4efe2 100%);box-shadow:inset 0 -3px 6px rgba(190,170,120,.35),0 0 0 5px rgba(255,255,255,.35),0 0 0 11px rgba(255,255,255,.18),0 0 18px rgba(255,255,255,.7)}

@@ -162,13 +162,14 @@ function renderLogin() {
   if (!connected) return;
   // 매체 아이콘 버튼
   //  · 서버 테스트 계정이 로그인 안 됨(X·인스타): 회색 (누르면 안내 + 다시 확인)
-  //  · 그 밖: 수집 켜짐 = 초록 테두리 / 수집 꺼짐 = 빨간 테두리 (누를 때마다 켜고 끔)
+  //  · 그 밖: 수집 켜짐 = 선명 / 수집 꺼짐 = 흐리게 (누를 때마다 켜고 끔)
   LOGIN_PLATS.forEach((p) => {
     const out = loggedOut(p);
     const collect = settings[p] !== false;
     const cls = "lb pi pi-" + p + (out ? " nl" : collect ? " go" : " stop");
     const tip = PLATFORM[p] + (out ? " · 서버 테스트 계정 로그인 필요 (눌러서 다시 확인)" : collect ? " · 수집 켜짐 (눌러서 끄기)" : " · 수집 꺼짐 (눌러서 켜기)");
     const b = el("button", { type: "button", class: cls, "aria-label": tip, title: tip, "aria-pressed": out ? "false" : String(collect) });
+    b.appendChild(pIcon(p));   // 다른 곳과 같은 기본 매체 아이콘
     b.addEventListener("click", async () => {
       if (out) {
         toast(LOGIN_HELP(p), "error");
