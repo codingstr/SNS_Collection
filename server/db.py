@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS avatars (
   data            TEXT NOT NULL,                -- data:image/...;base64,...
   at              INTEGER NOT NULL
 );
+-- 인스타그램 썸네일 보관(thumbs.py). 인스타 그림 주소는 며칠 뒤 만료되므로 받아서 줄인 JPEG를 둡니다. 주소는 /api/thumb/글 ID
+CREATE TABLE IF NOT EXISTS thumbs (
+  id              TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  data            BLOB NOT NULL,                -- JPEG(폭 520px 이하)
+  at              INTEGER NOT NULL              -- 받은 시각(밀리초)
+);
 -- 본 글 기록 (흐리게 표시)
 CREATE TABLE IF NOT EXISTS seen (
   user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
+import thumbs
 from db import get_db
 from machine import machine_name
 from . import winpos
@@ -340,6 +341,7 @@ def save_items(raw_items, via: str, ig_dates=None) -> int:
             relinked = [i for i in linked if i in olds]
             if relinked:
                 db.executemany("UPDATE items SET updated_at = ? WHERE id = ?", [(now, i) for i in relinked])
+    thumbs.want(its)   # 인스타 썸네일: 주소가 만료되기 전에 받아 둡니다(따로 도는 스레드)
     return len(ins)
 
 

@@ -45,6 +45,7 @@ from fastapi.responses import JSONResponse, Response
 
 from api_call import OpError
 from auth import rl_blocked, rl_bump, user_by_session
+import thumbs
 from db import DB_PATH, get_db
 
 router = APIRouter()
@@ -198,7 +199,8 @@ def link_item_id(url: str) -> str:
 
 
 def item_card(r) -> dict:
-    return {"id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"], "thumb": r["thumb"],
+    return {"id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"],
+            "thumb": thumbs.shown(r["id"], r["thumb"], r["stored"]),
             "publishedAt": r["published_at"], "publishedText": r["published_text"], "via": r["via"], "collectedAt": r["collected_at"]}
 
 
@@ -209,7 +211,7 @@ def items_by_links(db, links) -> dict:
         return {}
     want = sorted(set(ids.values()))
     rows = {r["id"]: r for r in db.execute(
-        f"SELECT id, source, url, title, author, thumb, published_at, published_text, via, collected_at FROM items WHERE id IN ({','.join('?' * len(want))})", want)}
+        f"SELECT id, source, url, title, author, thumb, published_at, published_text, via, collected_at, {thumbs.STORED_COL} FROM items i WHERE id IN ({','.join('?' * len(want))})", want)}
     return {u: item_card(rows[i]) for u, i in ids.items() if i in rows}
 
 
@@ -227,7 +229,7 @@ def find_items(db, p: dict):
     for w in q.lower().split()[:5]:
         where.append("(LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(author) LIKE ? ESCAPE '\\')")
         args += [like_esc(w)] * 2
-    rows = db.execute(f"""SELECT id, source, url, title, author, thumb, published_at, published_text, via, collected_at FROM items
+    rows = db.execute(f"""SELECT id, source, url, title, author, thumb, published_at, published_text, via, collected_at, {thumbs.STORED_COL} FROM items i
                           WHERE {' AND '.join(where)} ORDER BY collected_at DESC LIMIT 8""", args).fetchall()
     return [item_card(r) for r in rows]
 

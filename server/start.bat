@@ -12,6 +12,12 @@ if not exist "%VENV%\Scripts\python.exe" (
   exit /b 1
 )
 
+rem ---- install packages added since setup (requirements.txt) ----
+"%VENV%\Scripts\python.exe" -c "import fastapi, uvicorn, playwright, PIL" >nul 2>nul || (
+  echo Installing missing packages...
+  "%VENV%\Scripts\python.exe" -m pip install -r requirements.txt
+)
+
 rem ---- ngrok in a separate window ----
 where ngrok >nul 2>nul
 if errorlevel 1 (

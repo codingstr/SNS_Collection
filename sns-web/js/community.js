@@ -454,9 +454,9 @@ function cmItemCard(it) {
   const when = it.publishedAt && !Number.isNaN(Date.parse(it.publishedAt)) ? cmAgo(Date.parse(it.publishedAt)) : it.publishedText || "";
   const kind = it.source === "youtube-post" ? "유튜브 게시물" : /\/shorts\//.test(it.url) ? "쇼츠" : it.source === "youtube-video" ? "유튜브 영상" : PLATFORM[plat] || "";
   const b = el("button", { type: "button", class: "cm-icard" + (/\/shorts\//.test(it.url) ? " short" : ""), title: "자세히 보기" });
-  if (it.thumb) {
+  if (it.thumb && thumbOk(it.thumb)) {
     const img = el("img", { src: it.thumb, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
-    img.addEventListener("error", () => img.remove());
+    img.addEventListener("error", () => { imgBad.add(it.thumb); img.remove(); });
     b.appendChild(el("span", { class: "cm-ithumb" }, [img, ...(it.source === "youtube-video" ? [el("span", { class: "cm-play", "aria-hidden": "true" })] : [])]));
   }
   b.appendChild(el("span", { class: "cm-iinfo" }, [
@@ -1033,7 +1033,7 @@ function cmOpenWrite(opts = {}) {
       if (!list.length) found.appendChild(el("p", { class: "cm-empty sm", text: "찾는 글이 없습니다(이미 모은 글에서만 찾습니다)." }));
       list.forEach((it) => {
         const b = el("button", { type: "button", class: "cm-fitem" }, [
-          ...(it.thumb ? [el("img", { src: it.thumb, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })] : [el("span", { class: "cm-fnoimg" })]),
+          ...(it.thumb && thumbOk(it.thumb) ? [el("img", { src: it.thumb, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })] : [el("span", { class: "cm-fnoimg" })]),
           el("span", { class: "cm-iinfo" }, [el("b", { text: it.title || it.url }), el("span", { class: "cm-imeta" }, [pIcon(cmSrcPlat(it.source) || "youtube"), el("span", { text: it.author || "" })])]),
         ]);
         b.addEventListener("click", () => {

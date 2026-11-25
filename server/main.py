@@ -17,6 +17,7 @@ import api_call
 import auth
 import community
 import sync
+import thumbs
 from collector import collector
 from db import init_db
 
@@ -32,6 +33,7 @@ async def lifespan(_app):
     # 파일을 불러오기만 할 때(테스트·uvicorn --reload 감시 프로세스 등)는 수집기를 띄우지 않고, 서버가 실제로 켜질 때 한 번만 시작합니다.
     init_db()
     collector.start()   # 수집 작업 스레드 (크롬 창은 수집할 때만 뜹니다)
+    thumbs.start()      # 인스타그램 썸네일 보관 스레드 (주소가 만료되기 전에 받아 둡니다)
     yield
 
 
@@ -63,6 +65,7 @@ app.include_router(api_call.router)  # /api/call  글 목록·추적 계정·수
 app.include_router(sync.router)      # /api/sync  본 글 기록
 app.include_router(admin.router)     # /api/admin 관리자 전용(관리 탭)
 app.include_router(community.router) # /api/community 커뮤니티(글·댓글·좋아요·이미지)
+app.include_router(thumbs.router)    # /api/thumb  보관한 인스타그램 썸네일
 
 
 @app.get("/favicon.ico", include_in_schema=False)

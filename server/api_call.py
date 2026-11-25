@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from auth import user_by_session
 from collector import SearchCancelled, collector, get_login_state
 from collector.runner import AUTO_EVERY_MS, LOGIN_ACCTS, save_post, saved_post
+import thumbs
 from db import get_db, reset_seen
 
 router = APIRouter()
@@ -104,7 +105,7 @@ def clean_tracked(lst) -> list:
 def item_dict(r) -> dict:
     return {
         "id": r["id"], "source": r["source"], "url": r["url"], "title": r["title"], "author": r["author"],
-        "thumb": r["thumb"], "publishedAt": r["published_at"], "publishedText": r["published_text"],
+        "thumb": thumbs.shown(r["id"], r["thumb"], r["stored"]), "publishedAt": r["published_at"], "publishedText": r["published_text"],
         "via": r["uvia"], "collectedAt": r["collected_at"],
         # 이 사용자의 추적 계정 중 이 글이 이어진 모든 계정(인스타 공동 게시물처럼 한 글이 두 계정에 올라온 경우 둘 다)
         "vias": sorted(set((r["uvias"] or r["uvia"] or "").split(","))) if (r["uvias"] or r["uvia"]) else [],
@@ -126,11 +127,11 @@ def items_for(db, state: dict, known_ver: str):
     args = (*vias, state["clearedBefore"])
     # 버전: 글 수·가장 최근 수집·가장 최근 내용 변경(썸네일·제목·날짜 보충 등). 내용이 바뀐 글도 화면에 다시 보내집니다.
     cnt, mx, upd = db.execute(f"SELECT COUNT(DISTINCT i.id), MAX(i.collected_at), MAX(i.updated_at) {src}", args).fetchone()
-    # 끝의 "v2": 글에 vias가 붙으면서 형식이 바뀜 → 예전 형식 글을 가진 화면도 한 번 새로 받게 합니다
-    ver = hashlib.sha1(f"{cnt}:{mx}:{upd}:{','.join(vias)}:{state['clearedBefore']}:v2".encode()).hexdigest()[:16]
+    # 끝의 "v3": 글 형식이 바뀌면 올림 → 예전 형식 글을 가진 화면도 한 번 새로 받게 합니다(v2 vias, v3 보관한 인스타 썸네일·만료 주소 빼기)
+    ver = hashlib.sha1(f"{cnt}:{mx}:{upd}:{','.join(vias)}:{state['clearedBefore']}:v3".encode()).hexdigest()[:16]
     if ver == known_ver:
         return ver, None
-    rows = db.execute(f"SELECT i.*, MIN(v.via) AS uvia, GROUP_CONCAT(v.via) AS uvias {src} GROUP BY i.id ORDER BY i.collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
+    rows = db.execute(f"SELECT i.*, MIN(v.via) AS uvia, GROUP_CONCAT(v.via) AS uvias, {thumbs.STORED_COL} {src} GROUP BY i.id ORDER BY i.collected_at DESC LIMIT {MAX_ITEMS}", args).fetchall()
     return ver, {r["id"]: item_dict(r) for r in rows}
 
 

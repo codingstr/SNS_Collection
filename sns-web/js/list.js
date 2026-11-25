@@ -52,6 +52,15 @@ function smallPut(url, u) {
 // (예전에는 그림마다 받기 실패 → 다른 방법 실패 → 원본, 이렇게 요청이 세 번씩 갔습니다)
 const noCorsHits = new Map();
 const hostOf = (u) => { try { return new URL(u).host; } catch (e) { return ""; } };
+// 인스타그램(메타 CDN) 그림 주소는 만료 시각(oe=, 16진수 초)이 지나면 403으로 막힙니다. 지난 주소는 아예 요청하지 않고,
+// 한 번 실패한 주소는 기억해 두었다가 다시 그릴 때 또 요청하지 않습니다. 서버가 보관한 그림(/api/thumb/…)은 만료가 없습니다.
+const imgBad = new Set();
+function thumbOk(u) {
+  if (/^\/api\/thumb\//.test(u || "")) return true;
+  if (!/^https:\/\//.test(u || "") || imgBad.has(u)) return false;
+  const m = /[?&]oe=([0-9a-f]{6,10})(?:&|$)/i.exec(u);
+  return !m || parseInt(m[1], 16) * 1000 > Date.now();
+}
 const smallQueue = [];
 let smallActive = 0;
 function pumpSmall() {
@@ -60,16 +69,18 @@ function pumpSmall() {
     const hit = smallGet(url);
     if (hit !== undefined) { if (img.isConnected) img.src = hit; continue; }
     if (!img.isConnected) continue; // 기다리는 사이 화면에서 사라진 카드
+    if (!thumbOk(url)) { img.remove(); continue; } // 기다리는 사이 만료됐거나 다른 카드에서 실패한 주소
     smallActive++;
     const host = hostOf(url);
     const done = () => { smallActive--; pumpSmall(); };
-    const direct = () => { if (img.isConnected) { img.addEventListener("error", () => img.remove(), { once: true }); img.src = url; } done(); };
+    const direct = () => { if (img.isConnected) { img.onerror = () => { imgBad.add(url); img.remove(); }; img.src = url; } done(); };
+    const bad = () => { imgBad.add(url); img.remove(); done(); };
     const corsFailed = () => { noCorsHits.set(host, (noCorsHits.get(host) || 0) + 1); direct(); };
     if ((noCorsHits.get(host) || 0) >= 3) { direct(); continue; }
     // 받아서 줄이는 것(디코딩·인코딩)을 메인 화면 작업과 따로(비동기) 처리합니다.
     if (typeof createImageBitmap === "function" && typeof OffscreenCanvas === "function") {
       fetch(url, { mode: "cors", referrerPolicy: "no-referrer", credentials: "omit" })
-        .then((r) => { if (!r.ok) throw new Error("http"); return r.blob(); }, (e) => { e.cors = true; throw e; })
+        .then((r) => { if (!r.ok) { const e = new Error("http"); e.status = r.status; throw e; } return r.blob(); }, (e) => { e.cors = true; throw e; })
         .then((blob) => createImageBitmap(blob, { resizeWidth: 520, resizeQuality: "medium" }))
         .then((bm) => {
           const oc = new OffscreenCanvas(bm.width, bm.height);
@@ -78,7 +89,8 @@ function pumpSmall() {
           return oc.convertToBlob({ type: "image/jpeg", quality: 0.82 });
         })
         .then((b2) => { const u = URL.createObjectURL(b2); smallPut(url, u); if (img.isConnected) img.src = u; done(); })
-        .catch((e) => { if (e && e.cors) corsFailed(); else direct(); }); // 받기 자체가 막혔으면(CORS) 다른 방법도 똑같이 막히므로 바로 원본으로
+        // 받기 자체가 막혔으면(CORS) 다른 방법도 똑같이 막히므로 바로 원본으로. 서버가 거절(403·404 등)했으면 원본도 같으므로 다시 요청하지 않음
+        .catch((e) => { if (e && e.cors) corsFailed(); else if (e && e.status >= 400 && e.status < 500) bad(); else direct(); });
       continue;
     }
     // 오래된 브라우저: 그림을 불러와 캔버스로 줄입니다.
@@ -111,7 +123,10 @@ function loadSmall(url, img) {
   pumpSmall();
 }
 function loadImg(url, img) {
-  if (/^https:\/\//.test(url || "")) loadSmall(url, img); else img.remove();
+  if (!thumbOk(url)) { img.remove(); return; }
+  // 서버가 보관한 썸네일은 이미 작게 줄여 둔 것이라 그대로 띄웁니다(브라우저가 1년 동안 캐시)
+  if (url.startsWith("/api/thumb/")) { img.onerror = () => { imgBad.add(url); img.remove(); }; img.src = url; return; }
+  loadSmall(url, img);
 }
 // 화면 근처(위아래 약 1200px)의 그림만 메모리에 올리고, 멀어지면 내려놓습니다(인스타그램 252장처럼 큰 그림이 수백 장 쌓여 렉 걸리는 것 방지). 칸 크기는 16:9로 고정이라 다시 올려도 위치가 안 밀립니다.
 const imgObserver = new IntersectionObserver((entries) => {
@@ -379,7 +394,7 @@ function appendProgressive(g, arr, step) {
 
 function card(it) {
   const kids = [];
-  if (it.thumb) {
+  if (it.thumb && thumbOk(it.thumb)) {
     const img = el("img", { alt: "", referrerpolicy: "no-referrer", decoding: "async" });
     img.dataset.src = it.thumb;
     imgObserver.observe(img);
