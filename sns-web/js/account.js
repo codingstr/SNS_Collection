@@ -89,6 +89,8 @@ async function initAccount() {
     } catch (e) { say("pwMsg", e.message, true); }
   });
   let delArmed = 0;
+  // 비밀번호 칸을 다른 입력칸(검색창 등)과 따로 묶어 두려고 form으로 감쌌습니다. Enter로 페이지가 새로 고쳐지지 않게
+  $("delForm").addEventListener("submit", (ev) => ev.preventDefault());
   $("delBtn").addEventListener("click", async () => {
     if (!$("delPw").value) { say("delMsg", "비밀번호를 입력하세요.", true); return; }
     if (!delArmed) { // 두 번 눌러야 삭제합니다

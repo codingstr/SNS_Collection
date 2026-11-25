@@ -66,7 +66,7 @@ async function copyText(s) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v451";
+const WEB_VERSION = "v452";
 // 브라우저가 예전 index.html(예전 ?v=)을 쓰고 있으면 화면 뼈대와 새 JS가 짝이 안 맞아 일부 화면이 빕니다.
 // 이 파일이 예전 버전 주소로 불렸으면 한 번만 새로고침해서 새 index.html을 받습니다(같은 버전으로는 다시 하지 않음).
 (() => {
@@ -174,6 +174,8 @@ let personFocus = "", personPlat = "", activeTab = "people", connected = false, 
 
 function el(tag, props = {}, children = []) {
   const n = document.createElement(tag);
+  // 글자 입력칸은 브라우저 자동완성(저장된 아이디·검색 기록)을 끕니다. 로그인 칸(index.html)만 예외
+  if ((tag === "input" || tag === "textarea") && !("autocomplete" in props)) n.setAttribute("autocomplete", "off");
   for (const [k, v] of Object.entries(props)) {
     if (k === "text") n.textContent = v; else if (k === "class") n.className = v; else n.setAttribute(k, v);
   }
