@@ -249,15 +249,14 @@ html[data-theme="dark"]{--ouro-bg:#262523}
   html[data-design="bento"] #grid .sec:last-child{margin-bottom:0}
 }
 
-/* 레일 아래쪽: 라이트/다크 버튼(계정 버튼 바로 위). 지금 테마의 해·달 아이콘, 기기 설정을 따르는 중이면 흐리게(읽은 글처럼) */
+/* 레일 아래쪽: 화이트/다크 버튼(계정 버튼 바로 위). '%' 모양 아이콘 — 왼쪽 위 해(화이트), 오른쪽 아래 달(다크), 가운데 사선(기기 설정 따르기).
+   지금 테마의 해·달은 밝게, 다른 쪽은 흐리게. 사선은 기기 설정을 따르는 중에만 밝게 */
 @media (min-width:861px){
-  html[data-design="bento"] .themeswitch{display:flex;align-items:center;justify-content:center;position:fixed;left:22px;bottom:114px;z-index:3;width:56px;height:56px;padding:0;border:0;border-radius:50%;cursor:pointer;background:var(--soft);color:var(--muted);transition:opacity .2s,background .2s}
+  html[data-design="bento"] .themeswitch{display:flex;align-items:center;justify-content:center;position:fixed;left:22px;bottom:114px;z-index:3;width:56px;height:56px;padding:0;border:0;border-radius:50%;cursor:pointer;background:var(--soft);color:var(--fg);transition:background .2s}
   html[data-design="bento"] .themeswitch:hover{background:var(--line)}
-  html[data-design="bento"] .themeswitch svg{width:26px;height:26px;display:block}
-  html[data-design="bento"] .themeswitch .ts-moon{display:none}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .ts-sun{display:none}
-  html[data-design="bento"][data-theme="dark"] .themeswitch .ts-moon{display:block}
-  html[data-design="bento"][data-theme-auto] .themeswitch{opacity:.6}
+  html[data-design="bento"] .themeswitch svg{width:34px;height:34px;display:block;overflow:visible}
+  html[data-design="bento"] .themeswitch .ts-sun,html[data-design="bento"] .themeswitch .ts-moon,html[data-design="bento"] .themeswitch .ts-auto{opacity:.22;transition:opacity .2s}
+  html[data-design="bento"]:not([data-theme="dark"]) .themeswitch .ts-sun,html[data-design="bento"][data-theme="dark"] .themeswitch .ts-moon,html[data-design="bento"][data-theme-auto] .themeswitch .ts-auto{opacity:1}
   html[data-design="bento"] .themeswitch:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 }
 /* 위치: 라이트/다크 스위치가 위, 계정 버튼이 맨 아래 */
