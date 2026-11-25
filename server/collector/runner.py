@@ -41,6 +41,7 @@ PLATFORMS = ("youtube", "x", "instagram")
 PLATFORM_KO = {"youtube": "유튜브", "x": "X", "instagram": "인스타"}
 DAY_MS = 86400000
 MAX_ITEMS = 20000                 # DB에 남길 글 수(넘으면 오래 전에 모은 것부터 지움)
+UNTRACKED_KEEP_MS = 10 * DAY_MS   # 아무도 추적하지 않는 계정의 글: 마지막으로 모은(다시 본) 뒤 이만큼 지나면 지움
 
 DEEP_WAIT, SHALLOW_WAIT = 510, 40   # 페이지 하나당 최대 대기(초): 지금 최신화 / 자동 확인
 SEARCH_WAIT, POST_WAIT, LOGIN_WAIT = 30, 30, 15
@@ -549,11 +550,32 @@ def log_page(url: str, mode: str, res, err: str = ""):
 
 
 def prune_items():
+    """정기 정리(수집이 끝날 때마다). 글을 지우면 보관한 썸네일·글↔계정 연결도 같이 지워집니다(ON DELETE CASCADE)."""
     with get_db() as db:
+        # 아무도 추적하지 않는 계정의 글(모든 사용자가 그 계정을 뺌): 누구 화면에도 나오지 않으므로 10일 뒤 지웁니다.
+        # 10일 안에 다시 추가하면 이어서 모으고, 그 뒤면 처음부터 다시 모읍니다(이미 모은 글이 없으면 끝까지 모음).
+        ids = set()
+        for (raw,) in db.execute("SELECT tracked FROM user_state"):
+            try:
+                ids |= {t["id"] for t in json.loads(raw) if isinstance(t, dict) and isinstance(t.get("id"), str)}
+            except (ValueError, TypeError):
+                pass
+        db.execute("CREATE TEMP TABLE IF NOT EXISTS keep_via(id TEXT PRIMARY KEY)")
+        db.execute("DELETE FROM keep_via")
+        db.executemany("INSERT OR IGNORE INTO keep_via(id) VALUES (?)", [(i,) for i in ids])
+        n = db.execute("""DELETE FROM items WHERE MAX(collected_at, seen_at) < ?
+                          AND id NOT IN (SELECT item_id FROM item_via WHERE via IN (SELECT id FROM keep_via))""",
+                       (now_ms() - UNTRACKED_KEEP_MS,)).rowcount
+        if n:
+            log.info("아무도 추적하지 않는 계정의 글 %d개를 지웠습니다.", n)
         db.execute("""DELETE FROM items WHERE id IN
                       (SELECT id FROM items ORDER BY MAX(collected_at, seen_at) DESC LIMIT -1 OFFSET ?)""", (MAX_ITEMS,))
         db.execute("DELETE FROM coverage WHERE at < ?", (now_ms() - COVER_KEEP_MS,))
         db.execute("DELETE FROM page_log WHERE at < ?", (now_ms() - COVER_KEEP_MS,))
+        # 만료된 로그인 세션·지난 로그인 시도 횟수(로그인할 때도 만료를 확인하므로 보안과는 상관없는 정리)
+        now_s = int(time.time())
+        db.execute("DELETE FROM sessions WHERE expires_at < ?", (now_s,))
+        db.execute("DELETE FROM rate_limits WHERE reset_at < ?", (now_s,))
 
 
 # ---------- 서버 전체 상태(테스트 계정 로그인 상태) ----------

@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -176,6 +177,7 @@ def handle(db, uid: str, op: str, p: dict):
                         t["handle"] = k["handle"]
             db.execute("UPDATE user_state SET tracked = ? WHERE user_id = ?",
                        (json.dumps(lst, ensure_ascii=False), uid))
+            keep_avatars(db, lst)   # 검색해서 추가한 계정의 프로필 사진을 DB에 남김
         if isinstance(p.get("settings"), dict):
             s = {k: p["settings"][k] for k in PLATFORMS if isinstance(p["settings"].get(k), bool)}
             db.execute("UPDATE user_state SET settings = ? WHERE user_id = ?", (json.dumps(s), uid))
@@ -219,17 +221,42 @@ def inline_image(url: str, max_bytes: int = 150000) -> str:
         return ""
 
 
+# 검색 결과의 프로필 사진: 결과 중 무엇을 추가할지는 검색할 때 모르므로 서버 메모리에만 잠깐(PIC_KEEP_S) 들고 있다가,
+# 사용자가 그 계정을 추가하면(set) 그때 DB(avatars)에 넣습니다. 다른 기기·사용자는 DB에서 받아 씁니다.
+# (예전에는 검색 결과 사진을 모두 DB에 넣어, 추가하지 않은 계정 사진이 94%였습니다)
+PIC_KEEP_S = 3600
+PIC_CACHE_MAX = 600
+_pics: dict = {}   # 계정 ID(소문자) -> (데이터 주소, 받은 시각)
+_pics_lock = threading.Lock()
+
+
 def save_avatars(platform: str, results: list, pics: list):
-    """검색 결과의 프로필 사진을 계정 ID별로 저장해 둡니다(다른 기기·사용자도 다시 검색하지 않고 씀)."""
-    rows = []
-    for r, pic in zip(results, pics):
-        if not pic or len(pic) > AVATAR_MAX:
-            continue
-        for key in {(r.get("handle") or "").lower(), (r.get("channelId") or "").lower()} - {""}:  # 유튜브는 @핸들·채널 ID 둘 다
-            rows.append((f"{platform}:{key}", pic, int(time.time() * 1000)))
+    now = time.time()
+    with _pics_lock:
+        for k in [k for k, (_, at) in _pics.items() if now - at > PIC_KEEP_S]:
+            del _pics[k]
+        for r, pic in zip(results, pics):
+            if not pic or len(pic) > AVATAR_MAX:
+                continue
+            for key in {(r.get("handle") or "").lower(), (r.get("channelId") or "").lower()} - {""}:  # 유튜브는 @핸들·채널 ID 둘 다
+                _pics[f"{platform}:{key}"] = (pic, now)
+        while len(_pics) > PIC_CACHE_MAX:
+            del _pics[min(_pics, key=lambda k: _pics[k][1])]
+
+
+def keep_avatars(db, tracked: list):
+    """추적 목록에 든 계정 중 방금 검색해서 받아 둔 사진이 있으면 DB에 넣습니다."""
+    now = time.time()
+    with _pics_lock:
+        rows = []
+        for t in tracked:
+            keys = {t["id"].lower()} | ({f"youtube:{t['channelId'].lower()}"} if t.get("channelId") else set())
+            for k in keys:
+                hit = _pics.pop(k, None)
+                if hit and now - hit[1] <= PIC_KEEP_S:
+                    rows.append((k, hit[0], int(now * 1000)))
     if rows:
-        with get_db() as db:
-            db.executemany("INSERT OR REPLACE INTO avatars(id, data, at) VALUES (?, ?, ?)", rows)
+        db.executemany("INSERT OR REPLACE INTO avatars(id, data, at) VALUES (?, ?, ?)", rows)
 
 
 def handle_collector(uid: str, op: str, p: dict):

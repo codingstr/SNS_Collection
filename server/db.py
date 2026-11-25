@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS cm_reports (
   UNIQUE (reporter, post_id, comment_id)
 );
 """
-SCHEMA_VERSION = 4   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
+SCHEMA_VERSION = 5   # PRAGMA user_version. 한 번만 하면 되는 변환은 이 번호로 건너뜁니다.
 
 
 @contextmanager
@@ -189,6 +189,8 @@ def get_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA synchronous = NORMAL")  # WAL에서는 이것으로 충분히 안전하고, 잦은 작은 저장이 훨씬 빨라집니다
+    # 지운 내용을 0으로 덮어씁니다. 끄면 계정을 지워도 비밀번호 해시·글 내용이 'DB 정리' 전까지 파일 안에 남습니다.
+    conn.execute("PRAGMA secure_delete = ON")
     try:
         yield conn
         conn.commit()
@@ -257,6 +259,21 @@ def init_db():
         if ver < 4:
             # 유튜브 동영상 탭의 "N개월 전" 영상을 정확한 날짜로 바꾸게 됨: 이미 모은 영상도 고치도록 한 번은 기간 끝까지 다시 봅니다
             db.execute("""UPDATE coverage SET data = '{"gap": true}' WHERE url LIKE 'https://www.youtube.com/%/videos'""")
+        if ver < 5:
+            # 검색 결과 프로필 사진을 모두 저장하던 때 쌓인, 아무도 추적하지 않는 계정의 사진을 지웁니다(이제는 추가한 계정 것만 저장)
+            keep = set()
+            for (raw,) in db.execute("SELECT tracked FROM user_state"):
+                try:
+                    lst = json.loads(raw)
+                except ValueError:
+                    continue
+                for t in lst if isinstance(lst, list) else []:
+                    if isinstance(t, dict) and isinstance(t.get("id"), str):
+                        keep.add(t["id"].lower())
+                        if isinstance(t.get("channelId"), str):
+                            keep.add("youtube:" + t["channelId"].lower())
+            gone = [r[0] for r in db.execute("SELECT id FROM avatars") if r[0].lower() not in keep]
+            db.executemany("DELETE FROM avatars WHERE id = ?", [(x,) for x in gone])
         if ver < SCHEMA_VERSION:
             db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         now = int(time.time())
