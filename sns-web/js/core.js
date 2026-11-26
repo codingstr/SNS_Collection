@@ -66,7 +66,7 @@ async function copyText(s) {
 
 const LABELS = { people: "사람별", youtube: "유튜브", x: "X", instagram: "인스타" };
 /* 오른쪽 "현재 작업" 카드 아래 표시되는 정보 — 여기서 바꾸면 됩니다 */
-const WEB_VERSION = "v455";
+const WEB_VERSION = "v459";
 // 브라우저가 예전 index.html(예전 ?v=)을 쓰고 있으면 화면 뼈대와 새 JS가 짝이 안 맞아 일부 화면이 빕니다.
 // 이 파일이 예전 버전 주소로 불렸으면 한 번만 새로고침해서 새 index.html을 받습니다(같은 버전으로는 다시 하지 않음).
 (() => {
@@ -96,8 +96,10 @@ try {
 function lsGet(k, def) { try { const v = localStorage.getItem(ukey(k)); return v === null ? def : v; } catch (e) { return def; } }
 function lsSet(k, v) { try { localStorage.setItem(ukey(k), v); } catch (e) { /* 저장 불가 */ } }
 
-let searchPlats = ["youtube", "x", "instagram"]; // 통합 검색에서 찾을 매체
+let searchPlats = ["youtube", "x", "instagram"]; // 위쪽 글 검색에서 찾을 매체(검색창 왼쪽 동그라미)
 try { const v = JSON.parse(localStorage.getItem("snsSearchPlats") || "null"); if (Array.isArray(v)) { const f = v.filter((p) => ["youtube", "x", "instagram"].includes(p)); if (f.length) searchPlats = f; } } catch (e) {}
+let acctPlats = ["youtube", "x", "instagram"]; // 계정 찾기 대화 상자에서 찾을 매체
+try { const v = JSON.parse(localStorage.getItem("snsAcctPlats") || "null"); if (Array.isArray(v)) { const f = v.filter((p) => ["youtube", "x", "instagram"].includes(p)); if (f.length) acctPlats = f; } } catch (e) {}
 let ytMode = "both"; // 유튜브 탭: video(영상만) / both(둘 다) / post(게시물만)
 try { const m = localStorage.getItem("snsYtMode"); if (m === "video" || m === "post") ytMode = m; } catch (e) {}
 let ytLen = {}; // 유튜브 영상 칸마다(채널 계정 id → long 롱폼만 / short 쇼츠만, 없으면 모두)

@@ -73,7 +73,7 @@ function parseAccount(platformHint, raw) {
 
 
 /* ---------- 이벤트 ---------- */
-{ let qt = 0; $("q").addEventListener("input", () => { if (searchAcctOnly()) return; clearTimeout(qt); qt = setTimeout(renderList, 180); }); }   // 계정 찾기 전용 화면에서는 글을 거르지 않음 // 글자마다 전체를 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
+// 위쪽 검색창 입력 처리(글 검색)는 js/ui.js에 있습니다.
 // 추적 계정 관리 화면(고르기·그룹화·기간·숨기기·제거)은 js/manage.js에 있습니다.
 async function removeTrackedIds(ids) {
   const set = new Set(ids);

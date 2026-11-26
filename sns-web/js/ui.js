@@ -265,7 +265,7 @@ renderAll();
       b.addEventListener("click", (e) => {
         e.stopPropagation();
         searchPlats = k === "all" ? ALL.slice() : [k];
-        save(); render(); renderList(); setOpen(false);
+        save(); render(); renderList(); if (window.searchDrop) searchDrop(false); setOpen(false);
       });
       menu.appendChild(b);
     });
@@ -277,19 +277,12 @@ renderAll();
   render();
 })();
 
-/* ---------- 통합 검색: 입력 + Enter(또는 돋보기)로 선택한 매체 전부에서 계정 검색 ---------- */
+/* ---------- 위쪽 검색창: 글 검색 ----------
+   홈·즐겨찾기: 적는 대로 아래 글 목록을 거릅니다(list.js의 renderList).
+   커뮤니티·추적 계정 관리·관리자 화면: 검색창 아래에 결과 상자를 열어 모은 글을 찾아 보여 줍니다.
+   Esc 한 번은 결과 상자 닫기, 한 번 더는 검색어 지우기. 계정 찾기(추가)는 오른쪽 '계정 찾기' 버튼의 대화 상자에서 합니다(아래). */
 (function () {
-  const q = $("q"), go = $("sGo"), box = $("sResults");
-  // 지금 진행 중인 검색: { seq: 검색 순번, sid: 서버에 보내는 검색 번호, ctl: 요청을 끊는 AbortController }
-  // 검색창을 닫거나 새로 검색하면 이 검색을 취소합니다(브라우저 요청을 끊고 서버에도 cancelSearch를 보냄).
-  let cur = null, searchSeq = 0;
-  const newSid = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
-  const cancelCur = (leaving) => {
-    if (!cur) return;
-    const c = cur; cur = null;
-    c.ctl.abort();
-    call("cancelSearch", { sid: c.sid }, 0, leaving ? { keepalive: true } : undefined).catch(() => {});
-  };
+  const q = $("q"), box = $("sResults");
   // 좁은 화면(칸이 위아래로 쌓일 때)에서는 결과 상자 안이 아니라 바깥 오른쪽에 둥근 스크롤 막대를 둡니다(보이는 건 CSS가 결정).
   const rail = document.createElement("div"), thumb = document.createElement("i");
   rail.className = "sr-rail"; rail.hidden = true; rail.appendChild(thumb); box.parentNode.appendChild(rail);
@@ -322,13 +315,101 @@ renderAll();
     const r = rail.getBoundingClientRect(), frac = (ev.clientY - r.top - PAD) / Math.max(1, r.height - PAD * 2);
     box.scrollTop = frac * (box.scrollHeight - box.clientHeight);
   });
-  // 이 결과 상자에서 계정을 추가했다면, 닫을 때 검색어도 비웁니다(글 목록 거르기도 풀림). 추가하지 않고 닫으면 검색어는 그대로 둡니다.
-  let added = false;
-  box.addEventListener("acct-added", () => { added = true; });
-  const close = () => {
-    cancelCur(); box.hidden = true;
-    if (added) { added = false; q.value = ""; renderList(); }
+  // 결과 상자가 열려 있는 동안 뒤 화면을 대화 상자처럼 어둡게 가립니다(검색창과 결과 상자만 위에 남김). 어두운 곳을 누르면 닫힘
+  const sbox = q.closest(".sbox"), dim = el("div", { class: "sr-dim", hidden: "" });
+  document.body.appendChild(dim);
+  const shade = (on) => { dim.hidden = !on; sbox.classList.toggle("sr-open", on); };
+  const close = () => { box.hidden = true; box.textContent = ""; shade(false); };
+  // 결과 상자 그리기: 검색어가 없거나 홈·즐겨찾기면 닫습니다
+  // 결과는 홈에서 검색한 것과 같은 모양입니다(사람별 줄 + 매체 칸, list.js의 searchDropBody). keep: true면 스크롤 위치 유지, 숫자면 그 위치로
+  const drop = (keep) => {
+    const s = q.value.trim();
+    if (!searchAcctOnly() || !s) { close(); return; }
+    const res = searchPosts(s), st = typeof keep === "number" ? keep : keep ? box.scrollTop : 0;
+    box.textContent = ""; box.hidden = false; shade(true);
+    const x = el("button", { type: "button", class: "x", text: "×", "aria-label": "닫기" });
+    x.addEventListener("click", close);
+    box.appendChild(el("div", { class: "sr-head" }, [el("b", { text: "“" + s + "” 글 검색 · " + res.length + "건" }), x]));
+    if (!res.length) box.appendChild(el("p", { class: "hint", text: "맞는 글이 없습니다. 검색창 왼쪽 동그라미에서 찾을 매체를 바꿔 볼 수 있습니다." }));
+    else { box.appendChild(searchDropBody(s, res, drop, box)); sizeSections(box); }   // 칸 높이 맞추기도 홈과 같이
+    box.scrollTop = st; requestAnimationFrame(() => { if (!box.hidden) box.scrollTop = st; });   // 칸 높이를 맞춘 뒤에 한 번 더
   };
+  // 검색할 매체·즐겨찾기·롱/쇼츠 선택이 바뀌면 열린 결과를 다시 그림
+  window.searchDrop = (keep) => { if (!box.hidden) drop(keep); };
+  // 결과 상자에서 그룹 커뮤니티로 가면 상자를 닫습니다
+  box.addEventListener("click", (e) => { if (e.target.closest && e.target.closest(".pcomm")) setTimeout(close); });
+  const refresh = () => (searchAcctOnly() ? drop() : renderList());
+  let qt = 0;   // 글자마다 다시 그리지 않고 입력이 잠깐 멈추면 한 번만 그립니다
+  q.addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(refresh, 180); });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); clearTimeout(qt); refresh(); } });
+  // Esc로 닫은 뒤 검색창을 다시 누르면 결과 상자를 다시 엽니다
+  const reopen = () => { if (searchAcctOnly() && box.hidden && q.value.trim()) drop(); };
+  q.addEventListener("focus", reopen); q.addEventListener("click", reopen);
+  // 화면이 바뀌어 검색창 쓰임새(홈 글 거르기 ↔ 결과 상자)가 바뀌면 검색어와 결과 상자를 비웁니다
+  let other = false;
+  window.setSearchMode = (on) => {
+    if (on === other) return;
+    other = on;
+    q.placeholder = on ? "모은 글 검색 (제목·내용·작성자·매체·그룹)" : "글 검색 (제목·내용·작성자·매체·그룹)";
+    q.setAttribute("aria-label", on ? "모은 글 검색, 결과는 검색창 아래에" : "글 검색");
+    close();
+    if (q.value) { q.value = ""; renderList(); }
+  };
+  // 바깥을 누르면 닫습니다(결과 상자에서 연 글 보기 창·대화 상자·알림 안을 누를 때는 그대로)
+  document.addEventListener("click", (e) => {
+    if (box.hidden) return;
+    if (!e.composedPath().some((n) => n.classList && (n.classList.contains("sbox") || n.classList.contains("modal-back") || n.id === "viewer" || n.id === "toasts" || n.id === "picMenu"))) close();
+  });
+  // Esc: 닫을 것(글 보기 창·대화 상자·메뉴 등)이 열려 있으면 그것부터 닫고, 그다음 결과 상자를 닫고, 한 번 더 누르면 검색어를 지웁니다.
+  // 검색창에 커서가 있으면 지운 뒤 검색창에서 나옵니다. 다른 입력칸(그룹 이름 등)에서 누른 Esc는 건드리지 않습니다.
+  // 이 처리는 다른 Esc 처리보다 먼저 돌아야 열린 것을 정확히 봅니다(capture).
+  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden]), .cm-lb";
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing) return;
+    const a = document.activeElement, inQ = a === q;
+    if (!inQ && a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    if (!$("viewer").hidden || !$("setPanel").hidden || document.querySelector(OPEN)) return;
+    if (!box.hidden) { e.preventDefault(); close(); return; }   // 검색창의 기본 동작(글자 지우기)도 막음
+    if (q.value) { e.preventDefault(); q.value = ""; renderList(); }
+    if (inQ) q.blur();
+  }, true);
+})();
+
+/* ---------- 계정 찾기: 검색창 오른쪽 '계정 찾기' 버튼 → 대화 상자 ----------
+   이름·@아이디·프로필 주소를 적고 Enter(또는 '찾기')로 고른 매체(인스타·X·유튜브)에서 계정을 찾아 추적 목록에 추가합니다.
+   찾는 중에 닫으면(×·Esc) 검색을 취소합니다. 바깥을 눌러서는 찾는 중에 닫히지 않습니다(30초 넘게 걸린 검색이 실수로 취소되지 않게). */
+(function () {
+  const back = $("afModal"), q = $("afQ"), go = $("afGo"), box = $("afResults"), plats = $("afPlats");
+  const ALL = ["youtube", "x", "instagram"];
+  const allIcon = () => { const w = document.createElement("span"); w.className = "allico"; w.innerHTML = LOGO_SVG; return w; };
+  // 찾을 매체: 전체 / 유튜브 / X / 인스타그램 중 하나(위쪽 글 검색의 매체와 따로 기억)
+  const paintPlats = () => {
+    plats.textContent = "";
+    const isAll = acctPlats.length === ALL.length;
+    [["all", "전체"], ...ALL.map((p) => [p, PLATFORM[p]])].forEach(([k, label]) => {
+      const on = k === "all" ? isAll : !isAll && acctPlats[0] === k;
+      const b = el("button", { type: "button", class: "af-plat" + (on ? " on" : ""), role: "radio", "aria-checked": String(on) },
+        [el("span", { class: "si" }, [k === "all" ? allIcon() : pIcon(k)]), el("span", { text: label })]);
+      b.addEventListener("click", () => {
+        acctPlats = k === "all" ? ALL.slice() : [k];
+        try { localStorage.setItem("snsAcctPlats", JSON.stringify(acctPlats)); } catch (e) {}
+        paintPlats(); q.focus();
+      });
+      plats.appendChild(b);
+    });
+  };
+  // 지금 진행 중인 검색: { seq: 검색 순번, sid: 서버에 보내는 검색 번호, ctl: 요청을 끊는 AbortController }
+  // 대화 상자를 닫거나 새로 검색하면 이 검색을 취소합니다(브라우저 요청을 끊고 서버에도 cancelSearch를 보냄).
+  let cur = null, searchSeq = 0;
+  const newSid = () => { const a = new Uint8Array(12); crypto.getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join(""); };
+  const cancelCur = (leaving) => {
+    if (!cur) return;
+    const c = cur; cur = null;
+    c.ctl.abort();
+    call("cancelSearch", { sid: c.sid }, 0, leaving ? { keepalive: true } : undefined).catch(() => {});
+  };
+  const open = () => { paintPlats(); back.hidden = false; q.focus(); q.select(); };
+  const close = () => { cancelCur(); back.hidden = true; box.hidden = true; box.textContent = ""; };
   // 페이지를 떠나면 서버의 검색도 멈춥니다. 뒤로 가기로 이 화면이 그대로 돌아오면(브라우저가 보관해 둔 화면)
   // '찾는 중…'으로 멈춰 있는 매체를 '중단됨'으로 바꿔, 계속 기다리는 것처럼 보이지 않게 합니다.
   let leftMidSearch = false;
@@ -341,18 +422,6 @@ renderAll();
       n.appendChild(el("p", { class: "hint", text: "페이지를 떠나 있는 동안 검색이 중단되었습니다. 다시 찾으려면 Enter를 누르세요." }));
     });
   });
-  go.hidden = false; // (예전에는 1초마다 다시 켰지만 숨기는 곳이 없어 한 번이면 됩니다)
-  // 검색창 쓰임새: 홈·즐겨찾기는 '글 검색 + Enter로 계정 찾기', 커뮤니티·추적 계정 관리·관리자 화면은 '계정 찾기'만.
-  // 쓰임새가 바뀌면 적어 둔 검색어와 결과 상자를 비웁니다(홈의 글 거르기가 다른 화면의 계정 검색어로 남지 않게).
-  let acctOnly = false;
-  window.setSearchMode = (on) => {
-    if (on === acctOnly) return;
-    acctOnly = on;
-    q.placeholder = on ? "계정 찾기 · Enter (이름·@아이디·프로필 주소)" : "글 검색 · Enter로 계정 찾기 (이름·@아이디·프로필 주소)";
-    q.setAttribute("aria-label", on ? "계정 찾기 (Enter)" : "글 검색, Enter로 계정 찾기");
-    close();
-    if (q.value) { q.value = ""; renderList(); }
-  };
   const section = (p) => {
     const sec = el("div", { class: "sr-sec" });
     sec.appendChild(el("div", { class: "sr-plat" }, [el("span", { class: "si" }, [pIcon(p)]), el("span", { text: PLATFORM[p] })]));
@@ -364,15 +433,10 @@ renderAll();
     const name = q.value.trim();
     if (!name) return;
     cancelCur(); // 진행 중인 검색이 있으면 취소하고 새로 시작합니다
-    added = false;
     const my = { seq: ++searchSeq, sid: newSid(), ctl: new AbortController() };
     const live = () => cur === my; // 이 검색이 아직 화면에 보이는 검색인지(아니면 늦게 온 결과는 버림)
     box.hidden = false; box.textContent = "";
     if (!connected) { box.appendChild(el("p", { class: "hint", text: "로그인해야 계정을 찾을 수 있습니다." })); return; }
-    const head = el("div", { class: "sr-head" }, [el("b", { text: "“" + name + "” 계정 찾기" })]);
-    const x = el("button", { type: "button", class: "x", text: "×", "aria-label": "닫기" });
-    x.addEventListener("click", close); head.appendChild(x);
-    box.appendChild(head);
     // 프로필 주소: 검색하지 않고 그 매체에 바로 추가합니다.
     if (/^https?:\/\//i.test(name) || SITE_START.test(name)) {
       const r = parseAccount("youtube", name);
@@ -405,26 +469,21 @@ renderAll();
       }
     };
     try {
-      await Promise.all(["instagram", "x", "youtube"].filter((p) => searchPlats.includes(p)).map(one));
+      await Promise.all(["instagram", "x", "youtube"].filter((p) => acctPlats.includes(p)).map(one));
     } finally { if (cur === my) cur = null; }
   };
+  $("sGo").hidden = false;
+  $("sGo").addEventListener("click", open);
+  $("afX").addEventListener("click", close);
   go.addEventListener("click", run);
-  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
-  // 바깥 클릭: 검색 중에는 닫지 않습니다(잘못 눌러 30초 넘게 걸린 검색이 취소되지 않게). 닫기(×)·Esc는 검색 중에도 닫고 취소합니다.
-  document.addEventListener("click", (e) => { if (!cur && !e.composedPath().some((n) => n.classList && (n.classList.contains("sbox") || n.classList.contains("modal-back")))) close(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !box.hidden && !document.querySelector(".modal-back:not([hidden])")) close(); });
-  // Esc로 검색어 지우기: 닫을 것(글 보기 창·대화 상자·메뉴·계정 찾기 결과 등)이 없을 때만 동작합니다.
-  // 그런 것이 열려 있으면 이번 Esc는 그것을 닫는 데 쓰고, 다음 Esc에 검색어를 지웁니다. 검색창에 커서가 있으면 지운 뒤 검색창에서 나옵니다.
-  // 다른 입력칸(그룹 이름 등)에서 누른 Esc는 건드리지 않습니다. 이 처리는 다른 Esc 처리보다 먼저 돌아야 열린 것을 정확히 봅니다(capture).
-  const OPEN = ".modal-back:not([hidden]), .modemenu, #picMenu, #sMenu:not([hidden]), #sResults:not([hidden]), #tour:not([hidden]), .gsuggest:not([hidden]), .cm-lb";
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); run(); } });
+  back.addEventListener("click", (e) => { if (e.target === back && !cur) close(); });
+  // Esc: 위에 다른 대화 상자(가져올 기간 고르기 등)가 떠 있으면 그것만 닫힙니다
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.isComposing) return;
-    const a = document.activeElement, inQ = a === q;
-    if (!inQ && a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
-    if (!$("viewer").hidden || !$("setPanel").hidden || document.querySelector(OPEN)) return;
-    if (q.value) { q.value = ""; renderList(); }
-    if (inQ) q.blur();
-  }, true);
+    if (e.key !== "Escape" || e.isComposing || back.hidden) return;
+    if ([...document.querySelectorAll(".modal-back:not([hidden])")].some((m) => m !== back)) return;
+    e.preventDefault(); close();
+  });
 })();
 
 /* ---------- 상단 홈 / 추적 계정 관리 버튼 ---------- */
@@ -631,8 +690,8 @@ $("navAdmin").addEventListener("click", () => { goPage("admin"); window.scrollTo
   const $q = (s) => root.querySelector(s);
   const STEPS = [
     { t: "SNS 모아보기에 오신 걸 환영해요", d: "인스타그램·X·유튜브의 새 글을 한곳에 모아 봅니다. 화면을 하나씩 짚어 드릴게요." },
-    { sel: [".sbox"], t: "통합 검색창", d: "글 제목·내용·작성자·매체·그룹 이름으로 모아 둔 글을 바로 검색합니다. 왼쪽 동그라미는 '계정 찾기'에서 검색할 매체(인스타·X·유튜브)를 고르는 버튼이에요." },
-    { sel: ["#sGo"], t: "계정 찾기", d: "검색창에 이름·@아이디·프로필 주소를 적고 누르면(Enter도 가능) 선택한 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
+    { sel: [".sbox"], t: "글 검색창", d: "글 제목·내용·작성자·매체·그룹 이름으로 모아 둔 글을 바로 검색합니다. 홈·즐겨찾기에서는 아래 글 목록을 거르고, 다른 화면에서는 검색창 아래에 결과를 보여 줘요(Esc로 닫고, 한 번 더 누르면 검색어를 지워요). 왼쪽 동그라미는 검색할 매체(인스타·X·유튜브)를 고르는 버튼이에요." },
+    { sel: ["#sGo"], t: "계정 찾기", d: "누르면 계정 찾기 창이 열려요. 이름·@아이디·프로필 주소를 적고 Enter를 누르면 고른 매체에서 계정을 찾아 추적 목록에 추가할 수 있어요." },
     { sel: ["#empty:not([hidden])", "#grid:not([hidden])"], t: "글이 모이는 곳", d: "추적 중인 계정의 새 글이 여기에 모입니다. 카드를 누르면 바로 열어 볼 수 있어요." },
     { sel: ["#storyBar"], t: "그룹 고르기", d: "같은 사람의 인스타·X·유튜브 계정을 한 그룹으로 만들어 두면 한 사람으로 모아 봅니다. 동그라미를 눌러 보고 싶은 그룹을 여러 개 고를 수 있어요. 맨 앞 칸은 동그라미를 누르면 고른 것을 모두 풀어 전체를 보고, 그 아래 이름을 누르면 보기 기준(사람별·유튜브·X·인스타)을 바꿔요. 빨간 점은 안 읽은 글이 있다는 뜻이에요. 빠르게 두 번 누르면 안 읽은 글을 오래된 것부터 차례로 열고, 우클릭(휴대폰은 길게 누르기)하면 그 그룹의 글을 모두 읽음으로 표시해요(바로 되돌릴 수 있어요)." },
     { sel: ["#sidePeople:not([hidden])"], t: "그룹 목록", d: "지금 보이는 그룹과 글 수예요(매체 탭에서는 그 매체 글만 셉니다). 이름을 누르면 그 그룹 줄로 바로 내려가요." },

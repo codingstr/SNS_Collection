@@ -41,6 +41,7 @@ function ytLenBar(key) {
       try { localStorage.setItem("snsYtLen", JSON.stringify(ytLen)); } catch (e2) {}
       const st = ($("grid") || {}).scrollTop || 0;   // 아래쪽 칸에서 골라도 보던 자리 그대로
       renderList(); requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = st; });
+      if (window.searchDrop) searchDrop(true);   // 글 검색 결과 상자 안의 칸이면 그 상자도
     });
     bar.appendChild(b);
   });
@@ -394,13 +395,14 @@ let rowFocus = null;
 function openRow(key, kind) { rowFocus = { tab: activeTab, key, kind: kind || "", st: ($("grid") || {}).scrollTop || 0 }; renderList(); const g = $("grid"); if (g) g.scrollTop = 0; }
 function closeRow() { const st = rowFocus ? rowFocus.st : 0; rowFocus = null; renderList(); requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = st; }); }
 // "352건 · 인스타그램·X·유튜브": 매체 이름을 누르면 이 사람의 그 매체 글만 모아 봅니다.
-function platMeta(r) {
+// onPlat: 매체 이름을 눌렀을 때 할 일(없으면 홈에서 이 사람의 이 매체 글만 보기)
+function platMeta(r, onPlat) {
   const span = el("span", { class: "n" });
   span.append(document.createTextNode(r.list.length + "건 · "));
   platOrder([...r.plats]).forEach((p, i) => {
     if (i) span.append(document.createTextNode("·"));
     const a = el("span", { class: "platlink", role: "button", tabindex: "0", text: PLATFORM[p] });
-    const go = (e) => { e.stopPropagation(); e.preventDefault(); backCtx = { tab: activeTab, pf: personFocus, pp: personPlat, pg: page, st: ($("grid") || {}).scrollTop || 0 }; activeTab = "people"; personFocus = r.name; personPlat = p; renderList(); }; // 이 사람의 이 매체 글만
+    const go = (e) => { e.stopPropagation(); e.preventDefault(); if (onPlat) { onPlat(p); return; } backCtx = { tab: activeTab, pf: personFocus, pp: personPlat, pg: page, st: ($("grid") || {}).scrollTop || 0 }; activeTab = "people"; personFocus = r.name; personPlat = p; renderList(); }; // 이 사람의 이 매체 글만
     a.addEventListener("click", go);
     a.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(e); });
     span.append(a);
@@ -454,6 +456,13 @@ function card(it) {
   // 일반 클릭은 이 페이지에서 보기/새 크롬 창으로, Ctrl·Shift·휠 클릭은 새 탭으로 엽니다.
   a.addEventListener("click", (e) => { if (e.button !== 0 || safe === "#") return; if (e.ctrlKey || e.metaKey || e.shiftKey) { outside(); return; } setViewCtx(a, it); openItem(it); });
   a.addEventListener("auxclick", (e) => { if (e.button === 1) { e.preventDefault(); outside(); } });
+  // 우클릭(안드로이드는 길게 누르기): 브라우저 메뉴 대신 글의 원래 주소를 복사합니다
+  a.addEventListener("contextmenu", async (e) => {
+    if (safe === "#") return;
+    e.preventDefault();
+    const ok = await copyText(safe);
+    toast(ok ? "글 주소를 복사했습니다." : "주소를 복사하지 못했습니다.", ok ? undefined : "error");
+  });
   a.addEventListener("keydown", (e) => { if (e.key === "Enter" && safe !== "#") { e.preventDefault(); setViewCtx(a, it); openItem(it); } });
   return a;
 }
@@ -576,6 +585,21 @@ function selectedVias() {
   return out;
 }
 // 홈에 보일 글: 기간 안 + 숨긴 그룹 제외 + 고른 그룹만(고른 게 있으면)
+// 글 검색: 제목·본문·작성자·매체 이름·그룹 이름·계정을 한 번에 찾습니다(공백으로 나눈 단어가 모두 들어 있어야 함). 검색할 매체(searchPlats)의 글만
+function searchMatch(list, q) {
+  const words = String(q).toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = (it) => {
+    const t = it.via ? trackedOf(it.via) : null;
+    return [it.title, it.text, it.preview, it.author, SRC_LABELS[it.source], PLATFORM[tabOf(it.source)], t && t.group, t && t.handle].filter(Boolean).join(" ").toLowerCase();
+  };
+  return list.filter((it) => searchPlats.includes(tabOf(it.source)) && (() => { const h = hay(it); return words.every((w) => h.includes(w)); })());
+}
+// 홈·즐겨찾기 밖(커뮤니티 등)의 글 검색: 숨긴 그룹을 뺀 모든 글에서 찾습니다(위쪽 그룹 줄에서 고른 것과 관계없이). 최신순
+function searchPosts(q) {
+  const hid = hiddenVias();
+  const all = items.filter((it) => inPeriod(it) && viasOf(it).some((v) => !hid.has(v) && viaShows(v, it)));
+  return searchMatch(all, q).sort((a, b) => publishedMs(b) - publishedMs(a));
+}
 function homeItems() {
   const hid = hiddenVias(), sel = selectedVias();
   return items.filter((it) => inPeriod(it) && viasOf(it).some((v) => !hid.has(v) && (!sel || sel.has(v)) && viaShows(v, it)));
@@ -620,7 +644,7 @@ function pickPicFile(id) {
 let favs = new Set();
 try { favs = new Set(JSON.parse(lsGet("snsFavs", "[]"))); } catch (e) {}
 const saveFavs = () => lsSet("snsFavs", JSON.stringify([...favs]));
-function toggleFav(name) { if (favs.has(name)) favs.delete(name); else favs.add(name); saveFavs(); renderList(); }
+function toggleFav(name) { if (favs.has(name)) favs.delete(name); else favs.add(name); saveFavs(); renderList(); if (window.searchDrop) searchDrop(true); }
 function favStar(name) {
   const on = favs.has(name);
   const b = el("button", { type: "button", class: "pstar" + (on ? " on" : ""), text: on ? "★" : "☆", title: on ? "즐겨찾기 해제" : "즐겨찾기에 추가", "aria-pressed": String(on), "aria-label": name + " 즐겨찾기" });
@@ -800,20 +824,70 @@ function personHead(head, r) {
   head.title = "빈 곳을 두 번 누르면 안 읽은 글 이어 보기 · 우클릭하면 모두 읽음";
   return head;
 }
+// 사람(그룹) 한 줄: 머리(사진·이름·커뮤니티·별·건수와 매체)와 매체 칸들. 홈 화면과 글 검색 결과 상자가 같이 씁니다.
+// more(k): 매체 칸의 '전체 보기', onName: 이름을 눌렀을 때(없으면 그냥 글자), onPlat(p): 머리의 매체 이름을 눌렀을 때
+function personSection(r, limit, more, onName, onPlat) {
+  let name;
+  if (onName) {
+    name = el("h3", { class: "namelink", text: dispName(r), role: "button", tabindex: "0", title: "이 사람만 보기" });
+    name.addEventListener("click", onName);
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onName(); } });
+  } else name = el("h3", { text: dispName(r) });
+  const head = personHead(el("div", { class: "sec-head" }, [personAvatar(r), name, ...cmBtnFor(r), favStar(r.name), platMeta(r, onPlat)]), r);
+  const sec = el("section", { class: "sec" }, [head, mediaRows(r, limit, more)]);
+  sec._person = r.name;
+  return sec;
+}
+// 검색 중 어느 그룹에도 속하지 않은 계정(피드 등)의 결과
+function othersSection(others) {
+  const o = { name: "그 밖의 결과", list: others, plats: new Set(others.map((it) => tabOf(it.source))) };
+  return el("section", { class: "sec" }, [
+    el("div", { class: "sec-head" }, [el("h3", { text: o.name }), el("span", { class: "n", text: others.length + "건" })]),
+    mediaRows(o, 20, null),
+  ]);
+}
+// 한 사람의 한 매체(또는 줄 종류) 글 전체를 격자로. pp: 매체(예: youtube, x) 또는 줄 종류(youtube-video …),
+// 같은 매체 계정이 여럿인 줄의 '전체 보기'는 "줄 종류|계정". back: 돌아가기 버튼, key: 이어 그리기 기억용
+function platFull(r, pp, back, key) {
+  const [pk, pv] = pp.split("|");
+  const vid = pk === "youtube-video", yk = pv || ytKeyOf(r.ids, "etc"), ym = ytLenOf(yk);
+  const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)) && (!vid || ytLenOk(ym)(it)));
+  const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
+  const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who }), el("span", { class: "n", text: mine.length + "건" }), ...(vid ? [headActs(ytLenBar(yk))] : [])])]);
+  if (vid && !mine.length) grid.appendChild(el("p", { class: "hint", style: "grid-column: 1 / -1", text: ytLenEmpty(ym) }));
+  appendProgressive(grid, mine, key);
+  return grid;
+}
+// 홈·즐겨찾기 밖의 글 검색 결과(검색창 아래 상자): 홈에서 검색한 것과 같은 모양(사람별 줄 + 매체 칸, 그 밖의 결과).
+// 매체 칸의 '전체 보기'·머리의 매체 이름은 상자 안에서 그 글을 모두 보여 주고, '← 이름'으로 보던 자리로 돌아옵니다.
+// redraw(keep): 상자를 다시 그림(keep: true면 스크롤 위치 유지, 숫자면 그 위치로), box: 상자(돌아올 때 스크롤 위치)
+let dropFocus = null;   // { q, name, k, st }
+function searchDropBody(q, list, redraw, box) {
+  const all = [...peopleMap().values()];
+  const rows = visiblePeople().map((p) => ({ ...p, list: list.filter((it) => viasOf(it).some((v) => p.ids.has(v))) })).filter((r) => r.list.length)
+    .sort((a, b) => publishedMs(b.list[0]) - publishedMs(a.list[0]));
+  const personIds = new Set(); all.forEach((p) => p.ids.forEach((id) => personIds.add(id)));
+  const others = list.filter((it) => !viasOf(it).some((v) => personIds.has(v)));
+  if (dropFocus && (dropFocus.q !== q || !rows.some((r) => r.name === dropFocus.name))) dropFocus = null;
+  const body = el("div", { class: "sections" });
+  if (dropFocus) {
+    const f = dropFocus, r = rows.find((x) => x.name === f.name);
+    const back = el("button", { type: "button", text: "← " + dispName(r) });
+    back.addEventListener("click", () => { dropFocus = null; redraw(f.st); });
+    body.appendChild(platFull(r, f.k, back, "drop|" + q + "|" + f.name + "|" + f.k));
+    return body;
+  }
+  const open = (r, k) => { dropFocus = { q, name: r.name, k, st: box.scrollTop }; redraw(false); };
+  rows.forEach((r) => body.appendChild(personSection(r, 20, (k) => open(r, k), null, (p) => open(r, p))));
+  if (others.length) body.appendChild(othersSection(others));
+  return body;
+}
 function renderList() {
   queueMicrotask(() => sizeSections($("grid")));   // 다 그린 뒤에 섹션 자리 높이를 맞춤
   renderTabs();
-  const q = searchAcctOnly() ? "" : $("q").value.trim().toLowerCase();   // 커뮤니티 등에서 적은 계정 검색어로 홈 글을 거르지 않음
+  const q = searchAcctOnly() ? "" : $("q").value.trim().toLowerCase();   // 커뮤니티 등에서는 검색 결과를 검색창 아래 상자에 보여 주고, 홈 글은 거르지 않음
   let list = homeItems().filter((it) => activeTab === "all" || activeTab === "people" || tabOf(it.source) === activeTab);
-  if (q) {
-    // 통합 검색: 제목·본문·작성자·매체 이름·그룹 이름·계정을 한 번에 찾습니다(공백으로 나눈 단어가 모두 들어 있어야 함).
-    const words = q.split(/\s+/).filter(Boolean);
-    const hay = (it) => {
-      const t = it.via ? trackedOf(it.via) : null;
-      return [it.title, it.text, it.preview, it.author, SRC_LABELS[it.source], PLATFORM[tabOf(it.source)], t && t.group, t && t.handle].filter(Boolean).join(" ").toLowerCase();
-    };
-    list = list.filter((it) => searchPlats.includes(tabOf(it.source)) && (() => { const h = hay(it); return words.every((w) => h.includes(w)); })());
-  }
+  if (q) list = searchMatch(list, q);
   const bySort = true; // 항상 게시 시각 순
   list.sort((a, b) => (bySort ? publishedMs(b) - publishedMs(a) : b.collectedAt - a.collectedAt));
   const g = $("grid");
@@ -867,7 +941,7 @@ function renderList() {
     if (q) {
       // 검색 중에는 검색에 걸린 글이 있는 사람만 보여줍니다(빈 사람 줄은 숨김).
       rows.splice(0, rows.length, ...rows.filter((r) => r.list.length));
-      if (!rows.length && !others.length) { hint("“" + q + "”에 맞는 글이 없습니다." + (sel.size ? " 위쪽에서 고른 그룹 안에서만 찾았습니다." : "") + " 검색창을 비우면 모든 글이 보입니다. (계정을 찾으려면 Enter)"); return; }
+      if (!rows.length && !others.length) { hint("“" + q + "”에 맞는 글이 없습니다." + (sel.size ? " 위쪽에서 고른 그룹 안에서만 찾았습니다." : "") + " 검색창을 비우면 모든 글이 보입니다."); return; }
     }
     // 매체 이름을 눌러 들어간 '한 사람의 한 매체 전체 보기'는 그 사람이 지금 보이는 동안만 유지합니다.
     if (personPlat && !rows.some((r) => r.name === personFocus)) { personFocus = ""; personPlat = ""; }
@@ -887,15 +961,7 @@ function renderList() {
           requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = c.st || 0; }); // 보던 위치로
         } else { personPlat = ""; renderList(); }
       });
-        // personPlat: 매체(예: youtube, x) 또는 줄 종류(youtube-video …). 같은 매체 계정이 여럿인 줄의 '전체 보기'는 "줄 종류|계정"
-        const [pk, pv] = personPlat.split("|");
-        const vid = pk === "youtube-video", yk = pv || ytKeyOf(r.ids, "etc"), ym = ytLenOf(yk);
-        const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)) && (!vid || ytLenOk(ym)(it)));
-        const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
-        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who }), el("span", { class: "n", text: mine.length + "건" }), ...(vid ? [headActs(ytLenBar(yk))] : [])])]);
-        if (vid && !mine.length) grid.appendChild(el("p", { class: "hint", style: "grid-column: 1 / -1", text: ytLenEmpty(ym) }));
-        appendProgressive(grid, mine, "pp|" + personFocus + "|" + personPlat);
-        body.appendChild(grid);
+        body.appendChild(platFull(r, personPlat, back, "pp|" + personFocus + "|" + personPlat));
       } else {
         body.appendChild(el("section", { class: "sec" }, [
           personHead(el("div", { class: "sec-head" }, [personAvatar(r), el("h3", { text: dispName(r) }), ...cmBtnFor(r), favStar(r.name), platMeta(r)]), r),
@@ -905,25 +971,13 @@ function renderList() {
     } else {
       rows.forEach((r) => {
         // 이름을 누르면 위쪽 그룹 줄에서 이 사람만 고른 것과 같습니다.
-        const nameBtn = el("h3", { class: "namelink", text: dispName(r), role: "button", tabindex: "0", title: "이 사람만 보기" });
         const go = () => { storySel = new Set([r.name]); personFocus = ""; personPlat = ""; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
-        nameBtn.addEventListener("click", go);
-        nameBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-        const head = personHead(el("div", { class: "sec-head" }, [personAvatar(r), nameBtn, ...cmBtnFor(r), favStar(r.name), platMeta(r)]), r);
         // 매체 칸의 '전체 보기': 그 사람의 그 매체 글을 모두 봅니다. '← 이름'을 누르면 이 모든 그룹 화면의 보던 자리로 돌아옵니다
         const more = (k) => { backCtx = { tab: activeTab, pf: "", pp: "", pg: page, st: ($("grid") || {}).scrollTop || 0 }; personFocus = r.name; personPlat = k; renderList(); const g2 = $("grid"); if (g2) g2.scrollTop = 0; };
-        const sec = el("section", { class: "sec" }, [head, mediaRows(r, 20, more)]);
-        sec._person = r.name;
-        body.appendChild(sec);
+        body.appendChild(personSection(r, 20, more, go));
       });
     }
-    if (others.length && !focusName) {
-      const o = { name: "그 밖의 결과", list: others, plats: new Set(others.map((it) => tabOf(it.source))) };
-      body.appendChild(el("section", { class: "sec" }, [
-        el("div", { class: "sec-head" }, [el("h3", { text: o.name }), el("span", { class: "n", text: others.length + "건" })]),
-        mediaRows(o, 20, null),
-      ]));
-    }
+    if (others.length && !focusName) body.appendChild(othersSection(others));
     g.appendChild(body);
     $("empty").hidden = true;
     return;

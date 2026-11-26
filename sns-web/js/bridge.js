@@ -54,10 +54,10 @@ function applyPage() {
   if (comm !== wasComm && typeof cmShown === "function") cmShown(comm);
   // 추적 계정 관리 화면을 떠나면 그 화면에서 고른 계정·그룹을 모두 풉니다(다시 들어오면 아무것도 안 고른 상태)
   if (wasManage && !manage && selIds.length) { selIds = []; if (typeof renderTracked === "function") renderTracked(); }
-  // 커뮤니티·추적 계정 관리·관리자 화면에서는 위쪽 검색창이 계정 찾기만 합니다(글 거르기 없음)
+  // 커뮤니티·추적 계정 관리·관리자 화면에서는 위쪽 글 검색 결과를 검색창 아래 상자에 보여 줍니다(홈 글 목록은 거르지 않음)
   if (typeof setSearchMode === "function") setSearchMode(manage || adminOn || comm);
 }
-// 위쪽 검색창이 계정 찾기 전용인 화면인지(그때는 입력해도 홈 글 목록을 거르지 않음)
+// 위쪽 글 검색 결과를 검색창 아래 상자에 보여 주는 화면인지(홈·즐겨찾기 밖. 그때는 입력해도 홈 글 목록을 거르지 않음)
 const searchAcctOnly = () => connected && (page === "manage" || page === "community" || page === "admin");
 
 /* ---------- 화면 주소 ----------
