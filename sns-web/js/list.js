@@ -20,6 +20,26 @@ const viasOf = (it) => (it.vias && it.vias.length ? it.vias : it.via ? [it.via] 
 // 유튜브 글의 종류: video(일반 영상) / short(쇼츠) / post(게시물). 다른 매체는 ""
 const ytKind = (it) => (it.source === "youtube-post" ? "post" : it.source === "youtube-video" ? (/\/shorts\//.test(it.url || "") ? "short" : "video") : "");
 const YT_KIND_LABEL = { video: "일반 영상", short: "쇼츠", post: "게시물" };
+// 유튜브 영상 칸의 롱폼/쇼츠 거르기(ytLen, core.js). 영상 칸 머리글 오른쪽 위의 '롱 / 롱+쇼츠 / 쇼츠'로 고릅니다
+const ytLenOk = (it) => it.source !== "youtube-video" || ytLen === "both" || (ytKind(it) === "short") === (ytLen === "short");
+const ytLenEmpty = () => "이 기간에 모은 " + (ytLen === "short" ? "쇼츠가" : "롱폼 영상이") + " 없습니다.";
+function ytLenBar() {
+  const bar = el("div", { class: "segbar ytlen", role: "group", "aria-label": "유튜브 영상 종류" });
+  [["long", "롱"], ["both", "롱+쇼츠"], ["short", "쇼츠"]].forEach(([m, label]) => {
+    const b = el("button", { type: "button", class: ytLen === m ? "active" : "", text: label, "aria-pressed": String(ytLen === m) });
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (ytLen === m) return;
+      ytLen = m; try { localStorage.setItem("snsYtLen", m); } catch (e2) {}
+      const st = ($("grid") || {}).scrollTop || 0;   // 아래쪽 칸에서 골라도 보던 자리 그대로
+      renderList(); requestAnimationFrame(() => { const g = $("grid"); if (g) g.scrollTop = st; });
+    });
+    bar.appendChild(b);
+  });
+  return bar;
+}
+// 쇼츠 카드 오른쪽 아래의 쇼츠 아이콘
+const SHORTS_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff0033" fill-rule="evenodd" d="M17.77 10.32c-.77-.32-1.2-.5-1.2-.5L18 9.06c1.84-.96 2.53-3.23 1.56-5.06s-3.24-2.53-5.07-1.56L6 6.94c-1.29.68-2.07 2.04-2 3.49.07 1.42.93 2.67 2.22 3.25.03.01 1.2.5 1.2.5L6 14.93c-1.83.97-2.53 3.24-1.56 5.07.97 1.83 3.24 2.53 5.07 1.56l8.5-4.5c1.29-.68 2.06-2.04 1.99-3.49-.07-1.42-.94-2.68-2.23-3.25z"/><path fill="#fff" d="M10 14.65v-5.3L15 12l-5 2.65z"/></svg>';
 // 이 계정(v)으로 이 글을 보여 줄지: 계정에서 끈 유튜브 종류(추적 계정의 ytOff)의 글은 뺍니다(추적 계정 관리의 유튜브 숨김 설정)
 const viaShows = (v, it) => { const t = trackedOf(v); return !(t && t.ytOff && t.ytOff.length && t.ytOff.includes(ytKind(it))); };
 // 계정별 기간이 있으면 그 계정의 글은 그 기간으로, 없으면 맨 위 기간으로 거릅니다.
@@ -418,6 +438,7 @@ function card(it) {
   // href를 달지 않아 브라우저가 마우스를 올렸을 때 왼쪽 아래에 주소 띠를 띄우지 않습니다. 열기는 클릭 처리로 대신합니다.
   const a = el("a", { class: "card", role: "link", tabindex: "0", "data-plat": tabOf(it.source), "data-src": it.source }, kids);
   a._item = it;
+  if (ytKind(it) === "short") { a.classList.add("short"); const ic = el("span", { class: "shorts-ic", role: "img", "aria-label": "쇼츠" }); ic.innerHTML = SHORTS_SVG; a.appendChild(ic); }
   if (seen.has(it.id)) a.classList.add("seen");
   const outside = () => { if (safe !== "#") window.open(safe, "_blank", "noopener,noreferrer"); };
   // 일반 클릭은 이 페이지에서 보기/새 크롬 창으로, Ctrl·Shift·휠 클릭은 새 탭으로 엽니다.
@@ -707,15 +728,18 @@ function mediaRows(r, limit, onMore) {
     const t = via ? trackedOf(via) : null;
     const who = (b.via && b.part[0].author) || (t && t.handle ? (tabOf(b.k) === "x" ? "@" : "") + t.handle : "") || b.part[0].author || (t && t.channelId) || "";
     const kind = b.k === "youtube-video" ? "영상" : b.k === "youtube-post" ? "게시물" : "";
-    const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: shownOf(b.part.length, limit) })]);
-    if (onMore && b.part.length > limit) {
+    // 유튜브 영상 칸: 오른쪽 위에서 롱/롱+쇼츠/쇼츠를 고르고, 고른 것만 놓습니다(칸은 그대로 남김)
+    const vid = b.k === "youtube-video", part = vid ? b.part.filter(ytLenOk) : b.part;
+    const head = el("div", { class: "sec-head" }, [srcIcon(b.k), el("span", { class: "slabel", text: [who, kind].filter(Boolean).join(" · ") || SRC_LABELS[b.k] }), el("span", { class: "n", text: shownOf(part.length, limit) })]);
+    if (vid) head.appendChild(ytLenBar());
+    if (onMore && part.length > limit) {
       const more = el("button", { type: "button", text: "전체 보기" });
       more.addEventListener("click", () => onMore(b.via ? b.k + "|" + b.via : b.k));
       head.appendChild(more);
     }
     const grid = el("div", { class: "row-cards" });
-    fillRow(grid, b.part.slice(0, limit));
-    enableDrag(grid);
+    if (part.length) { fillRow(grid, part.slice(0, limit)); enableDrag(grid); }
+    else grid.appendChild(el("p", { class: "hint", text: ytLenEmpty() }));
     box.appendChild(el("div", { class: "sec" + (full ? " full" : ""), "data-plat": tabOf(b.k) }, [head, grid]));
   };
   // 놓는 순서: 유튜브는 계정마다 [영상, 게시물], 그다음 X, 인스타. 모두 반 칸씩 두 개가 한 줄이고,
@@ -855,9 +879,11 @@ function renderList() {
       });
         // personPlat: 매체(예: youtube, x) 또는 줄 종류(youtube-video …). 같은 매체 계정이 여럿인 줄의 '전체 보기'는 "줄 종류|계정"
         const [pk, pv] = personPlat.split("|");
-        const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)));
+        const vid = pk === "youtube-video";
+        const mine = r.list.filter((it) => (it.source === pk || tabOf(it.source) === pk) && (!pv || viasOf(it).includes(pv)) && (!vid || ytLenOk(it)));
         const who = pv && mine[0] ? " · " + (mine[0].author || "") : "";
-        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who }), el("span", { class: "n", text: mine.length + "건" })])]);
+        const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: (SRC_LABELS[pk] || PLATFORM[pk] || pk) + who }), el("span", { class: "n", text: mine.length + "건" }), ...(vid ? [ytLenBar()] : [])])]);
+        if (vid && !mine.length) grid.appendChild(el("p", { class: "hint", style: "grid-column: 1 / -1", text: ytLenEmpty() }));
         appendProgressive(grid, mine, "pp|" + personFocus + "|" + personPlat);
         body.appendChild(grid);
       } else {
@@ -918,12 +944,14 @@ function renderList() {
     if (rowFocus && !fr) rowFocus = null;
     if (fr) {
       const [kk, kv] = rowFocus.kind.split("|");
-      const mine = fr.list.filter((it) => (!kk || it.source === kk) && (!kv || viasOf(it).includes(kv)));
+      const vid = kk === "youtube-video" || (!kk && activeTab === "youtube" && ytMode === "video");
+      const mine = fr.list.filter((it) => (!kk || it.source === kk) && (!kv || viasOf(it).includes(kv)) && (!vid || ytLenOk(it)));
       const kindName = kk ? " · " + (kk === "youtube-video" ? "영상" : kk === "youtube-post" ? "게시물" : SRC_LABELS[kk] || kk) + (kv && mine[0] ? " · " + (mine[0].author || "") : "") : "";
       const back = el("button", { type: "button", text: "← 목록으로" });
       back.addEventListener("click", closeRow);
-      const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: dispName(fr) + kindName }), el("span", { class: "n", text: mine.length + "건" })])]);
-      appendProgressive(grid, mine, "row|" + activeTab + "|" + rowFocus.key + "|" + rowFocus.kind);
+      const grid = el("div", { class: "cards" }, [el("div", { class: "sec-head", style: "grid-column: 1 / -1" }, [back, el("h3", { text: dispName(fr) + kindName }), el("span", { class: "n", text: mine.length + "건" }), ...(vid ? [ytLenBar()] : [])])]);
+      if (vid && !mine.length) grid.appendChild(el("p", { class: "hint", style: "grid-column: 1 / -1", text: ytLenEmpty() }));
+      appendProgressive(grid, mine, "row|" + activeTab + "|" + rowFocus.key + "|" + rowFocus.kind + "|" + (vid ? ytLen : ""));
       g.appendChild(el("div", { class: "sections" }, [grid]));
       $("empty").hidden = true;
       return;
@@ -933,10 +961,13 @@ function renderList() {
     // 특정 매체 탭에서는 그 매체에 글이 없는 계정·그룹 줄은 숨깁니다.
     (activeTab === "all" ? rows : rows.filter((r) => r.list.length)).forEach((r) => {
       const split = activeTab === "youtube" && ytMode === "both" && r.list.length;
+      // 유튜브 '영상만' 화면: 줄마다 오른쪽 위에서 롱/롱+쇼츠/쇼츠를 고릅니다(고른 것이 없어도 줄은 남김)
+      const vid = activeTab === "youtube" && ytMode === "video", shown = vid ? r.list.filter(ytLenOk) : r.list;
       // 유튜브 영상+게시물 화면은 칸마다 "N건 중 M건"을 따로 쓰므로 그룹 머리글은 전체 수만
-      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: split ? r.list.length + "건" : shownOf(r.list.length, 30) })]);
+      const head = el("div", { class: "sec-head" }, [...(r.ids.size ? [personAvatar(r)] : []), el("h3", { text: dispName(r) }), el("span", { class: "n", text: split ? r.list.length + "건" : shownOf(shown.length, 30) })]);
+      if (vid) head.appendChild(ytLenBar());
       // 줄에는 최근 30개만 놓습니다. 더 있으면 '전체 보기'로 그 줄의 글을 모두 봅니다(유튜브 영상+게시물 화면은 칸마다 따로)
-      if (!split && r.list.length > 30) {
+      if (!split && shown.length > 30) {
         const more = el("button", { type: "button", text: "전체 보기" });
         more.addEventListener("click", () => openRow(r.key));
         head.appendChild(more);
@@ -945,8 +976,8 @@ function renderList() {
       if (split) grid = mediaRows(r, 30, (k) => openRow(r.key, k));   // 유튜브 영상+게시물: 사람별 화면처럼 왼쪽 영상, 오른쪽 게시물
       else {
         grid = el("div", { class: "row-cards" });
-        if (r.list.length) { fillRow(grid, r.list.slice(0, 30)); enableDrag(grid); }
-        else grid.appendChild(el("p", { class: "hint", text: "이 기간에 수집된 글이 없습니다." }));
+        if (shown.length) { fillRow(grid, shown.slice(0, 30)); enableDrag(grid); }
+        else grid.appendChild(el("p", { class: "hint", text: vid && r.list.length ? ytLenEmpty() : "이 기간에 수집된 글이 없습니다." }));
       }
       const sec = el("section", { class: "sec" }, [head, grid]);
       sec._person = r.person;   // 오른쪽 그룹 목록에서 누르면 이 줄로(jumpToPerson). 한 그룹이 여러 줄이면 첫 줄로
