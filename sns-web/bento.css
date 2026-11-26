@@ -1267,8 +1267,9 @@ html[data-design="bento"][data-theme="dark"] header .toolbar .lb.pi-x > .pg{box-
 /* 처음 안내(화면을 어둡게 하고 말풍선으로 하나씩 설명) */
 #tour{position:fixed;inset:0;z-index:300}
 #tour[hidden]{display:none}
+#tour,#tour *,#tour *::before{transition:none !important;animation:none !important}   /* 안내는 움직임 없이 바로 바뀜 */
 #tour .tour-hole{position:fixed;inset:0;background:rgba(14,14,13,.62)}
-#tour .tour-tip{position:fixed;width:min(340px,calc(100vw - 24px));box-sizing:border-box;padding:16px 18px 14px;border-radius:24px;background:var(--card,#fff);color:var(--fg,#222);box-shadow:0 18px 50px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px;transition:left .28s ease,top .28s ease}
+#tour .tour-tip{position:fixed;width:min(340px,calc(100vw - 24px));box-sizing:border-box;padding:16px 18px 14px;border-radius:24px;background:var(--card,#fff);color:var(--fg,#222);box-shadow:0 18px 50px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px}
 #tour .tour-step{color:var(--muted,#777);font-size:12px}
 #tour .tour-title{font-size:17px}
 #tour .tour-text{margin:0;font-size:14px;line-height:1.55;color:var(--muted,#666)}
